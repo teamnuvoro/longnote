@@ -1,0 +1,157 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../../app_services.dart';
+import '../../core/audio/pcm_source.dart';
+import '../home/home_screen.dart';
+
+/// Three short screens: what it does, the privacy promise, mic permission.
+/// No sign-in, no account.
+class OnboardingScreen extends StatefulWidget {
+  const OnboardingScreen({super.key});
+
+  @override
+  State<OnboardingScreen> createState() => _OnboardingScreenState();
+}
+
+class _OnboardingScreenState extends State<OnboardingScreen> {
+  final _pages = PageController();
+  int _page = 0;
+  String? _micMessage;
+
+  Future<void> _finish() async {
+    final s = context.read<AppServices>();
+    await s.kv.setBool(AppServices.kvOnboardingDone, true);
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const HomeScreen()));
+  }
+
+  Future<void> _askMic() async {
+    final src = RecordPcmSource();
+    bool ok;
+    try {
+      ok = await src.hasPermission(request: true);
+    } catch (_) {
+      ok = false;
+    } finally {
+      src.dispose();
+    }
+    if (ok) {
+      await _finish();
+    } else {
+      setState(() => _micMessage =
+          'No problem. You can turn the microphone on later in iPhone Settings > Longnote. Recording needs it.');
+    }
+  }
+
+  void _next() => _pages.nextPage(
+      duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+
+  @override
+  Widget build(BuildContext context) {
+    final pages = [
+      const _Page(
+        icon: Icons.graphic_eq,
+        title: 'Record for hours.\nGet clear notes.',
+        body:
+            'Tap one button to record a meeting, lecture or talk. It keeps going with the screen locked. '
+            'Afterwards you get a transcript and a summary with key points, decisions and action items.',
+      ),
+      const _Page(
+        icon: Icons.lock_outline,
+        title: 'Your audio stays on your phone',
+        body:
+            'Audio is saved on this phone while you record. Transcripts are made on this phone. '
+            'Nothing is uploaded unless you turn on cloud summaries in Settings - and then only the text is sent, never the audio.\n\n'
+            'No account. No sign-in. No ads or trackers.\n\n'
+            'Please get consent before recording other people.',
+      ),
+      _Page(
+        icon: Icons.mic_none,
+        title: 'Allow the microphone',
+        body:
+            'Longnote needs the microphone to record. It only listens while you are recording, and the red indicator shows when.',
+        footer: _micMessage,
+      ),
+    ];
+
+    return Scaffold(
+      body: SafeArea(
+        child: Column(
+          children: [
+            Expanded(
+              child: PageView(
+                controller: _pages,
+                onPageChanged: (i) => setState(() => _page = i),
+                children: pages,
+              ),
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(
+                3,
+                (i) => Container(
+                  margin: const EdgeInsets.all(4),
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: i == _page
+                        ? Theme.of(context).colorScheme.primary
+                        : Theme.of(context).colorScheme.outlineVariant,
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+              child: SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: FilledButton(
+                  onPressed: _page < 2
+                      ? _next
+                      : (_micMessage == null ? _askMic : _finish),
+                  child: Text(_page < 2
+                      ? 'Continue'
+                      : (_micMessage == null ? 'Allow microphone' : 'Continue')),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Page extends StatelessWidget {
+  const _Page({required this.icon, required this.title, required this.body, this.footer});
+  final IconData icon;
+  final String title;
+  final String body;
+  final String? footer;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(28, 64, 28, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 56, color: Theme.of(context).colorScheme.primary),
+          const SizedBox(height: 28),
+          Text(title, style: t.headlineMedium?.copyWith(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 16),
+          Text(body, style: t.bodyLarge?.copyWith(height: 1.45)),
+          if (footer != null) ...[
+            const SizedBox(height: 16),
+            Text(footer!, style: t.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.error)),
+          ],
+        ],
+      ),
+    );
+  }
+}
