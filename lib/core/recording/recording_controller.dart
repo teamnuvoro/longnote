@@ -278,8 +278,7 @@ class RecordingController extends ChangeNotifier {
 
   /// Stops, finalizes the WAV headers and marks the recording completed.
   Future<Recording?> stop({String reason = 'user'}) async {
-    if (!isActive && state != CaptureState.starting) return null;
-    if (state == CaptureState.stopping) return null;
+    if (!isActive || current == null || _sink == null) return null;
     state = CaptureState.stopping;
     notifyListeners();
     _flushTimer?.cancel();
