@@ -35,12 +35,12 @@ class Plan {
 }
 
 const monthlyPlan = Plan(
-    id: 'in.novaralabs.longnote.monthly',
+    id: 'com.novaralabs.longnote.monthly',
     period: PlanPeriod.month,
     price: 9.99,
     priceLabel: r'$9.99');
 const annualPlan = Plan(
-    id: 'in.novaralabs.longnote.annual',
+    id: 'com.novaralabs.longnote.annual',
     period: PlanPeriod.year,
     price: 59.99,
     priceLabel: r'$59.99');

@@ -1,0 +1,29 @@
+name: iOS build check (unsigned)
+
+# Manual only. Compiles the iOS app on a cloud Mac without signing, to catch Swift/plugin build errors.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.1"
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter test
+      - name: Build iOS (no codesign)
+        run: flutter build ios --release --no-codesign 2>&1 | tail -n 300
+      - name: App size
+        run: du -sh build/ios/iphoneos/Runner.app

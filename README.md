@@ -34,7 +34,7 @@ Apple ID (a free one is enough for running on your own phone).
 3. Open `ios/Runner.xcworkspace` in Xcode (the .xcworkspace, not the .xcodeproj).
 4. Click "Runner" in the left panel > target "Runner" > "Signing & Capabilities":
    - Team: pick your Apple ID team.
-   - Bundle Identifier: `in.novaralabs.longnote` (change it if Xcode says it is taken,
+   - Bundle Identifier: `com.novaralabs.longnote` (change it if Xcode says it is taken,
      e.g. add `.dev`).
    - Check that "Background Modes > Audio" is shown (it comes from Info.plist).
 5. Plug in the iPhone, trust the Mac, turn on Developer Mode on the phone

@@ -73,7 +73,7 @@ Labels: **DONE** = code written and unit-tested. **PARTIAL** = some of it done.
    - **Apple Intelligence**: on an iOS 26 Apple Intelligence iPhone, set Summary engine to Apple; check a real meeting summary keeps names, numbers, decisions.
    - **Headphones/Bluetooth** plugged in and out during recording.
    - **Trial reminder**: with fake billing, start a trial; temporarily change `AppConfig.trialReminderLead` or the trial length to see the notification arrive.
-3. Real billing: create the two products in App Store Connect (`in.novaralabs.longnote.monthly`, `.annual`, one subscription group, 3-day free trial intro offer), implement `BillingService` with `in_app_purchase` or RevenueCat, remove the "simulated" strip.
+3. Real billing: create the two products in App Store Connect (`com.novaralabs.longnote.monthly`, `.annual`, one subscription group, 3-day free trial intro offer), implement `BillingService` with `in_app_purchase` or RevenueCat, remove the "simulated" strip.
 4. Decide cloud summary: deploy the Supabase function to a NEW project (not an existing one), add App Attest + rate limit, set `ANTHROPIC_API_KEY` as a secret, build with `--dart-define`.
 5. Speaker labels: evaluate cloud diarization (and its privacy cost) or tinydiarize turn marks.
 6. Import an audio file; search transcript; widget/Shortcut to start recording (P1 list in the research doc).

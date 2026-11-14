@@ -4,7 +4,7 @@ One line each: the decision, then why. "Lead" = set in the brief. "Build" = made
 
 ## Product and scope
 - **No Supabase, no account, no sign-in in v1** (lead). Nothing to sign up for; less to break; the privacy promise is simpler.
-- **App name "Longnote", bundle id `in.novaralabs.longnote`, iOS 16+** (lead). Placeholder; ASO later.
+- **App name "Longnote", bundle id `com.novaralabs.longnote`, iOS 16+** (lead). Placeholder; ASO later.
 - **Consent line in onboarding and privacy screen** (build). The research says not to copy Summary's "secretly record" hook; recording others needs consent.
 - **A user can delete a recording, only with a confirmation dialog** (build). Users expect it; it is the only code path that deletes audio.
 - **Portrait only** (build). Simpler layout for v1.
