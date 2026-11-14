@@ -1,0 +1,45 @@
+name: longnote
+description: "Longnote: private AI note-taker for long recordings"
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.12.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  # Capture + playback
+  record: ^7.2.0
+  audio_session: ^0.1.25
+  just_audio: ^0.9.46
+  # Storage
+  sqflite: ^2.4.2
+  path_provider: ^2.1.5
+  path: ^1.9.1
+  uuid: ^4.5.2
+  # Network (cloud summary only)
+  http: ^1.6.0
+  # State
+  provider: ^6.1.5
+  # Share / export
+  share_plus: ^13.3.1
+  pdf: ^3.13.1
+  # Trial reminder
+  flutter_local_notifications: ^23.0.2
+  timezone: ^0.11.2
+  # Benchmark
+  battery_plus: ^7.1.2
+  # On-device transcription (whisper.cpp FFI)
+  whisper_ggml: ^2.9.0
+  intl: ^0.20.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  sqflite_common_ffi: ^2.4.7
+
+flutter:
+  uses-material-design: true
