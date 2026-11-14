@@ -83,3 +83,9 @@ Labels: **DONE** = code written and unit-tested. **PARTIAL** = some of it done.
 - Repo: `/root/projects/notetaker-app` (git, no remote, not pushed).
 - Research input: `/root/projects/business-discovery/utility-apps/reference-apps/FINAL-COMBINED.md`.
 - Decisions: `docs/DECISIONS.md`.
+
+## Update 15 Nov 2026 03:45 IST: compiles for iPhone
+- GitHub Actions run 43646685117 (macOS-15, latest Xcode, unsigned): `flutter test` passed, and `flutter build ios --release --no-codesign` **built Runner.app (39.4 MB)**. The Apple Intelligence Swift code and the whisper_ggml package therefore compile. They have still never run on a device.
+- Repo: private `teamnuvoro/longnote`. Workflows: `ios-build-check.yml` (unsigned compile) and `ios-testflight.yml` (signed archive + TestFlight upload; the same setup as Serial Stories; secrets copied).
+- Bundle id changed to `com.novaralabs.longnote` to match the team convention.
+- Blocked on the owner: (1) accept Apple's updated agreement in App Store Connect (the API currently returns 403 REQUIRED_AGREEMENTS_MISSING_OR_EXPIRED); (2) create the app record (Apps → + → New App; the API cannot create it). Then run `ios-testflight.yml`.
