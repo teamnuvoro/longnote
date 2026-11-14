@@ -32,12 +32,15 @@ class LocalExtractiveSummarizer implements Summarizer {
   static final _decisionCue = RegExp(
       r"\b(we (have )?decided|decided to|decision is|agreed|we agree|approved|"
       r"motion (passed|carried|failed)|voted|resolved|we('ll| will) go with|"
-      r"final(ly)? (call|answer)|settled on|signed off)\b",
+      r"final(ly)? (call|answer)|settled on|signed off|"
+      r"motion\b.*\b(passed|carried|failed|approved|rejected)|"
+      r"votes? (to|in favou?r|against)|unanimous(ly)?)\b",
       caseSensitive: false);
 
   static final _actionCue = RegExp(
       r"\b(will|'ll|is going to|needs? to|has to|have to|must|should|"
-      r"action item|to-?do|follow up|take care of|responsible for|assign(ed)?)\b",
+      r"action item|to-?do|follow up|take care of|responsible for|assign(ed)?|"
+      r"can you|could you|please)\b",
       caseSensitive: false);
 
   /// "Ravi will send the deck", "Priya, can you ..." -> owner only when a
@@ -99,7 +102,8 @@ class LocalExtractiveSummarizer implements Summarizer {
     final questions = <String>[];
 
     for (final s in sentences) {
-      if (s.endsWith('?')) {
+      final isRequest = _ownerAsk.hasMatch(s);
+      if (s.endsWith('?') && !isRequest) {
         if (_wordCount(s) >= 4) questions.add(s);
         continue;
       }
