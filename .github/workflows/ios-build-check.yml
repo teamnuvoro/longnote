@@ -1,3 +1,4 @@
+# Longnote iOS build check
 name: iOS build check (unsigned)
 
 # Manual only. Compiles the iOS app on a cloud Mac without signing, to catch Swift/plugin build errors.
