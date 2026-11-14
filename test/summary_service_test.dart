@@ -5,7 +5,6 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:longnote/core/summary/cloud_summarizer.dart';
 import 'package:longnote/core/summary/local_extractive_summarizer.dart';
-import 'package:longnote/core/summary/summary_models.dart';
 import 'package:longnote/core/summary/summary_service.dart';
 
 import 'helpers/fakes.dart';

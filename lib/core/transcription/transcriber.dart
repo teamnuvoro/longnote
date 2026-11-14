@@ -42,4 +42,7 @@ abstract class Transcriber {
     required int offsetMs,
     required int segmentIndex,
   });
+
+  /// Free model memory after a whole recording is done.
+  Future<void> releaseResources();
 }

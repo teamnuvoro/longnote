@@ -26,6 +26,9 @@ class FakeTranscriber implements Transcriber {
   Future<bool> isReady() async => true;
 
   @override
+  Future<void> releaseResources() async {}
+
+  @override
   Future<List<TranscriptLine>> transcribeFile(String wavPath,
       {required int offsetMs, required int segmentIndex}) async {
     calls++;

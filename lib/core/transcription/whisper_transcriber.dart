@@ -166,6 +166,7 @@ class WhisperTranscriber implements Transcriber {
     return s == '[BLANK_AUDIO]' || s == '(silence)' || s == '[ Silence ]';
   }
 
-  /// Free the parked model when a recording is done.
-  Future<void> release() => _controller.releaseModel();
+  /// Free the parked model when a recording is done (~150-500 MB of RAM).
+  @override
+  Future<void> releaseResources() => _controller.releaseModel();
 }

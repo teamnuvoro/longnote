@@ -32,17 +32,23 @@ class ProcessingPipeline {
                 onProgress('Downloading speech model ${(p * 100).round()}%'));
       }
       var offset = 0;
-      for (var i = 0; i < segs.length; i++) {
-        final s = segs[i];
-        if (!s.transcribed) {
-          onProgress('Transcribing part ${i + 1} of ${segs.length}');
-          final lines = await t.transcribeFile(
-              repo.storage.segmentPath(recordingId, s.fileName),
-              offsetMs: offset,
-              segmentIndex: s.index);
-          await repo.saveSegmentTranscript(recordingId, s.index, lines);
+      try {
+        for (var i = 0; i < segs.length; i++) {
+          final s = segs[i];
+          if (!s.transcribed) {
+            onProgress('Transcribing part ${i + 1} of ${segs.length}');
+            final lines = await t.transcribeFile(
+                repo.storage.segmentPath(recordingId, s.fileName),
+                offsetMs: offset,
+                segmentIndex: s.index);
+            await repo.saveSegmentTranscript(recordingId, s.index, lines);
+          }
+          offset += s.durationMs;
         }
-        offset += s.durationMs;
+      } finally {
+        try {
+          await t.releaseResources();
+        } catch (_) {}
       }
     }
 

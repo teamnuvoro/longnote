@@ -124,6 +124,9 @@ class _BenchmarkScreenState extends State<BenchmarkScreen> {
       error = e.toString();
     }
     sw.stop();
+    try {
+      await t.releaseResources();
+    } catch (_) {}
     final after = await _battery();
     final res = BenchmarkResult(
       model: t.name,
