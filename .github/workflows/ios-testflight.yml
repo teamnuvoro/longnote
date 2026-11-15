@@ -80,7 +80,7 @@ jobs:
           set -eu
           BUILD_NUMBER=$(( ${{ github.run_number }} + 100 ))
           echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
-          flutter build ios --config-only --release \
+          flutter build ios --config-only --release --no-codesign \
             --build-number "$BUILD_NUMBER"
           (cd ios && pod install)
 
