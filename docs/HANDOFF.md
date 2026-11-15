@@ -89,3 +89,8 @@ Labels: **DONE** = code written and unit-tested. **PARTIAL** = some of it done.
 - Repo: private `teamnuvoro/longnote`. Workflows: `ios-build-check.yml` (unsigned compile) and `ios-testflight.yml` (signed archive + TestFlight upload; the same setup as Serial Stories; secrets copied).
 - Bundle id changed to `com.novaralabs.longnote` to match the team convention.
 - Blocked on the owner: (1) accept Apple's updated agreement in App Store Connect (the API currently returns 403 REQUIRED_AGREEMENTS_MISSING_OR_EXPIRED); (2) create the app record (Apps → + → New App; the API cannot create it). Then run `ios-testflight.yml`.
+
+## Update 15 Nov 2026 ~11:30 IST: signed build works
+- Bundle ID com.novaralabs.longnote registered via the API (id X7WV526ZBU). Team ID 3VF395RF2W set as the APPLE_TEAM_ID repo secret (it was empty in story-app/.env.local).
+- ios-testflight.yml: config-only step now uses --no-codesign. Run 43683003177 (upload=false) archived, signed and exported the IPA.
+- Apple agreement now accepted (API no longer returns 403). Remaining: the owner creates the app record in App Store Connect, then run the workflow with upload=true.
