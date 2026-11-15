@@ -94,3 +94,4 @@ Labels: **DONE** = code written and unit-tested. **PARTIAL** = some of it done.
 - Bundle ID com.novaralabs.longnote registered via the API (id X7WV526ZBU). Team ID 3VF395RF2W set as the APPLE_TEAM_ID repo secret (it was empty in story-app/.env.local).
 - ios-testflight.yml: config-only step now uses --no-codesign. Run 43683003177 (upload=false) archived, signed and exported the IPA.
 - Apple agreement now accepted (API no longer returns 403). Remaining: the owner creates the app record in App Store Connect, then run the workflow with upload=true.
+- 15 Nov ~11:35 IST: app record created by the owner (ASC app id 6835017154). Run 43683328887 uploaded build 104; Apple processing VALID, no compliance prompt. Internal TestFlight group "Team" (all builds) created via the API; the owner added as tester. Next: device tests below.
