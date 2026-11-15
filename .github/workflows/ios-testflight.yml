@@ -1,6 +1,6 @@
 name: iOS TestFlight
 
-# Manual only. macOS minutes cost money.
+# Manual only. macOS minutes cost money. Bundle ID registered 15 Nov 2026.
 on:
   workflow_dispatch:
     inputs:
