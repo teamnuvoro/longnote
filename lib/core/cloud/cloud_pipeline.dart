@@ -512,6 +512,14 @@ class CloudPipeline {
             error: e.userMessage,
             errorCode: 'limit_reached',
           );
+        case 'upstream_failed' when e.detail['in_progress'] == true:
+          // The same summary is still being written on the server (an
+          // earlier attempt): check back soon, without using up a try.
+          return JobDeferral(
+            wait: const Duration(seconds: 20),
+            status: ProcessingStatus.summarizing,
+            progress: 'Writing summary',
+          );
         case 'bad_request' || 'too_long' || 'payload_too_large':
           return JobFailure(e.userMessage, code: e.code, retryable: false);
         default:
