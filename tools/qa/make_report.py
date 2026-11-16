@@ -122,8 +122,9 @@ def main():
     s.append(Paragraph(
         "The real Longnote app ran in an iPhone simulator on a cloud Mac, against the real server (transcription "
         "and summaries for real). A test played a 2-voice meeting into the recorder and tapped through the app "
-        "like a person. It was opened 4 times: a first run, a force-quit while recording, a restart after it, and "
-        "a run with the server cut off. Any error on screen, layout overflow, crash or freeze fails the check.", B))
+        "like a person. It was opened up to 5 times: a first run, a force-quit while recording, a restart after it, "
+        "a run with the server cut off, and an extra run (simulated phone calls, 10 min in the background while "
+        "recording, a 1-hour recording). Any error on screen, layout overflow, crash or freeze fails the check.", B))
     if summ.get("run_url"):
         s.append(Spacer(1, 3))
         s.append(Paragraph("Run: " + esc(summ["run_url"]), N))

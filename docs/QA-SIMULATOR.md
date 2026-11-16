@@ -79,6 +79,19 @@ Record opens one recording screen, Discard keeps no note. I1-I2 Import → Files
 **Launch 4 (backend blocked before launch):** J2 a recorded note waits in "Waiting &
 needs attention"; J3 the host unblocks and the note uploads and finishes with no tap.
 
+**Launch 5 (extra):** K1 a simulated phone call (the file microphone sends the iOS
+"interruption began/ended" events): "Paused for a phone call", timer stops, resumes by
+itself with "About N s was not recorded"; K2 a call iOS does not let us resume after:
+"Tap Resume", Resume continues; K3 the note processes and the transcript shows the
+"Paused … for a phone call" marker. L1 recording while the host opens the Settings app
+for 10 min (app in the background), then brings the app back: still recording, not
+marked interrupted, timer covers the time away; L2 the ~10 min note processes.
+M1 60 min of audio fed at 12x (`FilePcmSource.speed`): timer reaches 1 h, Mark moment
+still answers, memory flat; M2 the 60 min note compresses, uploads, transcribes and
+summarizes (times logged); M3 transcript lines, speakers, fast scrolling, player length;
+M4 Ask on the long note; M5 no note left stuck. The watcher pauses the hang check and
+the harness pauses the frame probe while the app is in the background.
+
 ## Not covered (needs the iPhone: docs/DEVICE-TEST-V1.md)
 
 - Lock screen while recording, a real phone call, battery/heat, 1-3 h recordings, feel.
