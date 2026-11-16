@@ -42,4 +42,19 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 10));
     expect(runs, 0);
   });
+
+  test('a failing run keeps the follow-up request', () async {
+    var runs = 0;
+    late CoalescingRunner r;
+    r = CoalescingRunner(() async {
+      runs++;
+      if (runs == 1) {
+        r.request(); // a change arrives during the run
+        throw StateError('db busy');
+      }
+    });
+    r.request();
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    expect(runs, 2);
+  });
 }

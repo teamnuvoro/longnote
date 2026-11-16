@@ -29,6 +29,7 @@ class BackendConfig {
   String get projectRef => Uri.parse(url).host.split('.').first;
 
   Uri get authSignUp => Uri.parse('$url/auth/v1/signup');
+  Uri get authUser => Uri.parse('$url/auth/v1/user');
   Uri get authRefresh =>
       Uri.parse('$url/auth/v1/token?grant_type=refresh_token');
   Uri function(String name) => Uri.parse('$url/functions/v1/$name');

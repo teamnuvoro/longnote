@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
+import 'package:sqflite/sqflite.dart' show DatabaseException;
 
 /// Sends crash and error reports to our server so we can fix what testers
 /// hit. Two sources, both saved on the phone first and uploaded later (a
@@ -61,16 +62,29 @@ class CrashReporter {
   }
 
   int _seq = 0;
+  int? _pending;
+
+  /// Error types whose text can carry user content (sqflite puts the SQL
+  /// arguments in the message; FormatException quotes its source text):
+  /// only the type and the stack are sent for these.
+  static bool _mayHoldUserText(Object e) {
+    return e is FormatException || e is DatabaseException;
+  }
 
   void record(String kind, Object error, StackTrace? stack, {String? context}) {
     try {
-      final files = _files('dart-');
-      if (files.length >= maxPending) return;
+      // Counted once, then in memory: an error repeating every frame must
+      // not list the folder every frame.
+      _pending ??= _files('dart-').length;
+      if (_pending! >= maxPending) return;
+      _pending = _pending! + 1;
       final report = {
         'kind': kind,
         'at': DateTime.now().toUtc().toIso8601String(),
         'error_type': error.runtimeType.toString(),
-        'message': _cut(error.toString(), maxMessage),
+        'message': _mayHoldUserText(error)
+            ? '(message withheld: may contain note text)'
+            : _cut(error.toString(), maxMessage),
         if (context != null) 'context': _cut(context, 500),
         'stack': _cut(stack?.toString() ?? '', maxStack),
         'breadcrumbs': List.of(_crumbs),
@@ -116,6 +130,11 @@ class CrashReporter {
         }
         await _delete(f);
         sent++;
+        if (p.basename(f.path).startsWith('dart-') &&
+            _pending != null &&
+            _pending! > 0) {
+          _pending = _pending! - 1;
+        }
       }
     } finally {
       _uploading = false;

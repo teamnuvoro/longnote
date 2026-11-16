@@ -6,6 +6,7 @@ import '../analytics/analytics.dart';
 import '../audio/segment_writer.dart';
 import '../audio/wav.dart';
 import '../config.dart';
+import '../diagnostics/crash_reporter.dart';
 import '../models/recording.dart';
 import '../util/clock.dart';
 import 'recording_repository.dart';
@@ -35,7 +36,21 @@ class RecoveryService {
         [RecordingStatus.recording, RecordingStatus.paused]);
     final out = <Recording>[];
     for (final r in stuck) {
-      out.add(await recoverOne(r));
+      try {
+        out.add(await recoverOne(r));
+      } catch (e, st) {
+        // One damaged recording (disk full, locked file) must never stop the
+        // app from opening. Mark it so the list does not show it as live; the
+        // files stay on disk and are tried again next launch only if the
+        // mark itself failed.
+        CrashReporter.instance?.record('recovery_failed', e, st);
+        try {
+          r
+            ..status = RecordingStatus.interrupted
+            ..note = 'This recording could not be repaired.';
+          await repo.updateCapture(r);
+        } catch (_) {}
+      }
     }
     return out;
   }

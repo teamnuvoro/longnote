@@ -345,6 +345,26 @@ class AppServices {
     await const BackupExclusion().setExcluded(recordingsRoot, v);
   }
 
+  /// D6 style change / "Make a summary": redo only the summary, through the
+  /// queue (so a crash mid-way is resumed at the next launch, never left on
+  /// "Writing summary"). The note is pinned to the engine that made its
+  /// transcript, so a Settings change never re-uploads a phone-only note or
+  /// replaces a cloud transcript. Returns false while the note is still
+  /// being processed (the summary would be made from a partial transcript).
+  Future<bool> redoSummary(String id) async {
+    final n = await repo.get(id);
+    if (n == null || n.processingStatus.inProgress) return false;
+    final src = n.transcriptSource;
+    if (src == 'cloud' || n.source == 'imported') {
+      await repo.setNoteOptions(id, transcriptionMode: TranscriptionMode.cloud);
+    } else if (src == 'on_device') {
+      await repo.setNoteOptions(id,
+          transcriptionMode: TranscriptionMode.onDevice);
+    }
+    await jobs.enqueue(id);
+    return true;
+  }
+
   /// D8 "Transcribe on this phone instead".
   Future<void> transcribeOnPhoneInstead(String id) =>
       processor.transcribeOnPhoneInstead(id, jobs);
@@ -363,19 +383,22 @@ class AppServices {
     _discarding = id;
     try {
       await recorder.stop(reason: 'discard');
+      await repo.deleteByUser(id);
     } finally {
       _discarding = null;
+      jobs.resume();
     }
-    await repo.deleteByUser(id);
-    jobs.resume();
   }
 
   String? _discarding;
 
   Future<void> _onRecordingFinished(Recording r) async {
     if (r.id == _discarding) return;
-    await _afterRecording(r);
-    jobs.resume();
+    try {
+      await _afterRecording(r);
+    } finally {
+      jobs.resume();
+    }
     if (r.durationMs > 0) await noteQueuedByUser();
   }
 

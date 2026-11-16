@@ -18,7 +18,21 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   registerFontLicenses();
   final reporter = await _startCrashReporter();
-  final services = await AppServices.boot();
+  await _launch(reporter);
+}
+
+/// Opens the app; if start-up fails (database cannot open or migrate, disk
+/// full) shows a plain "could not start" screen with Try again instead of a
+/// launch screen that never goes away.
+Future<void> _launch(CrashReporter reporter) async {
+  final AppServices services;
+  try {
+    services = await AppServices.boot();
+  } catch (e, st) {
+    reporter.record('boot_failed', e, st);
+    runApp(StartupFailedApp(onRetry: () => _launch(reporter)));
+    return;
+  }
   final api = services.api;
   if (api != null) {
     reporter.send = (r) => api.call('report', r, timeout: const Duration(seconds: 20));
@@ -57,6 +71,56 @@ Future<CrashReporter> _startCrashReporter() async {
   return CrashReporter(
       dir: Directory(p.join(support.path, 'diagnostics')), appInfo: info)
     ..install();
+}
+
+/// Shown only when [AppServices.boot] failed. No services, no router.
+class StartupFailedApp extends StatefulWidget {
+  const StartupFailedApp({super.key, required this.onRetry});
+  final Future<void> Function() onRetry;
+
+  @override
+  State<StartupFailedApp> createState() => _StartupFailedAppState();
+}
+
+class _StartupFailedAppState extends State<StartupFailedApp> {
+  bool _busy = false;
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: lnLightTheme(),
+        home: Scaffold(
+          body: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text('Longnote could not start',
+                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 12),
+                  const Text(
+                      'Your recordings are still on this phone. This can happen '
+                      'when the phone is almost full: free some space in iPhone '
+                      'Settings › General › iPhone Storage, then try again.'),
+                  const SizedBox(height: 24),
+                  FilledButton(
+                    onPressed: _busy
+                        ? null
+                        : () async {
+                            setState(() => _busy = true);
+                            await widget.onRetry();
+                            if (mounted) setState(() => _busy = false);
+                          },
+                    child: Text(_busy ? 'Starting…' : 'Try again'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
 }
 
 class LongnoteApp extends StatelessWidget {

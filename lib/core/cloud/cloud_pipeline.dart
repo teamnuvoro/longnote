@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
@@ -269,13 +270,21 @@ class CloudPipeline {
             : 'Preparing audio');
     final rel = p.join('cloud', 'piece_${piece.index + 1}.m4a');
     final out = _abs(note.id, rel);
-    Directory(p.dirname(out)).createSync(recursive: true);
+    await _ensureNoteExists(note.id);
+    await Directory(p.dirname(out)).create(recursive: true);
     final r = await encoder.encodeM4a(
       inputs: [for (final i in piece.inputs) _abs(note.id, i)],
       output: out,
       startMs: piece.rangeStartMs,
       durationMs: n > 1 ? piece.durationMs : null,
     );
+    // Deleted while compressing: remove what we just wrote and stop.
+    if (await repo.get(note.id) == null) {
+      final dir = Directory(repo.storage.dirFor(note.id));
+      if (await dir.exists()) await dir.delete(recursive: true);
+      throw JobFailure('This note no longer exists.',
+          code: 'not_found', retryable: false);
+    }
     piece
       ..audioFile = rel
       ..audioBytes = File(out).lengthSync()
@@ -284,7 +293,15 @@ class CloudPipeline {
     await pieces.save(piece);
   }
 
+  Future<void> _ensureNoteExists(String id) async {
+    if (await repo.get(id) == null) {
+      throw JobFailure('This note no longer exists.',
+          code: 'not_found', retryable: false);
+    }
+  }
+
   Future<void> _upload(Recording note, CloudPiece piece, int n) async {
+    await _ensureNoteExists(note.id);
     final userId = await auth.userId();
     if (piece.userId != null && piece.userId != userId) piece.resetServer();
     if (piece.uploaded) return;
@@ -454,15 +471,6 @@ class CloudPipeline {
     await repo.saveSummary(note.id, s.encode(), 'cloud', style: style.id);
   }
 
-  /// Re-summarize a done note with a new style / instructions (D6). Runs
-  /// directly (not via the queue); throws [ApiException] / network errors.
-  Future<void> resummarize(String id) async {
-    final note = await repo.get(id);
-    if (note == null) return;
-    await _summarize(note);
-    await repo.setProcessing(id, ProcessingStatus.done);
-  }
-
   // ---------------------------------------------------------------------------
   JobDeferral _offline() => JobDeferral(
         wait: config.offlineWait,
@@ -475,6 +483,11 @@ class CloudPipeline {
   Future<Exception> _translate(Object e) async {
     if (isNetworkError(e)) {
       if (!await network.isOnline()) return _offline();
+      // Online but no reply in time: the server may already be working (and
+      // billing). Use up a try, so a slow link cannot resend forever.
+      if (e is TimeoutException) {
+        return JobFailure(plainEnglishError('timeout'), code: 'timeout');
+      }
       return JobDeferral(
         wait: config.networkRetry,
         status: ProcessingStatus.waitingForNetwork,

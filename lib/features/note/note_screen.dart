@@ -276,7 +276,7 @@ class _NoteScreenState extends State<NoteScreen> {
             if (_tab == NoteTab.summary)
               ...summaryChildren(d,
                   onChangeStyle: _openStyle,
-                  onMakeSummary: () => _s.jobs.enqueue(widget.id))
+                  onMakeSummary: () => _s.redoSummary(widget.id))
             else
               _transcriptToolbar(d),
           ],

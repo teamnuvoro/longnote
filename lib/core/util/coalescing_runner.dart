@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import '../diagnostics/crash_reporter.dart';
+
 /// Runs an async [task] on request, at most one at a time, coalescing
 /// requests: a request while a run is in flight makes exactly one more run
 /// after it finishes (so the last change is always picked up).
@@ -35,7 +37,13 @@ class CoalescingRunner {
     try {
       do {
         _again = false;
-        await task();
+        try {
+          await task();
+        } catch (e, st) {
+          // Keep going: a request made during the failed run still gets its
+          // follow-up run, so the screen does not stay on stale data.
+          CrashReporter.instance?.record('reload_failed', e, st);
+        }
       } while (_again && !_closed);
     } finally {
       _running = false;

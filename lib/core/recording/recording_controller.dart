@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
+import '../diagnostics/crash_reporter.dart';
 import '../analytics/analytics.dart';
 import '../audio/pcm_source.dart';
 import '../audio/segment_writer.dart';
@@ -65,8 +66,18 @@ class RecordingController extends ChangeNotifier {
 
   static String defaultTitle(DateTime t) {
     const m = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     final hh = t.hour.toString().padLeft(2, '0');
     final mm = t.minute.toString().padLeft(2, '0');
@@ -104,20 +115,24 @@ class RecordingController extends ChangeNotifier {
         flushInterval: AppConfig.flushInterval,
         clock: _clock,
         onSegmentOpened: (i, name, bytes) {
-          repo.upsertSegment(AudioSegment(
-              recordingId: rec.id, index: i, fileName: name));
+          repo.upsertSegment(
+            AudioSegment(recordingId: rec.id, index: i, fileName: name),
+          );
           rec.segmentCount = i + 1;
           // Quiet: a new part every 5 minutes must not refresh the Notes
           // list under a running recording.
           repo.updateCapture(rec, notify: false);
         },
         onSegmentClosed: (i, name, bytes) {
-          repo.upsertSegment(AudioSegment(
+          repo.upsertSegment(
+            AudioSegment(
               recordingId: rec.id,
               index: i,
               fileName: name,
               dataBytes: bytes,
-              closed: true));
+              closed: true,
+            ),
+          );
         },
       )..open();
 
@@ -131,14 +146,24 @@ class RecordingController extends ChangeNotifier {
         notifyListeners();
       });
       final stream = await source.start();
-      _audioSub = stream.listen(_onAudio, onError: (Object e) {
-        _fail('The microphone stopped working ($e). Everything up to now is saved.');
-      });
+      _audioSub = stream.listen(
+        _onAudio,
+        onError: (Object e) {
+          _fail(
+            'The microphone stopped working ($e). Everything up to now is saved.',
+          );
+        },
+      );
 
       if (useTimers) {
-        _flushTimer = Timer.periodic(AppConfig.flushInterval, (_) => tickFlush());
-        _heartbeatTimer =
-            Timer.periodic(AppConfig.heartbeatInterval, (_) => tickHeartbeat());
+        _flushTimer = Timer.periodic(
+          AppConfig.flushInterval,
+          (_) => tickFlush(),
+        );
+        _heartbeatTimer = Timer.periodic(
+          AppConfig.heartbeatInterval,
+          (_) => tickHeartbeat(),
+        );
       }
       state = CaptureState.recording;
       await analytics.log(AnalyticsEvent.recordingStarted, recordingId: rec.id);
@@ -158,9 +183,11 @@ class RecordingController extends ChangeNotifier {
       sink.add(chunk);
     } on FileSystemException catch (e) {
       final full = e.osError?.errorCode == 28; // ENOSPC
-      _fail(full
-          ? 'Stopped: the phone is out of storage. Everything up to now is saved.'
-          : 'Stopped: could not write audio (${e.message}). Everything up to now is saved.');
+      _fail(
+        full
+            ? 'Stopped: the phone is out of storage. Everything up to now is saved.'
+            : 'Stopped: could not write audio (${e.message}). Everything up to now is saved.',
+      );
     }
   }
 
@@ -172,7 +199,9 @@ class RecordingController extends ChangeNotifier {
       sink.maybeFlush();
       lastSavedAt = _clock.now();
     } on FileSystemException {
-      _fail('Stopped: the phone is out of storage. Everything up to now is saved.');
+      _fail(
+        'Stopped: the phone is out of storage. Everything up to now is saved.',
+      );
       return;
     }
     notifyListeners();
@@ -187,11 +216,14 @@ class RecordingController extends ChangeNotifier {
     rec.durationMs = sink.totalDuration.inMilliseconds;
     await repo.heartbeat(rec.id, rec.heartbeatAt!, rec.durationMs);
     // Keep the open segment's byte count current too.
-    await repo.upsertSegment(AudioSegment(
+    await repo.upsertSegment(
+      AudioSegment(
         recordingId: rec.id,
         index: sink.currentIndex,
         fileName: segmentFileName(sink.currentIndex),
-        dataBytes: sink.currentSegmentBytes));
+        dataBytes: sink.currentSegmentBytes,
+      ),
+    );
   }
 
   Future<void> pause() async {
@@ -229,17 +261,24 @@ class RecordingController extends ChangeNotifier {
         sink.flushNow();
         if (_openGapId != null) return;
         _gapStartedAt = _clock.now();
-        _openGapId = await repo.addGap(RecordingGap(
-          recordingId: rec.id,
-          atMs: sink.totalDuration.inMilliseconds,
-          startedAt: _gapStartedAt!,
-          reason: 'interruption',
-        ));
+        _openGapId = await repo.addGap(
+          RecordingGap(
+            recordingId: rec.id,
+            atMs: sink.totalDuration.inMilliseconds,
+            startedAt: _gapStartedAt!,
+            reason: 'interruption',
+          ),
+        );
         banner =
             'Paused by a phone call or another app. Audio up to now is saved.';
-        await analytics.log(AnalyticsEvent.recordingInterrupted,
-            recordingId: rec.id,
-            props: {'cause': 'audio_interruption', 'at_ms': sink.totalDuration.inMilliseconds});
+        await analytics.log(
+          AnalyticsEvent.recordingInterrupted,
+          recordingId: rec.id,
+          props: {
+            'cause': 'audio_interruption',
+            'at_ms': sink.totalDuration.inMilliseconds,
+          },
+        );
         await _setStatus(RecordingStatus.paused, CaptureState.paused);
       case InterruptionPhase.endedResumable:
         if (_userPaused) return;
@@ -289,43 +328,71 @@ class RecordingController extends ChangeNotifier {
     try {
       await _source?.stop();
     } catch (_) {}
-    await _audioSub?.cancel();
-    await _levelSub?.cancel();
-    await _intSub?.cancel();
-    final sink = _sink!;
-    final lastBytes = sink.currentSegmentBytes;
+    var saved = false;
     try {
-      sink.close();
-    } on FileSystemException {
-      // Header could not be finalized (disk full). Recovery-style repair on
-      // next launch is not needed: sizes were written at the last flush.
+      await _audioSub?.cancel();
+      await _levelSub?.cancel();
+      await _intSub?.cancel();
+      final sink = _sink!;
+      final lastBytes = sink.currentSegmentBytes;
+      try {
+        sink.close();
+      } on FileSystemException {
+        // Header could not be finalized (disk full). Recovery-style repair on
+        // next launch is not needed: sizes were written at the last flush.
+      }
+      await _endGap();
+      // Final segment row with exact size.
+      await repo.upsertSegment(
+        AudioSegment(
+          recordingId: rec.id,
+          index: sink.currentIndex,
+          fileName: segmentFileName(sink.currentIndex),
+          dataBytes: lastBytes,
+          closed: true,
+        ),
+      );
+      rec
+        ..status = RecordingStatus.completed
+        ..durationMs = sink.totalDuration.inMilliseconds
+        ..heartbeatAt = _clock.now()
+        ..segmentCount = sink.currentIndex + 1
+        ..note = reason == 'error' ? banner : null;
+      await repo.updateCapture(rec);
+      saved = true;
+      await analytics.log(
+        AnalyticsEvent.recordingCompleted,
+        recordingId: rec.id,
+        props: {'duration_ms': rec.durationMs, 'reason': reason},
+      );
+    } catch (e, st) {
+      // Disk full / database error: the audio files are on disk and the row
+      // is repaired at the next launch (RecoveryService). Never leave the
+      // recorder stuck in "stopping" with the microphone open.
+      CrashReporter.instance?.record('stop_failed', e, st);
+      banner =
+          'Recording stopped. It will be repaired when you reopen Longnote.';
+    } finally {
+      try {
+        _source?.dispose();
+      } catch (_) {}
+      _source = null;
+      _sink = null;
+      current = null;
+      state = CaptureState.idle;
+      if (reason == 'user' && saved) banner = null;
     }
-    await _endGap();
-    // Final segment row with exact size.
-    await repo.upsertSegment(AudioSegment(
-        recordingId: rec.id,
-        index: sink.currentIndex,
-        fileName: segmentFileName(sink.currentIndex),
-        dataBytes: lastBytes,
-        closed: true));
-    rec
-      ..status = RecordingStatus.completed
-      ..durationMs = sink.totalDuration.inMilliseconds
-      ..heartbeatAt = _clock.now()
-      ..segmentCount = sink.currentIndex + 1
-      ..note = reason == 'error' ? banner : null;
-    await repo.updateCapture(rec);
-    await analytics.log(AnalyticsEvent.recordingCompleted,
-        recordingId: rec.id,
-        props: {'duration_ms': rec.durationMs, 'reason': reason});
-    _source?.dispose();
-    _source = null;
-    _sink = null;
-    current = null;
-    state = CaptureState.idle;
-    if (reason == 'user') banner = null;
+    // Queue the note before telling the screens we are idle, so the
+    // recording screen never flashes "Recording stopped" after a user Stop.
+    if (saved) {
+      try {
+        await onFinished?.call(rec);
+      } catch (e, st) {
+        CrashReporter.instance?.record('on_finished_failed', e, st);
+      }
+    }
     notifyListeners();
-    await onFinished?.call(rec);
+    if (!saved) return null;
     return rec;
   }
 

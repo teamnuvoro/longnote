@@ -31,4 +31,14 @@ void main() {
     expect(await r.uploadPending(), 0);
     expect(dir.listSync(), hasLength(1));
   });
+
+  test('withholds messages that can contain note text', () async {
+    final r = CrashReporter(dir: dir, appInfo: const {});
+    r.record('uncaught', const FormatException('secret transcript words'), null);
+    final got = <Map<String, Object?>>[];
+    r.send = (m) async => got.add(m);
+    await r.uploadPending();
+    expect(got.single['message'], isNot(contains('secret')));
+    expect(got.single['error_type'], 'FormatException');
+  });
 }

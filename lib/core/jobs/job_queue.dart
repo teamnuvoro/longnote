@@ -1,4 +1,3 @@
-import '../diagnostics/crash_reporter.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -6,6 +5,7 @@ import 'package:sqflite/sqflite.dart';
 
 import '../analytics/analytics.dart';
 import '../config.dart';
+import '../diagnostics/crash_reporter.dart';
 import '../models/recording.dart';
 import '../recording/recording_repository.dart';
 import '../util/clock.dart';
@@ -122,6 +122,25 @@ class ProcessingJobQueue {
         r['recording_id'] as String,
         ProcessingStatus.queued,
       );
+    }
+    // A note shown as in progress with no job behind it (e.g. the app died
+    // in a step that ran outside the queue) would spin forever: queue it.
+    final orphans = await _db.rawQuery('''
+      SELECT r.id FROM recordings r
+      WHERE r.processing_status NOT IN (?, ?, ?)
+        AND r.status NOT IN (?, ?)
+        AND NOT EXISTS (SELECT 1 FROM jobs j
+                        WHERE j.recording_id = r.id AND j.state IN (?, ?))''', [
+      ProcessingStatus.none.name,
+      ProcessingStatus.done.name,
+      ProcessingStatus.failed.name,
+      RecordingStatus.recording.name,
+      RecordingStatus.paused.name,
+      JobState.pending.name,
+      JobState.running.name,
+    ]);
+    for (final o in orphans) {
+      await enqueue(o['id'] as String);
     }
     _schedule();
   }

@@ -108,6 +108,26 @@ class SupabaseAuth {
         userId: s.userId);
   }
 
+  /// Our functions rejected a freshly refreshed token. Ask GoTrue whether
+  /// this user still exists; only a definite "gone / bad token" answer
+  /// starts a new anonymous user (an outage must never swap the user, which
+  /// would orphan its server jobs). Returns true when a new user was made.
+  Future<bool> replaceIfRejected() async {
+    final s = await session();
+    final r = await _client
+        .get(config.authUser, headers: {
+          ..._headers,
+          'Authorization': 'Bearer ${s.accessToken}',
+        })
+        .timeout(timeout);
+    if (r.statusCode == 200) return false;
+    if (r.statusCode != 401 && r.statusCode != 403 && r.statusCode != 404) {
+      return false;
+    }
+    await _store(await _signUp());
+    return true;
+  }
+
   Future<AuthSession?> _current() async {
     if (!_loaded) {
       _session = AuthSession.tryParse(await kv.get(kvSession));

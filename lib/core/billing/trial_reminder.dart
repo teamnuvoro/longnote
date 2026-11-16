@@ -1,5 +1,4 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:timezone/data/latest_all.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
 import '../config.dart';
@@ -90,7 +89,8 @@ class LocalNotificationScheduler implements ReminderScheduler {
 
   Future<void> _init() async {
     if (_inited) return;
-    tzdata.initializeTimeZones();
+    // Only tz.UTC is used (built in), so the time-zone database (a slow
+    // parse on the UI thread) is never loaded.
     await _plugin.initialize(
       settings: const InitializationSettings(
         iOS: DarwinInitializationSettings(

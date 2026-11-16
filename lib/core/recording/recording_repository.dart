@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
+import '../diagnostics/crash_reporter.dart';
 import '../db/app_database.dart' show summaryPlainText;
 import '../summary/summary_models.dart';
 import '../models/recording.dart';
@@ -171,9 +173,15 @@ class RecordingRepository extends ChangeNotifier {
   /// confirmation. Processing code never calls this.
   Future<void> deleteByUser(String id) async {
     await _db.delete('recordings', where: 'id = ?', whereArgs: [id]);
-    final dir = Directory(storage.dirFor(id));
-    if (dir.existsSync()) dir.deleteSync(recursive: true);
     notifyListeners();
+    // Files go in the background: a 3-hour note is ~400 MB; never stall the
+    // UI thread, and the note is already gone from every screen.
+    final dir = Directory(storage.dirFor(id));
+    unawaited(dir.delete(recursive: true).then<void>((_) {}, onError: (Object e) {
+      if (e is! PathNotFoundException) {
+        CrashReporter.instance?.record('delete_files_failed', e, null);
+      }
+    }));
   }
 
   // ---- segments ----------------------------------------------------------------

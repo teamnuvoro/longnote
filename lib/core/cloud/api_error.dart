@@ -38,8 +38,10 @@ String plainEnglishError(String code, {Map<String, Object?> detail = const {}}) 
       };
     case networkErrorCode:
       return 'No internet. Saved on your phone; it uploads when you are online.';
+    case 'timeout':
+      return 'The server took too long to answer. We will try again.';
     case 'unauthorized':
-      return 'Please reopen the app to sign in again.';
+      return 'Could not sign in to the service. We will try again.';
     case 'not_found':
       return 'We could not find that upload. We will send it again.';
     case 'too_long':

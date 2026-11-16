@@ -150,6 +150,12 @@ class LongnoteApi {
         await auth.invalidate();
         continue;
       }
+      // Still rejected with a fresh token: the user may be gone on the
+      // server (or the signing key changed). Start a new one if GoTrue
+      // confirms it; the pipeline re-sends work of the old user.
+      if (r.statusCode == 401 && attempt == 1 && await auth.replaceIfRejected()) {
+        continue;
+      }
       final text = utf8.decode(r.bodyBytes);
       Map<String, Object?>? json;
       try {
@@ -208,7 +214,7 @@ class LongnoteApi {
       if (customInstructions != null && customInstructions.trim().isNotEmpty)
         'custom_instructions': customInstructions.trim(),
       'output_language': outputLanguage,
-    });
+    }, timeout: const Duration(minutes: 3));
     final s = m['summary'];
     if (s is Map) return s.cast<String, Object?>();
     if (s is String) {

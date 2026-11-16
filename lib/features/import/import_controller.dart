@@ -172,6 +172,12 @@ class ImportController extends ChangeNotifier {
       }
       final dest = await part.rename(p.join(dir.path, fileName));
       final ms = m.durationMs ?? await probe.durationMs(dest.path);
+      if (job.cancelled) {
+        await _cleanup(dir);
+        jobs.remove(job);
+        notifyListeners();
+        return null;
+      }
       if (ms == null || ms <= 0) {
         await _cleanup(dir);
         return _fail(job, 'We could not find any sound in this file.');
@@ -218,39 +224,24 @@ class ImportController extends ChangeNotifier {
     return null;
   }
 
-  /// Streams the file over in chunks, reporting progress at most every ~1 MB.
+  /// Copies the file in chunks with every write awaited (so memory stays
+  /// flat even for a multi-GB video), reporting progress every ~1 MB.
   Future<void> _copy(File from, File to, ImportJob job) async {
-    final sink = to.openWrite();
-    final done = Completer<void>();
+    final out = await to.open(mode: FileMode.write);
     var lastNotified = 0;
-    late final StreamSubscription<List<int>> sub;
-    sub = from.openRead().listen(
-      (chunk) {
-        if (job.cancelled) {
-          sub.cancel();
-          if (!done.isCompleted) done.complete();
-          return;
-        }
-        sink.add(chunk);
+    try {
+      await for (final chunk in from.openRead()) {
+        if (job.cancelled) break;
+        await out.writeFrom(chunk);
         job.copiedBytes += chunk.length;
         if (job.copiedBytes - lastNotified >= 1 << 20) {
           lastNotified = job.copiedBytes;
           notifyListeners();
         }
-      },
-      onError: (Object e) {
-        if (!done.isCompleted) done.completeError(e);
-      },
-      onDone: () {
-        if (!done.isCompleted) done.complete();
-      },
-      cancelOnError: true,
-    );
-    try {
-      await done.future;
+      }
+      await out.flush();
     } finally {
-      await sink.flush();
-      await sink.close();
+      await out.close();
     }
     notifyListeners();
   }
