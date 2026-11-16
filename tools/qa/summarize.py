@@ -13,6 +13,7 @@ RUNS = [
     ("2-kill", "Force-quit while recording", False),  # ends by SIGKILL: drive exit != 0 expected
     ("3-recover", "Recovery, settings, fast taps, import", True),
     ("4-offline", "Server unreachable, then back", True),
+    ("5-extra", "Phone calls, background, 1-hour recording", True),
 ]
 
 

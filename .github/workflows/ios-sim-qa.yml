@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       only:
-        description: "Run only these launches (e.g. '1-main'); empty = all four"
+        description: "Run only these launches (e.g. '1-main'); empty = all five"
         type: string
         default: ""
 
@@ -28,7 +28,7 @@ concurrency:
 jobs:
   qa:
     runs-on: macos-15
-    timeout-minutes: 90
+    timeout-minutes: 170
     steps:
       - uses: actions/checkout@v4
       - uses: maxim-lobanov/setup-xcode@v1
@@ -40,7 +40,7 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - name: Run the app in the simulator (4 launches)
+      - name: Run the app in the simulator (5 launches)
         env:
           QA_OUT: ${{ github.workspace }}/qa_out
           QA_ONLY: ${{ inputs.only || '' }}

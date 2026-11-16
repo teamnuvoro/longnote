@@ -24,6 +24,11 @@ class FilePcmSource implements PcmSource {
   /// Bytes of real audio (not silence) sent by all sources this run.
   static int audioBytesSent = 0;
 
+  /// Audio seconds sent per real second. 1 = real time. The long-recording
+  /// check uses more so an hour of audio takes minutes; the recorder's timer
+  /// counts the bytes it is given, so it shows the full hour.
+  static int speed = 1;
+
   final String? path;
   static const _tick = Duration(milliseconds: 100);
 
@@ -96,7 +101,7 @@ class FilePcmSource implements PcmSource {
   void _pump() {
     final out = _out;
     if (out == null || out.isClosed || isPaused) return;
-    final due = (_clock.elapsedMicroseconds * AppConfig.bytesPerSecond ~/
+    final due = (_clock.elapsedMicroseconds * speed * AppConfig.bytesPerSecond ~/
             1000000) &
         ~1;
     var n = due - _sentBytes;
@@ -152,6 +157,23 @@ class FilePcmSource implements PcmSource {
     unawaited(_out?.close());
     _out = null;
     if (identical(current, this)) current = null;
+  }
+
+  /// Like an incoming phone call on iOS: the input stops, then the session
+  /// sends "interruption began".
+  void interruptBegin() {
+    isPaused = true;
+    _clock.stop();
+    _interruptions.add(InterruptionPhase.began);
+  }
+
+  /// The call ended. Resumable: iOS says the app may go on (the recorder
+  /// calls [resume]). Not resumable: the input stays stopped until the user
+  /// taps Resume.
+  void interruptEnd({bool resumable = true}) {
+    _interruptions.add(resumable
+        ? InterruptionPhase.endedResumable
+        : InterruptionPhase.endedNotResumable);
   }
 
   @override

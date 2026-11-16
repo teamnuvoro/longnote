@@ -7,7 +7,10 @@
    run says "running", this records a hang: a simulator screenshot, a native
    `sample` of the app process, the last check id, then stops that run.
 2. Requests from the app: QA_OUT/requests/<name> -> do it -> <name>.done
-   (`unblock` / `block` = tools/qa/net_block.sh off / on).
+   (`unblock` / `block` = tools/qa/net_block.sh off / on;
+   `background-<secs>` = send the app to the background by opening the
+   Settings app, wait, then bring the app back; no hang check meanwhile and
+   for 60 s after, since iOS may suspend the app's timers in the background).
 """
 import argparse
 import json
@@ -26,6 +29,8 @@ OUT = args.out
 HERE = os.path.dirname(os.path.abspath(__file__))
 REQ = os.path.join(OUT, "requests")
 reported = set()
+grace_until = 0.0
+BUNDLE = "com.novaralabs.longnote"
 
 
 def log(msg):
@@ -79,6 +84,26 @@ def on_hang(run, drive_pid, hb, age):
         pass
 
 
+def background(secs):
+    global grace_until
+    grace_until = time.time() + secs + 600  # in case we die mid-way
+    r = sh(["xcrun", "simctl", "launch", args.udid, "com.apple.Preferences"])
+    if r.returncode != 0:
+        return f"could not open Settings: {r.stderr.strip()[-200:]}"
+    time.sleep(3)
+    sh(["xcrun", "simctl", "io", args.udid, "screenshot",
+        os.path.join(OUT, "shots", f"host-background-{int(time.time())}.png")])
+    time.sleep(max(0, secs - 3))
+    pids_before = app_pids()
+    r = sh(["xcrun", "simctl", "launch", args.udid, BUNDLE])
+    grace_until = time.time() + 60
+    pids_after = app_pids()
+    same = bool(pids_before) and pids_before == pids_after
+    return (f"app in background {secs} s, brought back "
+            f"({'same process' if same else f'process before {pids_before} after {pids_after}'}; "
+            f"launch rc {r.returncode})")
+
+
 def handle_requests():
     if not os.path.isdir(REQ):
         return
@@ -89,6 +114,8 @@ def handle_requests():
         if name in ("unblock", "block"):
             r = sh([os.path.join(HERE, "net_block.sh"), "off" if name == "unblock" else "on", OUT])
             msg = (r.stdout.strip().splitlines() or [r.stderr.strip()])[-1]
+        elif name.startswith("background-"):
+            msg = background(int(name.split("-", 1)[1]))
         else:
             msg = f"unknown request {name}"
         log(f"request {name}: {msg}")
@@ -109,7 +136,8 @@ while True:
             except (OSError, ValueError):
                 hb = {}
             age = time.time() - os.path.getmtime(hb_path)
-            if hb.get("run") == run and hb.get("state") == "running" and age > HANG_SECS:
+            if (hb.get("run") == run and hb.get("state") == "running" and age > HANG_SECS
+                    and time.time() > grace_until):
                 reported.add(run)
                 on_hang(run, drive_pid, hb, age)
     except Exception as e:  # keep watching whatever happens
