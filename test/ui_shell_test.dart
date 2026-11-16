@@ -9,14 +9,7 @@ import 'package:longnote/features/dev/widget_gallery_screen.dart';
 import 'package:longnote/features/import/import_details_sheet.dart';
 import 'package:longnote/features/import/import_progress_screen.dart';
 import 'package:longnote/features/import/import_screen.dart';
-import 'package:longnote/features/note/player_sheet.dart';
-import 'package:longnote/features/note/share_sheet.dart';
-import 'package:longnote/features/note/speakers_sheet.dart';
-import 'package:longnote/features/note/summary_style_sheet.dart';
-import 'package:longnote/features/notes/note_actions_sheet.dart';
-import 'package:longnote/features/notes/search_screen.dart';
 import 'package:longnote/features/paywall/trial_started_screen.dart';
-import 'package:longnote/features/recording/discard_sheet.dart';
 import 'package:longnote/features/settings/audio_language_screen.dart';
 import 'package:longnote/features/settings/plan_screen.dart';
 import 'package:longnote/features/settings/transcription_screen.dart';
@@ -84,15 +77,9 @@ void main() {
     expect(initialLocation(onboarded: true, paywallSeen: true), '/notes');
   });
 
+  // B/C/D screens are real now: see test/screens/bcd_*_test.dart.
   testWidgets('every placeholder screen and sheet builds', (tester) async {
     final widgets = <Widget>[
-      const SearchScreen(),
-      const NoteActionsSheet(id: 'n'),
-      const SpeakersSheet(id: 'n'),
-      const ShareSheet(id: 'n'),
-      const SummaryStyleSheet(),
-      const PlayerSheet(id: 'n'),
-      const DiscardSheet(),
       const TrialStartedScreen(),
       const AskScreen(),
       const AskChatScreen(id: 'n'),

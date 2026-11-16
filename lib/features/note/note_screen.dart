@@ -403,10 +403,13 @@ class _NoteScreenState extends State<NoteScreen> {
           onChanged: canToggle ? (v) => setState(() => _showSpeakers = v) : null,
         ),
         const SizedBox(width: 8),
-        Text('Speakers',
-            style: LnText.segment.copyWith(
-                color: canToggle ? LnColors.ink : LnColors.ink3)),
-        const Spacer(),
+        Expanded(
+          child: Text('Speakers',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: LnText.segment.copyWith(
+                  color: canToggle ? LnColors.ink : LnColors.ink3)),
+        ),
         if (canToggle) ...[
           LnPillButton(label: 'Edit names', icon: LnIcons.pencil, onPressed: _openSpeakers),
           const SizedBox(width: 8),

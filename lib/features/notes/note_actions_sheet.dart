@@ -123,12 +123,16 @@ class _NoteActionsSheetState extends State<NoteActionsSheet> {
               large: true,
               showChevron: false,
               onTap: n == null ? null : _share),
-          LnListRow(
-              icon: LnIcons.copy,
-              label: 'Copy summary',
-              large: true,
-              showChevron: false,
-              onTap: _summaryText == null ? null : _copy),
+          // Dimmed when there is no summary yet.
+          Opacity(
+            opacity: _summaryText == null && n != null ? 0.4 : 1,
+            child: LnListRow(
+                icon: LnIcons.copy,
+                label: 'Copy summary',
+                large: true,
+                showChevron: false,
+                onTap: _summaryText == null ? null : _copy),
+          ),
         ]),
         const SizedBox(height: 12),
         LnCardGroup(children: [

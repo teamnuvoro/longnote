@@ -162,6 +162,12 @@ class _NoEncoder implements AudioEncoder {
 }
 
 class FakePcm implements PcmSource {
+  FakePcm() {
+    last = this;
+  }
+
+  /// The source of the current test recording (to feed it audio).
+  static FakePcm? last;
   final audio = StreamController<Uint8List>();
   final ints = StreamController<InterruptionPhase>.broadcast();
   @override
