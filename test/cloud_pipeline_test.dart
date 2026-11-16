@@ -392,4 +392,116 @@ void main() {
     expect(r.processingStatus, ProcessingStatus.failed);
     expect(r.errorCode, 'bad_request');
   });
+
+  test('refresh token dies mid-poll: new anonymous user, uploads again under it, done',
+      () async {
+    await makeRecording('n1');
+    server.pollsUntilDone = 3;
+    final app = boot();
+    await app.queue.enqueue('n1');
+    await app.queue.runDue();
+    expect((await note('n1')).processingStatus, ProcessingStatus.transcribing);
+    expect(server.objects.keys, ['user-1/n1.m4a']);
+
+    // The session expires and GoTrue no longer knows the refresh token.
+    server.revokedRefresh.add('rt-user-1');
+    env.clock.advance(const Duration(hours: 1));
+    await app.queue.runDue();
+    expect(server.signups, 2);
+    expect(server.objects.keys, contains('user-2/n1.m4a'),
+        reason: 're-uploaded from the phone under the new user');
+    var pieces = await CloudPieceStore(env.db.db).list('n1');
+    expect(pieces.single.userId, 'user-2');
+    expect(server.jobs[pieces.single.serverJobId]!.path, 'user-2/n1.m4a');
+
+    for (var i = 0; i < 3; i++) {
+      env.clock.advance(const Duration(seconds: 15));
+      await app.queue.runDue();
+    }
+    final r = await note('n1');
+    expect(r.processingStatus, ProcessingStatus.done);
+    expect(await env.repo.transcript('n1'), hasLength(2));
+  });
+
+  test('transcribe-status not_found (job gone): resets the piece, uploads and starts again',
+      () async {
+    await makeRecording('n1');
+    server.pollsUntilDone = 3;
+    final app = boot();
+    await app.queue.enqueue('n1');
+    await app.queue.runDue();
+    final firstJob = (await CloudPieceStore(env.db.db).list('n1')).single.serverJobId;
+    server.jobs.clear(); // e.g. the 30-day row cleanup, or a server reset
+
+    env.clock.advance(const Duration(seconds: 5));
+    await app.queue.runDue();
+    var r = await note('n1');
+    expect(r.processingStatus, ProcessingStatus.transcribing,
+        reason: 'not stuck and not failed');
+    expect(r.tries, 0);
+    expect(server.tusCreates, 2);
+    expect(server.starts, 2);
+    final piece = (await CloudPieceStore(env.db.db).list('n1')).single;
+    expect(piece.serverJobId, isNot(firstJob));
+
+    for (var i = 0; i < 3; i++) {
+      env.clock.advance(const Duration(seconds: 15));
+      await app.queue.runDue();
+    }
+    r = await note('n1');
+    expect(r.processingStatus, ProcessingStatus.done);
+    expect(server.signups, 1);
+  });
+
+  test('refresh outage while polling: same user, no re-upload, then done', () async {
+    await makeRecording('n1');
+    server.pollsUntilDone = 3;
+    final app = boot();
+    await app.queue.enqueue('n1');
+    await app.queue.runDue();
+    server.refreshFailures = 1; // 503 from GoTrue
+    env.clock.advance(const Duration(hours: 1));
+    await app.queue.runDue();
+    expect(server.signups, 1);
+    expect(server.tusCreates, 1);
+    for (var i = 0; i < 4; i++) {
+      env.clock.advance(const Duration(minutes: 1));
+      await app.queue.runDue();
+    }
+    expect((await note('n1')).processingStatus, ProcessingStatus.done);
+    expect(server.signups, 1);
+    expect(server.tusCreates, 1, reason: 'the old upload and job were kept');
+  });
+
+  test('on-device transcript is kept until the first cloud turns are saved',
+      () async {
+    await makeRecording('n1');
+    await env.repo.db.insert('transcript_lines',
+        TranscriptLine(startMs: 0, endMs: 900, text: 'whisper text').toMap('n1'));
+    await env.repo.setTranscriptSource('n1', 'on_device');
+
+    // A failing cloud run (not retried) leaves the old transcript alone.
+    server.startFailures = 1;
+    server.startFailureCode = 'bad_request';
+    final app = boot();
+    await app.queue.enqueue('n1');
+    await app.queue.runDue();
+    expect((await note('n1')).processingStatus, ProcessingStatus.failed);
+    expect((await env.repo.transcript('n1')).map((l) => l.text), ['whisper text']);
+    expect((await note('n1')).transcriptSource, 'on_device');
+
+    // Retry succeeds: replaced by the cloud turns at once.
+    await app.queue.enqueue('n1');
+    await app.queue.runDue();
+    expect((await env.repo.transcript('n1')).map((l) => l.text), ['whisper text'],
+        reason: 'still transcribing: nothing cleared yet');
+    env.clock.advance(const Duration(seconds: 5));
+    await app.queue.runDue();
+    final r = await note('n1');
+    expect(r.processingStatus, ProcessingStatus.done);
+    expect(r.transcriptSource, 'cloud');
+    final lines = await env.repo.transcript('n1');
+    expect(lines.map((l) => l.speaker), ['1', '2']);
+    expect(lines.any((l) => l.text == 'whisper text'), isFalse);
+  });
 }

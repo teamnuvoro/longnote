@@ -49,6 +49,14 @@ class FakeBackend {
   /// transcribe-start answers limit_reached with this scope while set.
   String? limitScope;
 
+  /// Refresh tokens GoTrue no longer knows (reply: refresh_token_not_found).
+  final revokedRefresh = <String>{};
+
+  /// Next N refresh calls fail with this HTTP status and body (an outage).
+  int refreshFailures = 0;
+  int refreshFailStatus = 503;
+  String refreshFailBody = '<html>upstream unavailable</html>';
+
   /// Polls until a job is done.
   int pollsUntilDone = 2;
 
@@ -84,7 +92,16 @@ class FakeBackend {
     if (path == '/auth/v1/token') {
       refreshes++;
       final rt = (jsonDecode(req.body) as Map)['refresh_token'] as String;
-      if (!rt.startsWith('rt-')) return http.Response('{"error":"bad"}', 400);
+      if (refreshFailures > 0) {
+        refreshFailures--;
+        return http.Response(refreshFailBody, refreshFailStatus);
+      }
+      if (!rt.startsWith('rt-') || revokedRefresh.contains(rt)) {
+        // Real GoTrue reply (checked against the project, 16 Nov 2026).
+        return http.Response(
+            '{"code":400,"error_code":"refresh_token_not_found","msg":"Invalid Refresh Token: Refresh Token Not Found"}',
+            400);
+      }
       return _session(rt.substring(3));
     }
     if (req.url.host == 'proj.storage.supabase.co') return _tus(req);
@@ -96,7 +113,7 @@ class FakeBackend {
       functionCalls.putIfAbsent(fn, () => []).add(body);
       return switch (fn) {
         'transcribe-start' => _start(user, body),
-        'transcribe-status' => _status(body),
+        'transcribe-status' => _status(user, body),
         'summarize' => _summarize(body),
         'ask' => _ask(body),
         _ => _err(404, 'not_found'),
@@ -186,7 +203,7 @@ class FakeBackend {
     if (limitScope != null) {
       return _err(429, 'limit_reached', {'scope': limitScope});
     }
-    final existing = jobs.values.where((j) => j.clientId == client).toList();
+    final existing = jobs.values.where((j) => j.clientId == client && j.path == path).toList();
     if (existing.isNotEmpty &&
         (existing.first.status == 'transcribing' || existing.first.status == 'done')) {
       return http.Response(
@@ -209,9 +226,10 @@ class FakeBackend {
         200);
   }
 
-  http.Response _status(Map<String, Object?> b) {
+  http.Response _status(String user, Map<String, Object?> b) {
     final job = jobs[b['job_id']];
-    if (job == null) return _err(404, 'not_found');
+    // Like the server: another user's job is "not found".
+    if (job == null || !job.path.startsWith('$user/')) return _err(404, 'not_found');
     if (b['ack'] == true) {
       job
         ..acked = true

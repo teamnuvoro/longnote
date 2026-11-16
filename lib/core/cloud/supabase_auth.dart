@@ -59,7 +59,9 @@ class AuthSession {
 ///
 /// The session lives in the local database (app sandbox). Tokens last 1 h;
 /// [accessToken] refreshes when less than [refreshMargin] is left, and signs
-/// up again if the refresh token is no longer valid.
+/// up again only if GoTrue says the refresh token is dead
+/// ([refreshTokenIsDead]). A new user id orphans server jobs; the cloud
+/// pipeline notices (piece.userId) and uploads again under the new user.
 class SupabaseAuth {
   SupabaseAuth({
     required this.config,
@@ -150,7 +152,10 @@ class SupabaseAuth {
         _clock.now());
   }
 
-  /// Null when the refresh token was rejected (then we sign up again).
+  /// Null only when GoTrue says the refresh token (or its session/user) is
+  /// gone for good; then we sign up again. Network errors, 5xx, 429 and
+  /// ambiguous 4xx replies throw instead, so a passing outage never swaps
+  /// the user (which would orphan every job on the server).
   Future<AuthSession?> _refresh(String refreshToken) async {
     final r = await _client
         .post(config.authRefresh,
@@ -161,10 +166,41 @@ class SupabaseAuth {
           jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, Object?>,
           _clock.now());
     }
-    if (r.statusCode == 400 || r.statusCode == 401 || r.statusCode == 403) {
-      return null;
-    }
-    throw ApiException('server_error', 'token refresh failed',
-        httpStatus: r.statusCode);
+    if (refreshTokenIsDead(r.statusCode, utf8.decode(r.bodyBytes))) return null;
+    throw ApiException(
+        r.statusCode == 429 ? 'limit_reached' : 'server_error',
+        'token refresh failed',
+        httpStatus: r.statusCode,
+        detail: r.statusCode == 429 ? const {'scope': 'user_hour'} : const {});
   }
+}
+
+/// GoTrue `error_code`s meaning the refresh token can never work again.
+const deadRefreshCodes = {
+  'refresh_token_not_found',
+  'refresh_token_already_used',
+  'session_not_found',
+  'session_expired',
+  'user_not_found',
+  'user_banned',
+};
+
+/// True when a /token?grant_type=refresh_token reply says the refresh token
+/// is invalid for good (new GoTrue `error_code`, or the older OAuth-style
+/// `error: invalid_grant` with "Invalid Refresh Token"). Anything else
+/// (5xx, 429, a proxy page, a body we cannot read) is treated as temporary.
+bool refreshTokenIsDead(int status, String body) {
+  if (status != 400 && status != 401 && status != 403) return false;
+  Object? m;
+  try {
+    m = jsonDecode(body);
+  } catch (_) {
+    return false;
+  }
+  if (m is! Map) return false;
+  final code = m['error_code'];
+  if (code is String) return deadRefreshCodes.contains(code);
+  final err = m['error'];
+  final desc = '${m['error_description'] ?? m['msg'] ?? ''}'.toLowerCase();
+  return err == 'invalid_grant' && desc.contains('refresh token');
 }

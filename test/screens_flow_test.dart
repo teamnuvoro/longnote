@@ -115,6 +115,39 @@ void main() {
       expect(env.billing.entitlement.value.planId, annualPlan.id);
     });
 
+    testWidgets('A1 says "can remind"; G4 shows the reminder Off after Skip, tap turns it on',
+        (t) async {
+      await openPaywall(t);
+      expect(find.text('We can remind you the trial is ending.'), findsOneWidget);
+      await t.tap(find.text('Start free trial'));
+      await settle(t);
+      await t.tap(find.text('Skip — I’ll remember'));
+      await settle(t);
+
+      await t.pumpWidget(env.app('/settings/plan'));
+      await settle(t);
+      expect(find.text('Off'), findsOneWidget);
+      expect(find.text('Wed, Nov 18'), findsNothing);
+      await t.tap(find.text('Off'));
+      await settle(t);
+      expect(env.scheduler.permissionAsks, 1);
+      expect(env.scheduler.scheduled, hasLength(1));
+      expect(find.text('Off'), findsNothing);
+      expect(find.text('Wed, Nov 18'), findsOneWidget);
+    });
+
+    testWidgets('G4 after Allow shows the scheduled reminder date', (t) async {
+      await openPaywall(t);
+      await t.tap(find.text('Start free trial'));
+      await settle(t);
+      await t.tap(find.text('Allow the reminder'));
+      await settle(t);
+      await t.pumpWidget(env.app('/settings/plan'));
+      await settle(t);
+      expect(find.text('Wed, Nov 18'), findsOneWidget);
+      expect(find.text('Off'), findsNothing);
+    });
+
     testWidgets('permission denied: no reminder, still Notes', (t) async {
       env.scheduler.grant = false;
       await openPaywall(t);

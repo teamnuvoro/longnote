@@ -26,6 +26,29 @@ void main() {
   setUp(() async => env = await TestEnv.create());
   tearDown(() async => env.dispose());
 
+  group('addPeriod clamps the day to the month length', () {
+    test('month', () {
+      expect(addPeriod(DateTime(2027, 1, 31, 9, 30), PlanPeriod.month),
+          DateTime(2027, 2, 28, 9, 30));
+      expect(addPeriod(DateTime(2028, 1, 31), PlanPeriod.month),
+          DateTime(2028, 2, 29));
+      expect(addPeriod(DateTime(2026, 3, 31), PlanPeriod.month),
+          DateTime(2026, 4, 30));
+      expect(addPeriod(DateTime(2026, 12, 31), PlanPeriod.month),
+          DateTime(2027, 1, 31));
+      expect(addPeriod(DateTime(2026, 11, 16), PlanPeriod.month),
+          DateTime(2026, 12, 16));
+      expect(addPeriod(DateTime.utc(2027, 1, 30), PlanPeriod.month),
+          DateTime.utc(2027, 2, 28));
+    });
+    test('year', () {
+      expect(addPeriod(DateTime(2028, 2, 29), PlanPeriod.year),
+          DateTime(2029, 2, 28));
+      expect(addPeriod(DateTime(2026, 11, 16), PlanPeriod.year),
+          DateTime(2027, 11, 16));
+    });
+  });
+
   group('paywall gate: first recording free, second gated', () {
     test('pure rule', () {
       const none = Entitlement();

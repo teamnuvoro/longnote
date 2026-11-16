@@ -196,6 +196,23 @@ class FakeBillingService implements BillingService {
   Future<void> resetForDev() async => _set(const Entitlement());
 }
 
-DateTime addPeriod(DateTime from, PlanPeriod p) => p == PlanPeriod.month
-    ? DateTime(from.year, from.month + 1, from.day, from.hour, from.minute)
-    : DateTime(from.year + 1, from.month, from.day, from.hour, from.minute);
+/// One billing period later, the way the App Store renews: the day is
+/// clamped to the target month's length (Jan 31 + 1 month = Feb 28/29,
+/// Feb 29 + 1 year = Feb 28), never rolled into the next month.
+DateTime addPeriod(DateTime from, PlanPeriod p) {
+  var y = from.year, m = from.month;
+  if (p == PlanPeriod.month) {
+    m += 1;
+    if (m > 12) {
+      m = 1;
+      y += 1;
+    }
+  } else {
+    y += 1;
+  }
+  final lastDay = DateTime.utc(y, m + 1, 0).day;
+  final d = from.day > lastDay ? lastDay : from.day;
+  return from.isUtc
+      ? DateTime.utc(y, m, d, from.hour, from.minute)
+      : DateTime(y, m, d, from.hour, from.minute);
+}

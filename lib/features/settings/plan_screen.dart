@@ -142,24 +142,99 @@ String _every(Plan p, DateTime d) => p.period == PlanPeriod.year
     ? 'every year on ${monthDay(d)}'
     : 'every month on the ${ordinal(d.day)}';
 
-class _Dates extends StatelessWidget {
+class _Dates extends StatefulWidget {
   const _Dates({required this.e});
   final Entitlement e;
 
   @override
+  State<_Dates> createState() => _DatesState();
+}
+
+class _DatesState extends State<_Dates> {
+  /// The reminder actually scheduled for this trial (null = none: the user
+  /// skipped or denied notifications on A2).
+  DateTime? _scheduled;
+  bool _loaded = false;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(_Dates old) {
+    super.didUpdateWidget(old);
+    if (old.e.trialEndsAt != widget.e.trialEndsAt) _load();
+  }
+
+  Future<void> _load() async {
+    final end = widget.e.trialEndsAt;
+    final at = end == null
+        ? null
+        : await context.read<AppServices>().reminders.scheduledFor(end);
+    if (!mounted) return;
+    setState(() {
+      _scheduled = at;
+      _loaded = true;
+    });
+  }
+
+  Future<void> _turnOn() async {
+    final s = context.read<AppServices>();
+    final e = widget.e;
+    if (_busy || e.trialEndsAt == null) return;
+    setState(() => _busy = true);
+    var granted = false;
+    DateTime? at;
+    try {
+      await s.kv.setBool(AppServices.kvNotificationsAsked, true);
+      granted = await s.reminderScheduler.requestPermission();
+      if (granted) {
+        at = await s.reminders.onTrialStarted(planForId(e.planId), e.trialEndsAt!);
+      }
+    } catch (_) {
+      granted = false;
+    }
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _scheduled = at;
+    });
+    if (!granted) {
+      showNote(context,
+          'Notifications are off. Turn them on in iPhone Settings → Longnote, then try again.');
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final e = widget.e;
     final plan = planForId(e.planId);
     final rows = <Widget>[];
     if (e.status == EntitlementStatus.trial && e.trialEndsAt != null) {
       final end = e.trialEndsAt!;
       // Same rule as the scheduled notification (26 h before the end).
       final remind = end.subtract(AppConfig.trialReminderLead);
-      rows.add(LnListRow(
-          icon: LnIcons.bell,
-          label: 'Reminder',
-          value: remind.isBefore(screenNow())
-              ? 'Sent ${monthDay(remind)}'
-              : weekdayMonthDay(remind)));
+      final canRemind = remind.isAfter(screenNow());
+      if (!_loaded) {
+        rows.add(const LnListRow(icon: LnIcons.bell, label: 'Reminder'));
+      } else if (_scheduled != null) {
+        rows.add(LnListRow(
+            icon: LnIcons.bell,
+            label: 'Reminder',
+            value: remind.isBefore(screenNow())
+                ? 'Sent ${monthDay(remind)}'
+                : weekdayMonthDay(remind)));
+      } else {
+        rows.add(LnListRow(
+            icon: LnIcons.bell,
+            label: 'Reminder',
+            value: 'Off',
+            subtitle: canRemind ? 'Tap to get one reminder before the first charge' : null,
+            onTap: canRemind ? _turnOn : null));
+      }
       rows.add(LnListRow(
           icon: LnIcons.card, label: 'First charge', value: weekdayMonthDay(end)));
       rows.add(LnListRow(

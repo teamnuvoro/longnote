@@ -3,6 +3,7 @@ import 'package:timezone/data/latest_all.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
 import '../config.dart';
+import '../db/app_database.dart';
 import '../util/clock.dart';
 import 'billing_service.dart';
 
@@ -40,18 +41,24 @@ abstract class ReminderScheduler {
 }
 
 /// Schedules the trial reminder as a local notification (no server needed).
+/// With a [kv], remembers what was scheduled so G4 can say "Off" when the
+/// user skipped or denied notifications.
 class TrialReminderService {
-  TrialReminderService(this.scheduler, {Clock clock = const SystemClock()})
+  TrialReminderService(this.scheduler,
+      {this.kv, Clock clock = const SystemClock()})
       : _clock = clock;
 
   final ReminderScheduler scheduler;
+  final KvStore? kv;
   final Clock _clock;
   static const notificationId = 4201;
+  static const kvScheduledAt = 'trial_reminder_at';
 
   /// Returns the scheduled time, or null if nothing was scheduled.
   Future<DateTime?> onTrialStarted(Plan plan, DateTime trialEndsAt) async {
     final at = trialReminderTime(trialEndsAt, _clock.now());
     await scheduler.cancel(notificationId);
+    await kv?.set(kvScheduledAt, null);
     if (at == null) return null;
     await scheduler.schedule(
       id: notificationId,
@@ -59,7 +66,18 @@ class TrialReminderService {
       title: 'Trial ends in about a day',
       body: trialReminderBody(plan, trialEndsAt),
     );
+    await kv?.set(kvScheduledAt, '${at.millisecondsSinceEpoch}');
     return at;
+  }
+
+  /// The reminder scheduled for the trial ending at [trialEndsAt], or null
+  /// if none was (skipped, notifications denied, or another trial's).
+  Future<DateTime?> scheduledFor(DateTime trialEndsAt) async {
+    final v = int.tryParse(await kv?.get(kvScheduledAt) ?? '');
+    if (v == null) return null;
+    final at = DateTime.fromMillisecondsSinceEpoch(v);
+    final want = trialEndsAt.subtract(AppConfig.trialReminderLead);
+    return at.difference(want).abs() < const Duration(minutes: 1) ? at : null;
   }
 }
 

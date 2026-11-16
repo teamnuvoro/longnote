@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:longnote/core/cloud/api_error.dart';
 import 'package:longnote/core/cloud/longnote_api.dart';
 import 'package:longnote/core/cloud/piece_planner.dart';
 import 'package:longnote/core/cloud/supabase_auth.dart';
@@ -146,6 +147,45 @@ void main() {
       final a = SupabaseAuth(config: testConfig, kv: env.kv, client: server.client);
       expect(await a.userId(), 'user-1');
       expect(server.signups, 1);
+    });
+
+    test('refresh outage (5xx / 429 / unreadable 400) keeps the user; no new sign-up',
+        () async {
+      final a = SupabaseAuth(
+          config: testConfig, kv: env.kv, client: server.client, clock: env.clock);
+      expect(await a.userId(), 'user-1');
+      env.clock.advance(const Duration(minutes: 56));
+      for (final (status, body) in [
+        (503, '<html>bad gateway</html>'),
+        (500, '{"code":500,"msg":"Internal"}'),
+        (429, '{"code":429,"error_code":"over_request_rate_limit"}'),
+        (400, '{"error":"bad"}'),
+        (401, 'not json'),
+      ]) {
+        server
+          ..refreshFailures = 1
+          ..refreshFailStatus = status
+          ..refreshFailBody = body;
+        await expectLater(a.session(), throwsA(isA<ApiException>()),
+            reason: 'HTTP $status');
+      }
+      expect(server.signups, 1, reason: 'never a new anonymous user');
+      // Outage over: same user, refreshed.
+      expect(await a.userId(), 'user-1');
+      expect(server.signups, 1);
+    });
+
+    test('refreshTokenIsDead: only GoTrue\'s definitive codes', () {
+      expect(refreshTokenIsDead(400,
+          '{"code":400,"error_code":"refresh_token_not_found","msg":"Invalid Refresh Token: Refresh Token Not Found"}'), isTrue);
+      expect(refreshTokenIsDead(400, '{"error_code":"refresh_token_already_used"}'), isTrue);
+      expect(refreshTokenIsDead(403, '{"error_code":"session_not_found"}'), isTrue);
+      expect(refreshTokenIsDead(400,
+          '{"error":"invalid_grant","error_description":"Invalid Refresh Token: Already Used"}'), isTrue);
+      expect(refreshTokenIsDead(400, '{"error_code":"validation_failed"}'), isFalse);
+      expect(refreshTokenIsDead(400, '{"error":"invalid_grant","error_description":"something else"}'), isFalse);
+      expect(refreshTokenIsDead(500, '{"error_code":"refresh_token_not_found"}'), isFalse);
+      expect(refreshTokenIsDead(400, '<html></html>'), isFalse);
     });
 
     test('API retries once with a fresh token after 401', () async {

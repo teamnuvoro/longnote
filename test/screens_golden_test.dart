@@ -112,6 +112,9 @@ void main() {
 
   testWidgets('G4 plan and billing', skip: _skip, (t) async {
     await env.billing.purchase(annualPlan);
+    // Figma draws the reminder as scheduled (the user allowed it on A2).
+    final e = env.billing.entitlement.value;
+    await env.services.reminders.onTrialStarted(annualPlan, e.trialEndsAt!);
     await shot(t, '/settings/plan', 'g4_plan');
   });
 }

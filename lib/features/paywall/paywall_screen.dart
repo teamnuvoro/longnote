@@ -282,7 +282,7 @@ class _Timeline extends StatelessWidget {
         rows.add(_Step(
             icon: LnIcons.bell,
             title: weekdayMonthDay(d.reminderAt!),
-            text: 'We remind you the trial is ending.'));
+            text: 'We can remind you the trial is ending.'));
       }
       rows.add(_Step(
           icon: LnIcons.card,

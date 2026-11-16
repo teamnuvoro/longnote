@@ -138,19 +138,27 @@ class CloudPipeline {
       if (plans.isEmpty) {
         throw JobFailure(plainEnglishError('no_audio'), code: 'no_audio', retryable: false);
       }
-      if (note.transcriptSource != 'cloud') {
-        await repo.clearTranscript(id);
-        await repo.setTranscriptSource(id, 'cloud');
-      }
+      // An existing (on-device) transcript stays until the first cloud
+      // turns are saved (_saveTurns), so a failed cloud run loses nothing.
       list = await pieces.create(id, plans);
+    }
+
+    // The anonymous user changed (its refresh token died): jobs and uploads
+    // of the old user are unreachable. Send those pieces again.
+    final userId = await auth.userId();
+    for (final piece in list) {
+      if (!piece.transcribed &&
+          piece.serverJobId != null &&
+          piece.userId != userId) {
+        piece.resetServer();
+        await pieces.save(piece);
+      }
     }
 
     // Phase 1: every piece without a server job: compress, upload, start.
     for (final piece in list) {
       if (piece.transcribed || piece.serverJobId != null) continue;
-      await _encode(note, piece, list.length);
-      await _upload(note, piece, list.length);
-      await _start(note, piece);
+      await _sendAndStart(note, piece, list.length);
     }
 
     // Phase 2: poll every running piece once.
@@ -159,7 +167,20 @@ class CloudPipeline {
     DateTime? oldest;
     for (final piece in list) {
       if (piece.transcribed) continue;
-      final st = await api.transcribeStatus(piece.serverJobId!);
+      final StatusResult st;
+      try {
+        st = await api.transcribeStatus(piece.serverJobId!);
+      } on ApiException catch (e) {
+        if (e.code != 'not_found') rethrow;
+        // The server has no such job for this user (cleaned up, or the user
+        // changed). The audio is still on the phone: upload and start again.
+        piece.resetServer();
+        await pieces.save(piece);
+        await _sendAndStart(note, piece, list.length);
+        pending++;
+        oldest ??= _clock.now();
+        continue;
+      }
       switch (st.status) {
         case 'done' when st.turns != null:
           await _saveTurns(piece, st.turns!, multi: list.length > 1);
@@ -230,6 +251,12 @@ class CloudPipeline {
 
   String _abs(String noteId, String rel) =>
       p.join(repo.storage.dirFor(noteId), rel);
+
+  Future<void> _sendAndStart(Recording note, CloudPiece piece, int n) async {
+    await _encode(note, piece, n);
+    await _upload(note, piece, n);
+    await _start(note, piece);
+  }
 
   Future<void> _encode(Recording note, CloudPiece piece, int n) async {
     if (piece.audioFile != null) {
@@ -357,6 +384,22 @@ class CloudPipeline {
       {required bool multi}) async {
     String key(String s) => multi ? '${piece.index + 1}:$s' : s;
     await repo.db.transaction((txn) async {
+      final src = await txn.query('recordings',
+          columns: ['transcript_source'],
+          where: 'id = ?',
+          whereArgs: [piece.recordingId]);
+      if (src.isNotEmpty && src.first['transcript_source'] != 'cloud') {
+        // First cloud turns of this note: only now replace the old
+        // (on-device) transcript.
+        await txn.delete('transcript_lines',
+            where: 'recording_id = ?', whereArgs: [piece.recordingId]);
+        await txn.delete('speakers',
+            where: 'recording_id = ?', whereArgs: [piece.recordingId]);
+        await txn.update('segments', {'transcribed': 0},
+            where: 'recording_id = ?', whereArgs: [piece.recordingId]);
+        await txn.update('recordings', {'transcript_source': 'cloud'},
+            where: 'id = ?', whereArgs: [piece.recordingId]);
+      }
       await txn.delete('transcript_lines',
           where: 'recording_id = ? AND seg_idx = ?',
           whereArgs: [piece.recordingId, piece.index]);
