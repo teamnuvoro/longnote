@@ -188,7 +188,7 @@ Replies `200`:
   Hourly cleanup also finalises jobs still `transcribing` after 30 min, and fails them after 6 h.
 
 **Polling:** every **5 s** for the first minute, then every **15 s**; stop after 2 h (show "still processing, we'll keep trying"
-and check when the app next opens). Soniox took 2-5 s for 23-60 s clips in the e2e test; expect roughly 1-3 min per audio hour (to be measured on long files).
+and check when the app next opens). Soniox took 2-5 s for 23-60 s clips in the e2e test; a 60-min file took 61 s (measured 16 Nov, section 9).
 On app start, poll every job that is `transcribing` or `done`.
 
 ### 4.3 `summarize`
@@ -334,7 +334,37 @@ Sample Hinglish output (note: Soniox writes the Hindi parts **in Devanagari**, i
 [18.3s] S1 (hi): Perfect. और इनवॉइस फ्राइडे तक भेज देना, प्लीज़।
 ```
 
-Not tested yet: a 1-hour and a 3-hour real recording (speed, turn quality), noisy rooms, Indian-English accents,
+### Re-run after the review fixes (16 Nov, later)
+
+- `tools/e2e/e2e.py`: all checks pass again (meeting TUS 2 speakers en; Hinglish 2 speakers hi; idempotent start; deletions;
+  summarize; ask found/not found). `--webhook-off` (secret `SONIOX_WEBHOOKS=off`, unset after): done in 27 s by the
+  status-poll fallback, no webhook.
+- `tools/e2e/race_cap.py`: 5 parallel `transcribe-start` for one note → one `job_id` (1 reply `transcribing`, 4 `uploaded`),
+  **one Soniox transcription**, `tries` 1. Global cap (test override = today's spend + room for one call): 5 parallel
+  `summarize` → 1 ok, 4 `global_day`, spend stayed under the cap and settled to the real cost (+$0.0009); same for `ask`
+  (+$0.0004).
+- Client-sent `X-Forwarded-For` / `X-Real-IP` do not change the IP the functions see (one `ip_daily` row).
+
+### Long audio: 60 min, two speakers (`tools/e2e/long_audio.py`)
+
+149 s of unique two-voice TTS dialogue looped to 60 min with gaps, AAC-LC mono 16 kHz 32 kbps:
+
+| measure | result |
+|---|---|
+| file | 3,600 s, **14,379,993 bytes** (32.0 kbps) |
+| TUS upload (3 × 6 MB chunks, from this server) | 4.1 s |
+| transcribe-start | 3.5 s |
+| **Soniox: start → done** | **61 s** (webhook arrived) |
+| result | 386 turns, **2 speakers**, en, `audio_duration_ms` 3,600,000, longest turn 11 s |
+| summarize (51,408 chars, 1 part) | 6.8 s; decisions correct (offer 80 Rs with 3-year lock-in; extend the trial) |
+| ask "What rent did we decide to offer?" | 3.9 s, found, 1 source, not truncated |
+| deletion | audio gone from storage, Soniox transcription 404, result cleared on ack |
+| cost (`cost_daily` delta) | **$0.1245** (Soniox $0.10 + summary + ask) |
+
+Projected for 3 h: ~43 MB (8 TUS chunks; upload time depends on the phone's uplink: ~1-3 min on 4G), Soniox ~3 min if it
+scales linearly (not measured), transcript ~155k chars → 2 summary parts, cost ≈ $0.35. Over 5 h the app splits into 4-h pieces.
+
+Not tested yet: a 3-hour real recording (speed, turn quality), noisy rooms, Indian-English accents,
 the hourly 24 h storage sweep on a real stale object (the delete call it uses is the same one the e2e verified).
 
 ## 10. Operations
