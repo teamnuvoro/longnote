@@ -7,6 +7,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../analytics/analytics.dart';
 import '../audio/wav.dart';
+import '../cloud/audio_encoder.dart';
 import '../models/recording.dart';
 import '../recording/recording_repository.dart';
 import '../summary/summary_models.dart';
@@ -15,9 +16,16 @@ import 'text_format.dart';
 
 /// Copy / share / export. Every export logs a local `export` event.
 class ShareService {
-  ShareService({required this.repo, required this.analytics});
+  ShareService({
+    required this.repo,
+    required this.analytics,
+    this.encoder = const NativeAudioEncoder(),
+  });
   final RecordingRepository repo;
   final Analytics analytics;
+
+  /// AAC encoder for the M4A audio export (D5).
+  final AudioEncoder encoder;
 
   PdfFonts? _fonts;
 
@@ -48,14 +56,20 @@ class ShareService {
         recordingId: r.id, props: {'kind': kind, 'via': 'share'});
   }
 
+  /// [speakerNames] (key -> name) prints names before each turn; null
+  /// leaves them out (D5 "Include speaker names" off).
   Future<void> sharePdf(Recording r,
-      {MeetingSummary? summary, String? note, Rect? origin}) async {
+      {MeetingSummary? summary,
+      String? note,
+      Rect? origin,
+      Map<String, String>? speakerNames}) async {
     final bytes = await buildRecordingPdf(
       recording: r,
       summary: summary,
       summaryNote: note,
       transcript: await repo.transcript(r.id),
       fonts: await _loadFonts(),
+      speakerNames: speakerNames,
     );
     final dir = await getTemporaryDirectory();
     final f = File(p.join(dir.path, '${safeFileName(r.title)}.pdf'));
@@ -87,5 +101,34 @@ class ShareService {
     } catch (_) {}
   }
 
-  String transcriptText(List<TranscriptLine> lines) => transcriptToText(lines);
+  /// Encodes the parts to one AAC .m4a in the temp folder and shares it
+  /// (about 15 MB per hour). The original parts are untouched.
+  Future<void> shareAudioM4a(Recording r, {Rect? origin}) async {
+    final parts = await repo.segmentPaths(r.id);
+    final dir = await getTemporaryDirectory();
+    final out = p.join(dir.path, '${safeFileName(r.title)}.m4a');
+    await encoder.encodeM4a(inputs: parts, output: out);
+    await SharePlus.instance.share(ShareParams(
+        files: [XFile(out, mimeType: 'audio/mp4')],
+        subject: r.title,
+        sharePositionOrigin: origin));
+    await analytics.log(AnalyticsEvent.export,
+        recordingId: r.id, props: {'kind': 'audio_m4a', 'via': 'share'});
+    try {
+      File(out).deleteSync();
+    } catch (_) {}
+  }
+
+  /// Plain transcript; [names] null = no speaker labels.
+  String transcriptText(List<TranscriptLine> lines, {Map<String, String>? names}) =>
+      names == null
+          ? transcriptToText([
+              for (final l in lines)
+                TranscriptLine(
+                    startMs: l.startMs,
+                    endMs: l.endMs,
+                    text: l.text,
+                    segmentIndex: l.segmentIndex)
+            ])
+          : transcriptToText(lines, names: names);
 }

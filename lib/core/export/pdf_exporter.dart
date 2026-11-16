@@ -32,6 +32,7 @@ Future<Uint8List> buildRecordingPdf({
   required List<TranscriptLine> transcript,
   required PdfFonts fonts,
   String? summaryNote,
+  Map<String, String>? speakerNames,
 }) async {
   final theme = pw.ThemeData.withFont(
     base: fonts.regular,
@@ -115,6 +116,11 @@ Future<Uint8List> buildRecordingPdf({
                   text: '${formatTimestamp(l.startMs)}  ',
                   style: const pw.TextStyle(
                       fontSize: 9, color: PdfColors.grey600)),
+              if (speakerNames != null && l.speaker != null)
+                pw.TextSpan(
+                    text: '${speakerNames[l.speaker] ?? 'Speaker ${l.speaker}'}: ',
+                    style: pw.TextStyle(
+                        fontSize: 11, fontWeight: pw.FontWeight.bold)),
               pw.TextSpan(
                   text: l.text, style: const pw.TextStyle(fontSize: 11)),
             ])),

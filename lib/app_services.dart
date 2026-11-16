@@ -126,6 +126,62 @@ class AppServices {
     await kv.set(kvWhisper, c.name);
   }
 
+  /// Widget tests: services over an already-open database, with fakes for
+  /// the platform parts. Not used by the app.
+  @visibleForTesting
+  static AppServices forTesting({
+    required AppDatabase db,
+    required RecordingRepository repo,
+    required Analytics analytics,
+    required BillingService billing,
+    required ShareService share,
+    required NetworkMonitor network,
+    required RecordingController Function(AppServices s) recorder,
+    required String recordingsRoot,
+    LocalNotificationScheduler? scheduler,
+    JobProcessor? processor,
+  }) {
+    final kv = KvStore(db.db);
+    final settings = AppSettings(kv);
+    final sched = scheduler ?? LocalNotificationScheduler();
+    final s = AppServices._(
+      db: db,
+      kv: kv,
+      repo: repo,
+      analytics: analytics,
+      billing: billing,
+      gate: PaywallGate(kv),
+      reminders: TrialReminderService(sched),
+      reminderScheduler: sched,
+      summaries: SummaryService.standard(kv),
+      share: share,
+      settings: settings,
+      network: network,
+      recordingsRoot: recordingsRoot,
+    );
+    s.processor = NoteProcessor(
+      repo: repo,
+      settings: settings,
+      pieces: CloudPieceStore(db.db),
+      onDevice: ProcessingPipeline(
+          repo: repo, transcriber: s.currentTranscriber, summaries: s.summaries),
+    );
+    s.jobs = ProcessingJobQueue(
+      db: db.db,
+      repo: repo,
+      analytics: analytics,
+      processor: processor ?? s.processor.process,
+      autoSchedule: false,
+    );
+    s.recorder = recorder(s);
+    return s;
+  }
+
+  /// For [forTesting] recorders: what the app does after a recording stops.
+  @visibleForTesting
+  Future<void> onRecordingFinishedForTesting(Recording r) =>
+      _onRecordingFinished(r);
+
   static Future<AppServices> boot() async {
     final support = await getApplicationSupportDirectory();
     final dbPath = p.join(support.path, 'longnote.db');
@@ -249,7 +305,25 @@ class AppServices {
     jobs.dispose();
   }
 
+  /// C4 "Discard recording": stops capture and deletes this recording's
+  /// audio. Nothing is queued and it does not count as a recording.
+  Future<void> discardRecording() async {
+    final id = recorder.current?.id;
+    if (id == null) return;
+    _discarding = id;
+    try {
+      await recorder.stop(reason: 'discard');
+    } finally {
+      _discarding = null;
+    }
+    await repo.deleteByUser(id);
+    jobs.resume();
+  }
+
+  String? _discarding;
+
   Future<void> _onRecordingFinished(Recording r) async {
+    if (r.id == _discarding) return;
     await _afterRecording(r);
     jobs.resume();
   }

@@ -179,19 +179,21 @@ TextStyle _style(String family, double size, int weight,
 /// Text styles from the Figma "Type" frame (2:218) plus the sizes used in the
 /// screens. Colours default to ink; use `.copyWith(color: ...)`.
 abstract final class LnText {
-  // Newsreader (titles, summaries)
+  // Newsreader (titles, summaries). Figma's "normal" leading for Newsreader
+  // is 1.0; Flutter's default from the font metrics is much taller.
   /// Large title: Newsreader Medium 34 (tab roots: Notes, Settings ...).
-  static final largeTitle = _style(LnFonts.serif, 34, 500);
+  static final largeTitle = _style(LnFonts.serif, 34, 500, lineHeightPx: 34);
 
   /// Note title on the detail screen: Newsreader Medium 28 / 33.
   static final detailTitle = _style(LnFonts.serif, 28, 500, lineHeightPx: 33);
 
   /// Recording screen title: Newsreader Medium 24.
   static final recordingTitle =
-      _style(LnFonts.serif, 24, 500, color: LnColors.nightText);
+      _style(LnFonts.serif, 24, 500,
+          lineHeightPx: 24, color: LnColors.nightText);
 
   /// Note title (sheets, cards): Newsreader Medium 22.
-  static final noteTitle = _style(LnFonts.serif, 22, 500);
+  static final noteTitle = _style(LnFonts.serif, 22, 500, lineHeightPx: 22);
 
   /// "In short" summary paragraph: Newsreader Regular 18 / 27.
   static final summaryLead = _style(LnFonts.serif, 18, 400, lineHeightPx: 27);

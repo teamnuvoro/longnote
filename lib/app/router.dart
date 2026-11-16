@@ -8,11 +8,11 @@ import '../features/ask/ask_chat_screen.dart';
 import '../features/ask/ask_screen.dart';
 import '../features/ask/choose_note_sheet.dart';
 import '../features/benchmark/benchmark_screen.dart';
-import '../features/detail/detail_screen.dart';
 import '../features/dev/widget_gallery_screen.dart';
 import '../features/import/import_details_sheet.dart';
 import '../features/import/import_progress_screen.dart';
 import '../features/import/import_screen.dart';
+import '../features/note/note_screen.dart';
 import '../features/note/player_sheet.dart';
 import '../features/note/share_sheet.dart';
 import '../features/note/speakers_sheet.dart';
@@ -112,7 +112,8 @@ GoRouter buildRouter({required String initialLocation}) => GoRouter(
               path: 'discard',
               name: R.discard,
               parentNavigatorKey: rootNavigatorKey,
-              pageBuilder: (c, s) => _sheet<bool>(s, const DiscardSheet()),
+              pageBuilder: (c, s) => DialogPage<bool>(
+                  key: s.pageKey, name: s.name, child: const DiscardSheet()),
             ),
           ],
         ),
@@ -136,10 +137,16 @@ GoRouter buildRouter({required String initialLocation}) => GoRouter(
                     path: ':id',
                     name: R.note,
                     parentNavigatorKey: rootNavigatorKey,
-                    // D1/D2/D3/D8 = states of one screen. Still the v0.1
-                    // DetailScreen until the screens session builds NoteScreen.
-                    pageBuilder: (c, s) =>
-                        _push(s, DetailScreen(recordingId: _id(s))),
+                    // D1/D2/D3/D8 = states of one screen.
+                    pageBuilder: (c, s) => _push(
+                        s,
+                        NoteScreen(
+                          id: _id(s),
+                          initialTab: s.uri.queryParameters['tab'] == 'transcript'
+                              ? NoteTab.transcript
+                              : null,
+                          atMs: int.tryParse(s.uri.queryParameters['at'] ?? ''),
+                        )),
                     routes: [
                       GoRoute(
                         path: 'actions',
