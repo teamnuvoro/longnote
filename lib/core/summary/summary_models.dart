@@ -25,10 +25,14 @@ class ActionItem {
 }
 
 /// The summary shape every summarizer produces:
-/// `{key_points, decisions, action_items[{task, owner?, due?}],
+/// `{in_short?, key_points, decisions, action_items[{task, owner?, due?}],
 ///   numbers_and_dates, open_questions}`
+///
+/// `in_short` (2-3 sentences) comes from the cloud summarizer (BACKEND-API
+/// 4.3); on-device engines leave it null.
 class MeetingSummary {
   const MeetingSummary({
+    this.inShort,
     this.keyPoints = const [],
     this.decisions = const [],
     this.actionItems = const [],
@@ -36,6 +40,7 @@ class MeetingSummary {
     this.openQuestions = const [],
   });
 
+  final String? inShort;
   final List<String> keyPoints;
   final List<String> decisions;
   final List<ActionItem> actionItems;
@@ -43,6 +48,7 @@ class MeetingSummary {
   final List<String> openQuestions;
 
   bool get isEmpty =>
+      (inShort == null || inShort!.isEmpty) &&
       keyPoints.isEmpty &&
       decisions.isEmpty &&
       actionItems.isEmpty &&
@@ -50,6 +56,7 @@ class MeetingSummary {
       openQuestions.isEmpty;
 
   Map<String, Object?> toJson() => {
+        if (inShort != null && inShort!.isNotEmpty) 'in_short': inShort,
         'key_points': keyPoints,
         'decisions': decisions,
         'action_items': actionItems.map((a) => a.toJson()).toList(),
@@ -58,6 +65,10 @@ class MeetingSummary {
       };
 
   String encode() => jsonEncode(toJson());
+
+  /// From an already-decoded JSON object (server reply).
+  static MeetingSummary fromJson(Map<String, Object?> m) =>
+      parse(jsonEncode(m));
 
   /// Defensive parse of model output. Accepts:
   /// - plain JSON, JSON inside ```json fences, or JSON with chatter around it
@@ -71,6 +82,7 @@ class MeetingSummary {
     final obj = _extractJsonObject(raw);
     if (obj == null) throw SummaryParseException('no JSON object found');
     const keys = [
+      'in_short',
       'key_points',
       'decisions',
       'action_items',
@@ -83,7 +95,9 @@ class MeetingSummary {
     if (!keys.any(normalized.containsKey)) {
       throw SummaryParseException('none of the expected fields present');
     }
+    final inShort = _clean(normalized['in_short']);
     return MeetingSummary(
+      inShort: inShort,
       keyPoints: _strings(normalized['key_points']),
       decisions: _strings(normalized['decisions']),
       actionItems: _actions(normalized['action_items']),
@@ -234,7 +248,13 @@ class MeetingSummary {
       }
     }
 
+    // Each part of a long transcript has its own in_short; join them in order.
+    final shorts = [
+      for (final p in parts)
+        if (p.inShort != null && p.inShort!.trim().isNotEmpty) p.inShort!.trim()
+    ];
     return MeetingSummary(
+      inShort: shorts.isEmpty ? null : shorts.join(' '),
       keyPoints: mergeStr(parts.map((p) => p.keyPoints)),
       decisions: mergeStr(parts.map((p) => p.decisions)),
       actionItems: actions,
@@ -250,6 +270,7 @@ class MeetingSummary {
   String toPlainText({String? title}) {
     final b = StringBuffer();
     if (title != null) b.writeln('$title\n');
+    if (inShort != null && inShort!.isNotEmpty) b.writeln('$inShort\n');
     void section(String h, List<String> items) {
       if (items.isEmpty) return;
       b.writeln(h);

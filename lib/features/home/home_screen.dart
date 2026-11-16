@@ -267,6 +267,10 @@ List<Widget> statusChips(BuildContext context, Recording r) {
   }
   switch (r.processingStatus) {
     case ProcessingStatus.queued:
+    case ProcessingStatus.compressing:
+    case ProcessingStatus.uploading:
+    case ProcessingStatus.queuedOnServer:
+    case ProcessingStatus.waitingForNetwork:
     case ProcessingStatus.transcribing:
     case ProcessingStatus.summarizing:
       out.add(chip(r.processingProgress ?? 'Waiting to process',

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
+import '../db/app_database.dart' show summaryPlainText;
 import '../models/recording.dart';
 
 /// Where audio files live: `<root>/<recordingId>/seg_0000.wav`.
@@ -22,6 +23,13 @@ class RecordingRepository extends ChangeNotifier {
   RecordingRepository(this._db, this.storage);
   final Database _db;
   final RecordingStorage storage;
+
+  /// The raw database, for the stores that live next to this repository
+  /// (speakers, moments, chat, search, cloud pieces).
+  Database get db => _db;
+
+  /// Tell listeners (the UI) that something changed. Used by the other stores.
+  void changed() => notifyListeners();
 
   // ---- recordings ------------------------------------------------------------
   Future<void> insert(Recording r) async {
@@ -75,17 +83,67 @@ class RecordingRepository extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Writes the pipeline state. [progress] is the free-text line ("Uploading
+  /// 40%"), [progressValue] the 0..1 bar, [error] plain words, [errorCode]
+  /// the machine code, [tries] the failed-attempt count (null = unchanged).
   Future<void> setProcessing(String id, ProcessingStatus s,
-      {String? error, String? progress}) async {
+      {String? error,
+      String? progress,
+      double? progressValue,
+      String? errorCode,
+      int? tries}) async {
     await _db.update(
         'recordings',
         {
           'processing_status': s.name,
           'processing_error': error,
           'processing_progress': progress,
+          'progress': progressValue,
+          'error_code': errorCode,
+          'tries': ?tries,
+          'updated_at': DateTime.now().millisecondsSinceEpoch,
         },
         where: 'id = ?',
         whereArgs: [id]);
+    notifyListeners();
+  }
+
+  /// Sets per-note options. Pass only what changes; [clear] lists column
+  /// names to reset to NULL (= follow the setting).
+  Future<void> setNoteOptions(String id,
+      {String? language,
+      String? summaryStyle,
+      String? customInstructions,
+      String? outputLanguage,
+      TranscriptionMode? transcriptionMode,
+      List<String> clear = const []}) async {
+    final values = <String, Object?>{
+      'language': ?language,
+      'summary_style': ?summaryStyle,
+      'custom_instructions': ?customInstructions,
+      'output_language': ?outputLanguage,
+      'transcription_mode': ?transcriptionMode?.id,
+      for (final c in clear) c: null,
+    };
+    if (values.isEmpty) return;
+    await _db.update('recordings', values, where: 'id = ?', whereArgs: [id]);
+    notifyListeners();
+  }
+
+  Future<void> setTranscriptSource(String id, String? source) => _db.update(
+      'recordings', {'transcript_source': source},
+      where: 'id = ?', whereArgs: [id]);
+
+  /// Removes the transcript (lines + speakers) so another engine can write a
+  /// new one. Audio is not touched.
+  Future<void> clearTranscript(String id) async {
+    await _db.transaction((txn) async {
+      await txn.delete('transcript_lines',
+          where: 'recording_id = ?', whereArgs: [id]);
+      await txn.delete('speakers', where: 'recording_id = ?', whereArgs: [id]);
+      await txn.update('segments', {'transcribed': 0},
+          where: 'recording_id = ?', whereArgs: [id]);
+    });
     notifyListeners();
   }
 
@@ -174,7 +232,7 @@ class RecordingRepository extends ChangeNotifier {
 
   // ---- summary -------------------------------------------------------------------
   Future<void> saveSummary(String recordingId, String json, String engine,
-      {String? note, DateTime? at}) async {
+      {String? note, DateTime? at, String? style}) async {
     await _db.insert(
         'summaries',
         {
@@ -183,8 +241,15 @@ class RecordingRepository extends ChangeNotifier {
           'engine': engine,
           'note': note,
           'created_at': (at ?? DateTime.now()).millisecondsSinceEpoch,
+          'style': style,
         },
         conflictAlgorithm: ConflictAlgorithm.replace);
+    try {
+      await _db.update('notes_fts', {'summary': summaryPlainText(json)},
+          where: 'recording_id = ?', whereArgs: [recordingId]);
+    } catch (_) {
+      // No FTS5 on this SQLite: search uses LIKE over summaries.json.
+    }
     notifyListeners();
   }
 

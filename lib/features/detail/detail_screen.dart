@@ -414,9 +414,7 @@ class _Waiting extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final busy = r.processingStatus == ProcessingStatus.queued ||
-        r.processingStatus == ProcessingStatus.transcribing ||
-        r.processingStatus == ProcessingStatus.summarizing;
+    final busy = r.processingStatus.inProgress;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -437,7 +435,7 @@ class _Waiting extends StatelessWidget {
             const Padding(
               padding: EdgeInsets.only(top: 8),
               child: Text(
-                'This runs on your phone. Keep the app open for faster results; it continues next time you open it if interrupted.',
+                'Keep the app open for faster results; it continues next time you open it if interrupted.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 12),
               ),
