@@ -162,8 +162,9 @@ def main():
             block = [head]
             if ch.get("error"):
                 block.append(Paragraph("What happened: " + esc(ch["error"][:700]), E))
-            for n in ch.get("notes", [])[:8]:
-                block.append(Paragraph(esc(n[:400]), N))
+            # Kept short: one check must fit on a phone-sized page.
+            for n in ch.get("notes", [])[:4]:
+                block.append(Paragraph(esc(n[:220] + ("…" if len(n) > 220 else "")), N))
             took = f"{ch['ms'] / 1000:.1f} s"
             if ch.get("max_frame_wait_ms"):
                 took += f" · slowest frame {ch['max_frame_wait_ms']} ms"
