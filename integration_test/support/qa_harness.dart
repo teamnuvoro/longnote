@@ -220,7 +220,12 @@ class Qa {
     }
   }
 
+  /// True while the host keeps the app in the background: iOS draws no
+  /// frames for a background app, so the frame probe is off.
+  bool _inBackground = false;
+
   void _frameWait(int ms, {bool stillWaiting = false}) {
+    if (_inBackground) return;
     _lastFrameWaitMs = ms;
     final c = _current;
     if (c == null) return;
@@ -232,7 +237,7 @@ class Qa {
 
   void _onTimings(List<FrameTiming> timings) {
     final c = _current;
-    if (c == null) return;
+    if (c == null || _inBackground) return;
     for (final t in timings) {
       final ms = t.totalSpan.inMilliseconds;
       if (ms > c.maxFrameWaitMs) c.maxFrameWaitMs = ms;
@@ -355,13 +360,23 @@ class Qa {
     final req = File(p.join(outDir, 'requests', what));
     final done = File(p.join(outDir, 'requests', '$what.done'));
     if (done.existsSync()) done.deleteSync();
-    req.writeAsStringSync(DateTime.now().toIso8601String());
-    final end = DateTime.now().add(timeout);
-    while (!done.existsSync()) {
-      if (DateTime.now().isAfter(end)) {
-        throw TimeoutException('host did not do "$what" in ${timeout.inSeconds} s');
+    final background = what.startsWith('background-');
+    if (background) _inBackground = true;
+    try {
+      req.writeAsStringSync(DateTime.now().toIso8601String());
+      final end = DateTime.now().add(timeout);
+      while (!done.existsSync()) {
+        if (DateTime.now().isAfter(end)) {
+          throw TimeoutException('host did not do "$what" in ${timeout.inSeconds} s');
+        }
+        await wait(const Duration(milliseconds: 500));
       }
-      await wait(const Duration(milliseconds: 500));
+      if (background) await wait(const Duration(seconds: 2));
+    } finally {
+      if (background) {
+        _probeStartedUs = null;
+        _inBackground = false;
+      }
     }
     note('host: ${done.readAsStringSync().trim()}');
   }

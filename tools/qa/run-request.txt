@@ -5,3 +5,4 @@ run 3: 2026-11-16T15:26:00Z
 run 4: 2026-11-16T15:43:33Z
 run 2026-11-16T15:43:42Z after type() fix
 run 2026-11-16T20:16:57Z with launch 5 (calls, background, 60 min)
+run 2026-11-16T20:46:13Z frame probe off in background

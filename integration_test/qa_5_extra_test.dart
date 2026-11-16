@@ -33,15 +33,6 @@ void main() {
     final t = qa.tester;
     RecordingController c() => qa.services.recorder;
 
-    Future<void> startRecording(String wav) async {
-      FilePcmSource.nextPath = Qa.audio(wav);
-      if (!qa.onTop<NotesScreen>()) await qa.home();
-      await qa.tap(find.text('Record'));
-      await qa.expectOnTop<RecordingScreen>();
-      await qa.waitUntil(() async => c().state == CaptureState.recording,
-          what: 'recording to start', timeout: const Duration(seconds: 10));
-    }
-
     Future<Recording> stopAndSave() async {
       await qa.tap(byLabel('Stop & save'), after: const Duration(milliseconds: 100));
       await qa.expectOnTop<NoteScreen>(timeout: const Duration(seconds: 15));
@@ -51,6 +42,17 @@ void main() {
         await qa.waitGone(find.byType(NoteReadyAskSheet));
       }
       return qa.newestNote();
+    }
+
+    Future<void> startRecording(String wav) async {
+      // A failed check before may have left a recording running: save it.
+      if (c().isActive && qa.onTop<RecordingScreen>()) await stopAndSave();
+      FilePcmSource.nextPath = Qa.audio(wav);
+      if (!qa.onTop<NotesScreen>()) await qa.home();
+      await qa.tap(find.text('Record'));
+      await qa.expectOnTop<RecordingScreen>();
+      await qa.waitUntil(() async => c().state == CaptureState.recording,
+          what: 'recording to start', timeout: const Duration(seconds: 10));
     }
 
     Future<void> expectSummary(String id) async {
