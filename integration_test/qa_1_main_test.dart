@@ -252,8 +252,15 @@ void main() {
         'transcript there', () async {
       await qa.tap(find.text('Ask'));
       await qa.expectOnTop<AskChatScreen>();
-      await qa.type(find.byKey(const ValueKey('ask-input')),
-          'When will the description and the privacy answers be finished?');
+      // The box is disabled until the screen has loaded its note.
+      final input = find.byKey(const ValueKey('ask-input'));
+      await qa.waitUntil(() async =>
+              input.evaluate().isNotEmpty && t.widget<TextField>(input).enabled != false,
+          what: 'the question box to be ready', timeout: const Duration(seconds: 20));
+      const q = 'When will the description and the privacy answers be finished?';
+      await qa.type(input, q);
+      expect(t.widget<TextField>(input).controller?.text, q,
+          reason: 'the question did not reach the box');
       await qa.tap(find.byKey(const ValueKey('ask-send')));
       final chip = byLabelPrefix('Open the transcript at');
       await qa.waitFor(chip, what: 'an answer with a source chip',
@@ -274,9 +281,18 @@ void main() {
       await qa.expectOnTop<NoteScreen>();
     }, section: note, needs: ['C2'], timeout: const Duration(minutes: 3));
 
+    // A failed check may leave Ask or a sheet open: back to the note.
+    Future<void> backToNote() async {
+      for (var i = 0; i < 4 && !qa.onTop<NoteScreen>(); i++) {
+        await qa.back();
+      }
+      await qa.expectOnTop<NoteScreen>();
+    }
+
     final share = ShareRecorder()..install(t);
     await qa.check('D5', 'Share: PDF, summary, transcript, audio (M4A and WAV), copy',
         () async {
+      await backToNote();
       await qa.tap(byLabel('Share'));
       await qa.expectOnTop<ShareSheet>();
       Future<void> option(String what, {String? then}) async {
@@ -314,6 +330,7 @@ void main() {
     share.uninstall(t);
 
     await qa.check('D6', 'Back to Notes: the note is listed', () async {
+      await backToNote();
       await qa.back();
       await qa.expectOnTop<NotesScreen>();
       await qa.waitFor(find.text(title));
