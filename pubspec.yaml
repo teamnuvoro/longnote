@@ -46,6 +46,11 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  # Simulator QA suite (integration_test/, test_driver/; docs/QA-SIMULATOR.md).
+  integration_test:
+    sdk: flutter
+  flutter_driver:
+    sdk: flutter
   flutter_lints: ^6.0.0
   sqflite_common_ffi: ^2.4.7
 

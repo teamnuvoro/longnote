@@ -1,0 +1,50 @@
+# Longnote simulator QA (docs/QA-SIMULATOR.md)
+name: iOS simulator QA
+
+# Manual only: macOS minutes cost money, and each run sends ~60 s of audio to
+# the real backend (Soniox + OpenAI, a few cents). No secrets: the Supabase URL
+# and anon key are the committed defaults in lib/core/cloud/backend_config.dart.
+on:
+  workflow_dispatch:
+    inputs:
+      only:
+        description: "Run only these launches (e.g. '1-main'); empty = all four"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-sim-qa
+  cancel-in-progress: false
+
+jobs:
+  qa:
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.1"
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Run the app in the simulator (4 launches)
+        env:
+          QA_OUT: ${{ github.workspace }}/qa_out
+          QA_ONLY: ${{ inputs.only }}
+        run: tools/qa/run_sim_qa.sh
+      - name: Results on the run page
+        if: always()
+        run: cat qa_out/RESULTS.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "no RESULTS.md" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-sim-qa-${{ github.run_id }}
+          path: qa_out
+          retention-days: 14
