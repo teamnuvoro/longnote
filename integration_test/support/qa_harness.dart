@@ -463,7 +463,11 @@ class Qa {
 
   Future<void> type(Finder field, String text) async {
     await waitFor(field);
-    await tester.enterText(field.first, text);
+    // The visible field: tabs stay alive offstage (e.g. the Ask tab under
+    // the Ask chat screen has a field with the same key).
+    final visible = field.hitTestable();
+    await tester.enterText(
+        visible.evaluate().isEmpty ? field.first : visible.first, text);
     await wait(const Duration(milliseconds: 300));
   }
 
