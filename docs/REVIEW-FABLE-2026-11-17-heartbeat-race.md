@@ -140,3 +140,54 @@ Required before the next QA round on the same theme: F1 (the `_setStatus`
 guard, one line) because it reopens the same 0-byte final row through a
 second Stop. F2 is a one-line reset in `start()` and should go in the same
 commit. F3 is optional.
+
+## 4. Re-review of 05c5303 (F1-F3), 17 Nov 2026
+
+Diff only: `recording_controller.dart` and `recording_controller_test.dart`.
+
+**Checked and correct**
+
+- `_setStatus` guard (`!isActive`): `stopping`, `starting` and `idle` all
+  return early, so a pause/resume/interruption that resumes after an await
+  cannot set `state` back to recording/paused or write the row. `pause()`,
+  `resume()`, `began` and `endedResumable` all go through it; `_fail` and
+  `endedNotResumable` do not touch `state`, so nothing is left unguarded.
+- `began` after `addGap`: the gap id is never stored in `_openGapId` once
+  Stop has begun, so Stop's `_endGap` cannot race it and the gap is closed
+  exactly once. `_gapStartedAt` is cleared only when the sink is still ours
+  or gone, so a new recording's own gap is not clobbered.
+- `unawaited(_intSub?.cancel())` before `_source.stop()`: the source uses a
+  broadcast controller, so cancel removes the listener synchronously; no
+  new event reaches `_onInterruption` after this line. The pending future
+  is only source cleanup. Safe to leave unawaited.
+- F2 resets in `start()` sit after the idle check, before any await, so no
+  in-flight handler of the old recording can be mid-way through them.
+- F3 catch: safe on every throw point. On the permission throw `_source`,
+  `_sink` and `current` are still null, so nothing is double-disposed. The
+  one throw that can land after `source.start()` is nothing in practice
+  (`analytics.log` swallows), and even then the teardown is correct and the
+  row is repaired at next launch. `_audioSub` is not cancelled in the catch;
+  harmless, `_onAudio` ignores a null sink and `dispose()` ends the stream.
+- `discardRecording` (app_services.dart:385): unchanged behaviour. It calls
+  `stop(reason: 'discard')` and the only difference inside Stop is the
+  earlier interruption cancel. `_discarding` is still set before `stop()`.
+- `endedResumable` / `endedNotResumable` with the guard: a handler already
+  past `_source.resume()` when Stop begins closes the gap (Stop's `_endGap`
+  then sees null) and its `_setStatus` is dropped. No reopen, no double
+  endGap.
+- Tests: I ran the file on HEAD (8/8 pass) and on the 988abd1 controller in
+  a scratch copy: F1 fails on "gap left open", F2 fails waiting for
+  `recording`. The tests test the fix.
+
+**Noted, not required (pre-existing, not introduced here)**
+
+- A `resume()` or `endedResumable` handler that resumes during an
+  error-Stop writes `banner` (null or "Recording resumed...") after `_fail`
+  set the error text, so `rec.note` can lose the error message. Narrow:
+  needs an ENOSPC flush while paused and a resume in the same tick.
+- A short interruption whose `endedResumable` arrives while `began` is still
+  awaiting `addGap` leaves the recorder paused with an open gap until the
+  user taps Resume. Not touched by this commit; worth a test later.
+
+**Verdict: APPROVED.** F1, F2 and F3 are implemented as asked, no new
+race or regression found.
