@@ -11,28 +11,36 @@ import 'package:provider/provider.dart';
 import 'app/router.dart';
 import 'app/routes.dart';
 import 'app_services.dart';
+import 'core/audio/pcm_source.dart';
 import 'core/billing/trial_reminder.dart';
 import 'core/diagnostics/crash_reporter.dart';
 import 'ui/fonts.dart';
 import 'ui/theme.dart';
 
-Future<void> main() async {
+Future<void> main() => launchApp();
+
+/// The app's start. [sourceFactory] replaces the microphone: only the
+/// simulator QA suite (integration_test/) passes one.
+@visibleForTesting
+Future<void> launchApp({PcmSource Function()? sourceFactory}) async {
   WidgetsFlutterBinding.ensureInitialized();
   registerFontLicenses();
   final reporter = await _startCrashReporter();
-  await _launch(reporter);
+  await _launch(reporter, sourceFactory);
 }
 
 /// Opens the app; if start-up fails (database cannot open or migrate, disk
 /// full) shows a plain "could not start" screen with Try again instead of a
 /// launch screen that never goes away.
-Future<void> _launch(CrashReporter reporter) async {
+Future<void> _launch(CrashReporter reporter,
+    [PcmSource Function()? sourceFactory]) async {
   final AppServices services;
   try {
-    services = await AppServices.boot();
+    services = await AppServices.boot(sourceFactory: sourceFactory);
   } catch (e, st) {
     reporter.record('boot_failed', e, st);
-    runApp(StartupFailedApp(onRetry: () => _launch(reporter)));
+    runApp(StartupFailedApp(
+        onRetry: () => _launch(reporter, sourceFactory)));
     return;
   }
   final api = services.api;

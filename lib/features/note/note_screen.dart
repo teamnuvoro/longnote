@@ -148,10 +148,10 @@ class _NoteScreenState extends State<NoteScreen> {
   void _leave() {
     if (_popped || !mounted) return;
     final route = ModalRoute.of(context);
-    if (route == null || !route.isCurrent) {
-      setState(() {});
-      return;
-    }
+    // Not visible: build() runs again when this route becomes current
+    // (ModalRoute.of dependency) and calls this again. No setState here: it
+    // would rebuild every frame while another screen is on top.
+    if (route == null || !route.isCurrent) return;
     _popped = true;
     if (context.canPop()) {
       context.pop();
@@ -231,10 +231,12 @@ class _NoteScreenState extends State<NoteScreen> {
   @override
   Widget build(BuildContext context) {
     final d = _model.data;
-    if (_model.gone) {
-      // Rebuilt when this route becomes current again (ModalRoute.of).
-      ModalRoute.of(context);
-      WidgetsBinding.instance.addPostFrameCallback((_) => _leave());
+    if (_model.gone && !_popped) {
+      // Rebuilt when this route becomes current again (ModalRoute.of); only
+      // then is a pop attempted.
+      if (ModalRoute.of(context)?.isCurrent ?? false) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => _leave());
+      }
     }
     if (d == null || _model.gone) {
       return Scaffold(

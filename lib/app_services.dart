@@ -221,7 +221,11 @@ class AppServices {
   Future<void> onRecordingFinishedForTesting(Recording r) =>
       _onRecordingFinished(r);
 
-  static Future<AppServices> boot() async {
+  /// [sourceFactory] replaces the microphone; only the simulator QA suite
+  /// (integration_test/) passes one (a file-backed source). The app uses
+  /// [RecordPcmSource].
+  static Future<AppServices> boot(
+      {PcmSource Function()? sourceFactory}) async {
     final support = await getApplicationSupportDirectory();
     final dbPath = p.join(support.path, 'longnote.db');
     final recRoot = Directory(p.join(support.path, 'recordings'))
@@ -295,8 +299,9 @@ class AppServices {
     s.recorder = RecordingController(
       repo: repo,
       analytics: analytics,
-      sourceFactory: RecordPcmSource.new,
+      sourceFactory: sourceFactory ?? RecordPcmSource.new,
       onFinished: s._onRecordingFinished,
+      onStopFailed: () => s.jobs.resume(),
     );
 
     // 1) Recover anything a crash/force-quit left behind, BEFORE new capture.

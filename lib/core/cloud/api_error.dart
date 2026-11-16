@@ -38,6 +38,8 @@ String plainEnglishError(String code, {Map<String, Object?> detail = const {}}) 
       };
     case networkErrorCode:
       return 'No internet. Saved on your phone; it uploads when you are online.';
+    case 'upload_refused':
+      return 'Too many recordings are waiting to upload. We will try again.';
     case 'timeout':
       return 'The server took too long to answer. We will try again.';
     case 'unauthorized':

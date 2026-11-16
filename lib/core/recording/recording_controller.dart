@@ -23,6 +23,7 @@ class RecordingController extends ChangeNotifier {
     required this.analytics,
     required this.sourceFactory,
     this.onFinished,
+    this.onStopFailed,
     Clock clock = const SystemClock(),
     this.useTimers = true,
   }) : _clock = clock;
@@ -34,6 +35,10 @@ class RecordingController extends ChangeNotifier {
   /// Called after a recording is stopped and saved (enqueue processing,
   /// count the free recording, ...).
   final Future<void> Function(Recording r)? onFinished;
+
+  /// Called when Stop could not save the ending (disk full); the note is
+  /// repaired at the next launch. Lets the app resume paused processing.
+  final void Function()? onStopFailed;
   final Clock _clock;
 
   /// Tests drive flush/heartbeat by hand.
@@ -391,6 +396,11 @@ class RecordingController extends ChangeNotifier {
       } catch (e, st) {
         CrashReporter.instance?.record('on_finished_failed', e, st);
       }
+    }
+    if (!saved) {
+      try {
+        onStopFailed?.call();
+      } catch (_) {}
     }
     notifyListeners();
     if (!saved) return null;

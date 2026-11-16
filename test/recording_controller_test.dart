@@ -8,6 +8,7 @@ import 'package:longnote/core/audio/pcm_source.dart';
 import 'package:longnote/core/audio/wav.dart';
 import 'package:longnote/core/models/recording.dart';
 import 'package:longnote/core/recording/recording_controller.dart';
+import 'package:longnote/core/recording/recording_repository.dart';
 import 'package:longnote/core/recording/recovery_service.dart';
 
 import 'helpers/test_env.dart';
@@ -150,4 +151,40 @@ void main() {
     expect(r.status, RecordingStatus.interrupted);
     expect(r.durationMs, 2000, reason: 'bytes written before the kill are kept');
   });
+
+  test('a Stop that cannot save still frees the mic and the recorder', () async {
+    final src = FakePcmSource();
+    var stopFailed = 0;
+    final finished = <Recording>[];
+    final c = RecordingController(
+      repo: _FailingRepo(env),
+      analytics: env.analytics,
+      sourceFactory: () => src,
+      clock: env.clock,
+      useTimers: false,
+      onFinished: (r) async => finished.add(r),
+      onStopFailed: () => stopFailed++,
+    );
+    await c.start();
+    src.audio.add(pcm(32000));
+    await pump();
+    expect(await c.stop(), isNull);
+    expect(c.state, CaptureState.idle);
+    expect(c.current, isNull);
+    expect(stopFailed, 1);
+    expect(finished, isEmpty);
+    expect(c.banner, contains('repaired'));
+  });
+}
+
+/// updateCapture fails like SQLITE_FULL.
+class _FailingRepo extends RecordingRepository {
+  _FailingRepo(TestEnv env) : super(env.db.db, env.repo.storage);
+  @override
+  Future<void> updateCapture(Recording r, {bool notify = true}) async {
+    if (r.status == RecordingStatus.completed) {
+      throw const FileSystemException('database or disk is full');
+    }
+    return super.updateCapture(r, notify: notify);
+  }
 }

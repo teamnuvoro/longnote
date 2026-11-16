@@ -350,3 +350,82 @@ Verdict: **safe to ship to the owner's TestFlight once items 1-7 are fixed and t
 device list in docs/DEVICE-TEST-V1.md pass**, with a disk-full recording and a style change followed by a force-quit
 added to that device list. It is **not** yet safe for a public or external-tester build until the backend "should
 fix" list is done.
+
+---
+
+## Re-review of fixes (19a8a28)
+
+Diff `c00ea6d..19a8a28` (7741f50 app core, e77b385 UI, 3b071fb backend, 19a8a28 summarize in_progress). Read-only;
+line numbers from 19a8a28. Files changed after 19a8a28 (integration tests) ignored.
+
+### Per finding
+
+| # | Verdict | Where / note |
+|---|---|---|
+| A1 | FIXED | `main.dart:25-33` try/catch + `StartupFailedApp` with retry; `recovery_service.dart:39-53` per-recording catch, row marked `interrupted` |
+| A2 | FIXED | `resummarize` removed; `AppServices.redoSummary` goes through the queue (`app_services.dart:352-367`); launch sweep queues any in-progress note with no pending/running job (`job_queue.dart:126-144`, test `review_fixes_test.dart:34`) |
+| A3 | FIXED | second 401 asks GoTrue `/auth/v1/user`, signs up again only on 401/403/404 (`longnote_api.dart:153-158`, `supabase_auth.dart:111-130`); message now true (`api_error.dart:43`) |
+| A4 | FIXED | `recording_controller.dart:332-392`: try/catch/finally always disposes the source, nulls sink/current, sets idle. See N2 for a side effect |
+| A5 | FIXED | online timeout uses a try (`cloud_pipeline.dart:486-490`), summarize timeout 3 min (`longnote_api.dart:217`), server idempotency cache (migration 00007 `summary_cache`, `summarize/index.ts:130-170`), app treats `in_progress` as a 20 s deferral (`cloud_pipeline.dart:515-522`) |
+| A6 | FIXED | `app_services.dart:383-404` try/finally in both; but the new stop-failed path never reaches them (N2) |
+| A7 | FIXED | note-exists checks before encode/upload and after encode with cleanup (`cloud_pipeline.dart:273-304`); folder deleted async off the UI thread (`recording_repository.dart:174-185`). No start-up orphan-folder sweep: WON'T-FIX-OK |
+| A8 | FIXED | `coalescing_runner.dart:40-46` + test |
+| A9 | FIXED | `import_controller.dart:229-247` awaited `RandomAccessFile` writes |
+| A10 | FIXED | `trial_reminder.dart:116-118`; only `tz.UTC` is used and neither `TZDateTime.from` nor the plugin's `toMap` reads `tz.local` (checked timezone 0.11.2, flutter_local_notifications 23.0.2) |
+| A11 | FIXED | `crash_reporter.dart:74-79,133-137` in-memory counter |
+| B1 | FIXED | separate audio/LLM pools, per-user and per-IP USD caps in one SQL step (`common.ts:81-104`, 00007 `ln_reserve_llm` / `ln_reserve_audio_v2`); verified by `tools/e2e/review_b.py` per BACKEND-API 9. App Attest/captcha still open (accepted for an owner-only build) |
+| B2 | FIXED | `started_at` on every claim (`ln_claim_start`), `ln_stuck_jobs` + cleanup 6 h use it, 7/30-day timers coalesce on it |
+| B3 | FIXED | 30/60 s timeouts (`soniox.ts:16-40`); `start_unknown` kept on the job and the next start adopts by `client_reference_id` (`transcribe-start:171-187`); webhook resolves unknown ids and deletes true orphans (`soniox-webhook:28-62`); cleanup step 5 sweeps orphans |
+| B4 | FIXED | 100 MB object cap, 25 objects per user (policy calls `ln_upload_count()`), cleanup loops under a 45 s budget |
+| B5 | PARTIAL | count+insert in one locked function with per-user and per-IP caps (`ln_report_insert`); app withholds `DatabaseException`/`FormatException` text (`crash_reporter.dart:69-72,110-112`). Not done: the "crash data" line in `launch/privacy-policy.md` / App Store label (no code; do before external testers) |
+| B6 | FIXED | IPv6 /64 bucketing with a deno test (`common.ts:207-226`); IP seconds stored on the job and corrected in `ln_settle_audio` / `ln_refund_audio` |
+| B-L1..L10 | FIXED | L1 single reserve; L2 `fetched` once the result is gone (`transcribe-status:76-79`, also removes a would-be endless poll on `done` without turns); L3 24 h after fetch; L4 fail-first CAS; L5 `billed: unknown` keeps the reservation; L6 cache key per part; L8 re-runnable; L9 90-day anon delete (see N5); L10 index. L7 is a doc line, not checked |
+| C1 | FIXED | `note_screen.dart:270` hides the button for imports; `note_processor.dart:29-32` forces cloud |
+| C2 | PARTIAL | PlayerSheet guarded (`player_sheet.dart:41-46`), AskView drops a deleted note (`ask_view.dart:110-127`); the ghost-NoteScreen fix is wrong in one line (N1) |
+| C3 | FIXED | `search.dart` excludes live rows in all four queries; Delete disabled and guarded (`note_actions_sheet.dart:86,145`) |
+| C4 | FIXED | `note_screen.dart:247-253,275-281` banner + Try again over existing content |
+| C5 | FIXED | `askable()` (done, or failed after a transcript), Ask pill uses it, `pickAskNote` filters, AskView refreshes on repo change |
+| C6 | FIXED | `redoSummary` pins `transcriptionMode` to `transcriptSource` before queueing; both pipelines skip transcription when every segment/piece is transcribed (`processing_pipeline.dart:27`, cloud Phase 1/2), so only the summary runs |
+| C7 | FIXED | `NoteData.playbackPaths/hasPlayback/hasWaveform`, PlayerSheet, `ShareService._shareImported`, share sheet shortcut |
+| C8 | FIXED | `redoSummary` returns false while `inProgress`; snackbar. Small caveat: "the new style is used when it finishes" holds only if the running job re-reads the note before `_summarize` (it does on every deferral re-run; not if it is already inside `_summarize`) |
+| C-L1..L9 | FIXED | L1 `_leaving` + `onFinished` before `notifyListeners`; L2 `level` ValueNotifier, waveform listens to it alone; L3 `_s` read once; L4 post-frame dispose; L5 cancel after copy; L6 CoalescingRunner; L7 via A8; L8 payload + `onOpenNote` + cold-start `launchNoteId`; L9 dispose/mounted |
+
+### New issues introduced by the fixes
+
+- **N1 HIGH** `lib/features/note/note_screen.dart:149-152` - `_leave()` on a non-current route calls `setState(() {})`;
+  `build()` (`:234-238`) re-arms `addPostFrameCallback(_leave)` on every build while `_model.gone`, so the screen
+  rebuilds every frame (60-120 Hz) for as long as the deleted note's screen sits under another route. Common path:
+  Delete from the actions sheet (the sheet is on top) - loops for the sheet's dismiss animation, then pops. Long path:
+  Note -> Ask -> source chip -> delete the top note: the first NoteScreen spins under Ask until the user comes back.
+  Not a freeze (frames still flow) but the same re-arm class as build 105, with battery/heat cost. Fix: drop the
+  `setState` - the `ModalRoute.of(context)` dependency in `build` already rebuilds the screen when it becomes current.
+- **N2 MEDIUM** `lib/core/recording/recording_controller.dart:366-392` + `lib/app_services.dart:424` - when the stop
+  body throws (`saved == false`: disk full / `DatabaseException`), `onFinished` is skipped, so
+  `_onRecordingFinished` -> `jobs.resume()` never runs and the queue paused by `startRecording()` (`:424`) stays paused
+  for the rest of the session: every other note waits ("Waiting to start") until relaunch. The row also stays
+  `status = recording` (shown live, Delete disabled) until recovery at next launch - acceptable. Fix: resume in all
+  cases (e.g. an `onStopFailed`/`onStopped` callback from the controller, or `jobs.resume()` in
+  `RecordingScreen._stop` when `rec == null`).
+- **N3 LOW** 26th upload: storage answers 403 -> `tus_uploader.dart:131-132` maps it to `unauthorized` -> 4 tries ->
+  failed with "Could not sign in to the service" (wrong words, but Retry works and nothing is stranded). Only reachable
+  with 25 un-started objects (daily cap hit 25 times in a day).
+- **N4 LOW** server replies the app sees: `report {stored:false}` - ignored, file deleted (fine);
+  `summarize {cached:true}` - `summary` read as before (fine); `upstream_failed + in_progress` - deferral (fine;
+  bounded because `ln_summary_claim` abandons a claim after 3 min, so a dead first call cannot keep the app in the
+  20 s loop); `transcribe-status fetched` without result - re-upload (fine); dollar caps -> `limit_reached` with the
+  same scopes as before (fine).
+- **N5 VERIFY (backend)** `ln_cleanup_db` now also `delete from auth.users`. If the migration owner lacks that
+  privilege on the live project, the whole 15-min function aborts (results no longer cleared, cache rows pile up)
+  and the hourly `cleanup` still returns 200 because the rpc error is dropped (`cleanup/index.ts:27`). The "called by
+  hand: 200" line in BACKEND-API 9 does not prove it; check that `out.db` was a JSON object, not null.
+
+### Verdict
+
+**NOT APPROVED yet** - two small must-fix items, both from the new code:
+1. N1: remove the `setState` in `_leave()` (`note_screen.dart:150`).
+2. N2: make `jobs.resume()` run when `RecordingController.stop()` fails.
+
+Everything else from the original list is fixed or acceptably deferred (B5 policy line, App Attest, N3 wording, N5
+check). After those two lines plus `flutter analyze` / `flutter test` green, APPROVED for the owner's TestFlight
+build; the device list in DEVICE-TEST-V1.md should add: delete a note from under Ask (no heat/battery spike),
+disk-full stop then record again, style change + force-quit, tap the "note ready" notification.
