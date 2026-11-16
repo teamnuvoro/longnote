@@ -76,12 +76,23 @@ jobs:
         run: flutter pub get
 
       - name: Flutter config and pod install
+        # Backend URL + anon key: committed defaults in
+        # lib/core/cloud/backend_config.dart (public by design). Optional
+        # repo variables SUPABASE_URL / SUPABASE_ANON_KEY override them; the
+        # dart-defines are written into Generated.xcconfig, which the archive
+        # step below uses.
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
         run: |
           set -eu
           BUILD_NUMBER=$(( ${{ github.run_number }} + 100 ))
           echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
+          DEFINES=()
+          if [ -n "${SUPABASE_URL}" ]; then DEFINES+=(--dart-define=SUPABASE_URL="${SUPABASE_URL}"); fi
+          if [ -n "${SUPABASE_ANON_KEY}" ]; then DEFINES+=(--dart-define=SUPABASE_ANON_KEY="${SUPABASE_ANON_KEY}"); fi
           flutter build ios --config-only --release --no-codesign \
-            --build-number "$BUILD_NUMBER"
+            --build-number "$BUILD_NUMBER" ${DEFINES[@]+"${DEFINES[@]}"}
           (cd ios && pod install)
 
       - name: Archive (automatic signing with API key)

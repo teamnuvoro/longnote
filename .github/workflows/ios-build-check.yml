@@ -25,6 +25,17 @@ jobs:
       - run: flutter pub get
       - run: flutter test
       - name: Build iOS (no codesign)
-        run: flutter build ios --release --no-codesign 2>&1 | tail -n 300
+        # pipefail: a failed build must fail the job even though we pipe to tail.
+        # The Supabase URL + anon key come from lib/core/cloud/backend_config.dart
+        # (public by design); repo variables can override them per build.
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+        run: |
+          set -o pipefail
+          DEFINES=()
+          if [ -n "${SUPABASE_URL}" ]; then DEFINES+=(--dart-define=SUPABASE_URL="${SUPABASE_URL}"); fi
+          if [ -n "${SUPABASE_ANON_KEY}" ]; then DEFINES+=(--dart-define=SUPABASE_ANON_KEY="${SUPABASE_ANON_KEY}"); fi
+          flutter build ios --release --no-codesign ${DEFINES[@]+"${DEFINES[@]}"} 2>&1 | tail -n 300
       - name: App size
         run: du -sh build/ios/iphoneos/Runner.app
