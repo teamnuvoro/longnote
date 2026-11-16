@@ -429,3 +429,25 @@ Everything else from the original list is fixed or acceptably deferred (B5 polic
 check). After those two lines plus `flutter analyze` / `flutter test` green, APPROVED for the owner's TestFlight
 build; the device list in DEVICE-TEST-V1.md should add: delete a note from under Ask (no heat/battery spike),
 disk-full stop then record again, style change + force-quit, tap the "note ready" notification.
+
+### Follow-up: f0effa2 (N1-N3, N5)
+
+Diff `19a8a28..f0effa2 -- lib test` read; `flutter analyze` clean, `flutter test` 215 passed (run by me).
+
+- N1 FIXED - `note_screen.dart:148-155` no `setState` in `_leave()`; `build()` (`:234-240`) schedules `_leave` only when
+  the route is current and not yet popped. The route-status dependency is still registered (`ModalRoute.of` in `_leave`
+  and `build`), so a NoteScreen deleted under Ask rebuilds once when it becomes current again and pops then. No loop.
+- N2 FIXED - `RecordingController.onStopFailed` (`recording_controller.dart:38-41,400-404`) is called exactly when
+  `saved == false`; `AppServices.boot` passes `jobs.resume` (`app_services.dart:304`). Discard already resumed in its
+  `finally`. Test `recording_controller_test.dart:155-177` covers mic freed, idle, callback once, `onFinished` not called.
+- N3 FIXED - TUS create 403 -> `upload_refused` with an honest message (`tus_uploader.dart:132-134`, `api_error.dart:41`);
+  other 403s still `unauthorized`.
+- N5 - reported by the coordinator: `select public.ln_cleanup_db()` as postgres returns the JSON object and
+  `cron.job_run_details` shows success every 15 min. Not re-run by me (no network); accepted.
+- B5 policy line handed to the launch session (not code).
+- `boot(sourceFactory:)` / `launchApp` hooks for the integration suite: a nullable override defaulting to
+  `RecordPcmSource.new`; no behaviour change for the app.
+
+**Final verdict: APPROVED for the owner's TestFlight build** (f0effa2). Still not for external testers until the B5
+privacy-policy line and App Attest/captcha on anonymous sign-up are done. Device list additions stand: delete a note
+from under Ask, disk-full stop then record again, style change + force-quit, tap the "note ready" notification.
