@@ -14,7 +14,14 @@ import '../../core/config.dart';
 /// - A reminder is scheduled ~1 day before the trial ends.
 /// Pops with `true` when the user now has access.
 class PaywallScreen extends StatefulWidget {
-  const PaywallScreen({super.key});
+  const PaywallScreen({super.key, this.onDone, this.placement = 'second_recording'});
+
+  /// First run (onboarding -> paywall -> app): called instead of popping,
+  /// with true when the user subscribed / started a trial.
+  final void Function(BuildContext context, bool subscribed)? onDone;
+
+  /// Analytics placement: 'first_run' or 'second_recording'.
+  final String placement;
 
   @override
   State<PaywallScreen> createState() => _PaywallScreenState();
@@ -32,7 +39,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _s.analytics.log(AnalyticsEvent.paywallViewed,
-          props: {'placement': 'second_recording'});
+          props: {'placement': widget.placement});
       final plans = await _s.billing.loadPlans();
       if (!mounted) return;
       setState(() {
@@ -68,7 +75,16 @@ class _PaywallScreenState extends State<PaywallScreen> {
         // Notifications unavailable: the paywall already showed the date.
       }
     }
-    if (mounted) Navigator.of(context).pop(true);
+    if (mounted) _close(true);
+  }
+
+  void _close(bool subscribed) {
+    final done = widget.onDone;
+    if (done != null) {
+      done(context, subscribed);
+    } else {
+      Navigator.of(context).pop(subscribed);
+    }
   }
 
   @override
@@ -88,7 +104,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
         leading: IconButton(
           tooltip: 'Not now',
           icon: const Icon(Icons.close),
-          onPressed: () => Navigator.of(context).pop(false),
+          onPressed: () => _close(false),
         ),
         title: const Text('Keep recording'),
       ),
@@ -194,7 +210,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
                 await _s.billing.restore();
                 if (!context.mounted) return;
                 if (_s.billing.entitlement.value.isActive) {
-                  Navigator.of(context).pop(true);
+                  _close(true);
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                       content: Text('No active subscription found.')));

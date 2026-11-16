@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../app/routes.dart';
 import '../../core/recording/recording_controller.dart';
 import '../../core/util/clock.dart';
 import '../../theme.dart';
-import '../detail/detail_screen.dart';
 
 /// Live recording: timer, level meter, pause/resume, stop, "Saved on this
 /// phone" indicator and an honest interruption banner.
@@ -26,12 +27,9 @@ class RecordingScreen extends StatelessWidget {
     if (ok != true) return;
     final rec = await c.stop();
     if (!context.mounted) return;
-    if (rec == null) {
-      Navigator.of(context).pop();
-      return;
-    }
-    Navigator.of(context).pushReplacement(MaterialPageRoute(
-        builder: (_) => DetailScreen(recordingId: rec.id)));
+    final router = GoRouter.of(context);
+    router.pop();
+    if (rec != null) router.pushNamed(R.note, pathParameters: {'id': rec.id});
   }
 
   @override

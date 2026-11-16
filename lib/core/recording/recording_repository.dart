@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
 import '../db/app_database.dart' show summaryPlainText;
+import '../summary/summary_models.dart';
 import '../models/recording.dart';
 
 /// Where audio files live: `<root>/<recordingId>/seg_0000.wav`.
@@ -253,6 +254,17 @@ class RecordingRepository extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// One-line preview per note for the Notes list: the summary's in_short,
+  /// else its first key point.
+  Future<Map<String, String>> summaryPreviews() async {
+    final out = <String, String>{};
+    for (final r in await _db.query('summaries', columns: ['recording_id', 'json'])) {
+      final text = summaryPreviewLine(r['json'] as String);
+      if (text != null) out[r['recording_id'] as String] = text;
+    }
+    return out;
+  }
+
   Future<({String json, String engine, String? note})?> summary(
       String recordingId) async {
     final r = await _db.query('summaries',
@@ -263,5 +275,15 @@ class RecordingRepository extends ChangeNotifier {
       engine: r.first['engine'] as String,
       note: r.first['note'] as String?,
     );
+  }
+}
+
+String? summaryPreviewLine(String json) {
+  try {
+    final s = MeetingSummary.parse(json);
+    final t = s.inShort ?? (s.keyPoints.isEmpty ? null : s.keyPoints.first);
+    return t?.replaceAll('\n', ' ');
+  } catch (_) {
+    return null;
   }
 }

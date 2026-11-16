@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../app/routes.dart';
 import '../../app_services.dart';
 import '../../core/audio/pcm_source.dart';
-import '../home/home_screen.dart';
 
 /// Three short screens: what it does, the privacy promise, mic permission.
 /// No sign-in, no account.
@@ -23,8 +24,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     final s = context.read<AppServices>();
     await s.kv.setBool(AppServices.kvOnboardingDone, true);
     if (!mounted) return;
-    Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const HomeScreen()));
+    // onboarding -> paywall (once) -> Notes
+    context.goNamed(R.paywall, queryParameters: {'first': '1'});
   }
 
   Future<void> _askMic() async {

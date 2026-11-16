@@ -52,6 +52,9 @@ class LnTabBar extends StatelessWidget {
                         color: i == currentIndex ? LnColors.ink : LnColors.ink3),
                     const SizedBox(height: 3),
                     Text(tabs[i].label,
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.visible,
                         style: i == currentIndex
                             ? LnText.tabActive
                             : LnText.tabInactive),

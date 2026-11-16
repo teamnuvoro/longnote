@@ -8,6 +8,7 @@ import '../../core/billing/billing_service.dart';
 import '../../core/billing/paywall_gate.dart';
 import '../../core/models/recording.dart';
 import '../../core/util/clock.dart';
+import '../dev/widget_gallery_screen.dart';
 
 /// Result of one benchmark run.
 class BenchmarkResult {
@@ -155,6 +156,11 @@ class _BenchmarkScreenState extends State<BenchmarkScreen> {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
+          OutlinedButton(
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => const WidgetGalleryScreen())),
+            child: const Text('Widget gallery (design system)'),
+          ),
           Text(
             'Transcribes one recording on this phone and reports speed and battery. '
             'For a fair battery number: unplug, close other apps, use a recording of 30+ minutes. '

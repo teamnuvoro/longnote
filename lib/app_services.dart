@@ -1,6 +1,7 @@
+import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
@@ -10,15 +11,31 @@ import 'core/audio/pcm_source.dart';
 import 'core/billing/billing_service.dart';
 import 'core/billing/paywall_gate.dart';
 import 'core/billing/trial_reminder.dart';
+import 'core/cloud/audio_encoder.dart';
+import 'core/cloud/backend_config.dart';
+import 'core/cloud/cloud_pieces.dart';
+import 'core/cloud/cloud_pipeline.dart';
+import 'core/cloud/longnote_api.dart';
+import 'core/cloud/network_monitor.dart';
+import 'core/cloud/supabase_auth.dart';
+import 'core/cloud/tus_uploader.dart';
 import 'core/db/app_database.dart';
 import 'core/export/share_service.dart';
 import 'core/jobs/job_queue.dart';
+import 'core/jobs/note_processor.dart';
 import 'core/jobs/processing_pipeline.dart';
 import 'core/models/recording.dart';
+import 'core/notes/ask_service.dart';
+import 'core/notes/chat.dart';
+import 'core/notes/moments.dart';
+import 'core/notes/search.dart';
+import 'core/notes/speakers.dart';
 import 'core/recording/recording_controller.dart';
 import 'core/recording/recording_repository.dart';
 import 'core/recording/recovery_service.dart';
+import 'core/settings/app_settings.dart';
 import 'core/summary/summary_service.dart';
+import 'core/util/backup_exclusion.dart';
 import 'core/transcription/fake_transcriber.dart';
 import 'core/transcription/transcriber.dart';
 import 'core/transcription/whisper_transcriber.dart';
@@ -36,6 +53,11 @@ class AppServices {
     required this.reminderScheduler,
     required this.summaries,
     required this.share,
+    required this.settings,
+    required this.network,
+    required this.recordingsRoot,
+    this.auth,
+    this.api,
   });
 
   final AppDatabase db;
@@ -48,8 +70,29 @@ class AppServices {
   final LocalNotificationScheduler reminderScheduler;
   final SummaryService summaries;
   final ShareService share;
+  final AppSettings settings;
+  final NetworkMonitor network;
+  final String recordingsRoot;
+
+  /// Null when the backend is not configured in this build.
+  final SupabaseAuth? auth;
+  final LongnoteApi? api;
+
   late final ProcessingJobQueue jobs;
   late final RecordingController recorder;
+  late final NoteProcessor processor;
+  CloudPipeline? cloud;
+  late final SpeakerStore speakers = SpeakerStore(repo);
+  late final MomentStore moments = MomentStore(repo);
+  late final ChatStore chat = ChatStore(repo);
+  late final NoteSearch search = NoteSearch(repo, ftsEnabled: db.ftsEnabled);
+  AskService? get ask => api == null ? null : AskService(repo: repo, api: api!);
+
+  /// True while the app is on screen (no "note ready" notification then).
+  bool get inForeground => _lifecycle == AppLifecycleState.resumed;
+  AppLifecycleState? _lifecycle = AppLifecycleState.resumed;
+  StreamSubscription<bool>? _netSub;
+  AppLifecycleListener? _lifecycleListener;
 
   /// Current whisper choice; changing it swaps the transcriber.
   final ValueNotifier<WhisperChoice> whisperChoice =
@@ -61,6 +104,9 @@ class AppServices {
   List<Recording> recoveredAtLaunch = const [];
 
   static const kvOnboardingDone = 'onboarding_done';
+
+  /// The paywall is shown once after onboarding (onboarding -> paywall -> app).
+  static const kvFirstPaywallSeen = 'first_paywall_seen';
   static const kvWhisper = 'whisper_model';
   static const kvFakeTranscriber = 'dev_fake_transcriber';
 
@@ -93,6 +139,12 @@ class AppServices {
     final billing = FakeBillingService(kv: kv);
     await billing.init();
     final scheduler = LocalNotificationScheduler();
+    final settings = AppSettings(kv);
+    final network = ConnectivityPlusMonitor();
+    const backend = BackendConfig.current;
+    final auth =
+        backend.isConfigured ? SupabaseAuth(config: backend, kv: kv) : null;
+    final api = auth == null ? null : LongnoteApi(config: backend, auth: auth);
 
     final s = AppServices._(
       db: db,
@@ -103,22 +155,47 @@ class AppServices {
       gate: PaywallGate(kv),
       reminders: TrialReminderService(scheduler),
       reminderScheduler: scheduler,
-      summaries: SummaryService.standard(kv),
+      summaries: SummaryService.standard(kv, api: api),
       share: ShareService(repo: repo, analytics: analytics),
+      settings: settings,
+      network: network,
+      recordingsRoot: recRoot.path,
+      auth: auth,
+      api: api,
     );
     s.whisperChoice.value = WhisperChoice.parse(await kv.get(kvWhisper));
     s.useFakeTranscriber = await kv.getBool(kvFakeTranscriber);
 
-    final pipeline = ProcessingPipeline(
+    final pieces = CloudPieceStore(db.db);
+    if (auth != null && api != null) {
+      s.cloud = CloudPipeline(
+        repo: repo,
+        settings: settings,
+        auth: auth,
+        api: api,
+        tus: TusUploader(endpoint: backend.tusEndpoint, anonKey: backend.anonKey),
+        encoder: const NativeAudioEncoder(),
+        network: network,
+        pieces: pieces,
+        notifier: _LocalNoteReadyNotifier(scheduler, () => s.inForeground),
+      );
+    }
+    s.processor = NoteProcessor(
       repo: repo,
-      transcriber: s.currentTranscriber,
-      summaries: s.summaries,
+      settings: settings,
+      pieces: pieces,
+      cloud: s.cloud,
+      onDevice: ProcessingPipeline(
+        repo: repo,
+        transcriber: s.currentTranscriber,
+        summaries: s.summaries,
+      ),
     );
     s.jobs = ProcessingJobQueue(
       db: db.db,
       repo: repo,
       analytics: analytics,
-      processor: pipeline.process,
+      processor: s.processor.process,
     );
     s.recorder = RecordingController(
       repo: repo,
@@ -135,10 +212,41 @@ class AppServices {
     }
     s.recoveredAtLaunch = recovered;
 
-    // 2) Resume processing that was cut off.
+    // 2) Resume processing that was cut off; check server jobs at once.
     await s.jobs.resetInterrupted();
-    await s.jobs.runDue();
+    await s.jobs.pokeAll();
+    unawaited(s.jobs.runDue());
+
+    // 3) Network back -> resume uploads; app back on screen -> check jobs.
+    s._netSub = network.changes.listen((online) {
+      if (online) s.jobs.wakeNetworkWaiters();
+    });
+    s._lifecycleListener = AppLifecycleListener(onStateChange: (st) {
+      s._lifecycle = st;
+      if (st == AppLifecycleState.resumed) s.jobs.pokeAll();
+    });
+
+    // 4) iCloud backup choice for the recordings folder.
+    if (await settings.excludeFromBackup()) {
+      unawaited(const BackupExclusion().setExcluded(recRoot.path, true));
+    }
     return s;
+  }
+
+  /// Settings > "Keep recordings out of iCloud backup".
+  Future<void> setExcludeFromBackup(bool v) async {
+    await settings.setExcludeFromBackup(v);
+    await const BackupExclusion().setExcluded(recordingsRoot, v);
+  }
+
+  /// D8 "Transcribe on this phone instead".
+  Future<void> transcribeOnPhoneInstead(String id) =>
+      processor.transcribeOnPhoneInstead(id, jobs);
+
+  void dispose() {
+    _netSub?.cancel();
+    _lifecycleListener?.dispose();
+    jobs.dispose();
   }
 
   Future<void> _onRecordingFinished(Recording r) async {
@@ -158,10 +266,37 @@ class AppServices {
   Future<Recording> startRecording() async {
     jobs.pause(); // keep CPU/battery for capture
     try {
-      return await recorder.start();
+      final r = await recorder.start();
+      // The note starts with the current defaults (the C1 language chip and
+      // D6 can change them per note).
+      await repo.setNoteOptions(r.id,
+          language: await settings.audioLanguage(),
+          summaryStyle: (await settings.defaultStyle()).id,
+          outputLanguage: await settings.summaryLanguage());
+      return r;
     } catch (_) {
       jobs.resume();
       rethrow;
     }
+  }
+}
+
+/// "Your note is ready" as a local notification, only when the app is not on
+/// screen. No push server: works while iOS keeps the app running (e.g. a
+/// long upload/poll right after recording) or when it is next opened.
+class _LocalNoteReadyNotifier implements NoteReadyNotifier {
+  _LocalNoteReadyNotifier(this.scheduler, this.inForeground);
+  final LocalNotificationScheduler scheduler;
+  final bool Function() inForeground;
+
+  @override
+  Future<void> noteReady(Recording note) async {
+    if (inForeground()) return;
+    try {
+      await scheduler.showNow(
+          id: 5000 + (note.id.hashCode & 0xffff),
+          title: 'Your note is ready',
+          body: note.title);
+    } catch (_) {}
   }
 }
