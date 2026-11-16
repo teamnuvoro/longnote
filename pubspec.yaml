@@ -34,6 +34,9 @@ dependencies:
   # On-device transcription (whisper.cpp FFI)
   whisper_ggml: ^2.9.0
   intl: ^0.20.2
+  flutter_svg: ^2.4.0
+  go_router: ^17.5.0
+  connectivity_plus: ^7.3.1
 
 dev_dependencies:
   flutter_test:
@@ -45,3 +48,17 @@ flutter:
   uses-material-design: true
   assets:
     - assets/fonts/
+    - assets/fonts/newsreader/OFL.txt
+    - assets/fonts/geist/OFL.txt
+    - assets/fonts/geist_mono/OFL.txt
+    - assets/icons/
+  fonts:
+    - family: Newsreader
+      fonts:
+        - asset: assets/fonts/newsreader/Newsreader-Variable.ttf
+    - family: Geist
+      fonts:
+        - asset: assets/fonts/geist/Geist-Variable.ttf
+    - family: GeistMono
+      fonts:
+        - asset: assets/fonts/geist_mono/GeistMono-Variable.ttf
