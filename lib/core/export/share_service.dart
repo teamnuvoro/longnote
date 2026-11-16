@@ -82,9 +82,22 @@ class ShareService {
         recordingId: r.id, props: {'kind': 'pdf', 'via': 'share'});
   }
 
+  /// Imported notes share their original file as is (they have no
+  /// recorded parts). Returns false for recorded notes.
+  Future<bool> _shareImported(Recording r, Rect? origin) async {
+    if (r.source != 'imported' || r.importFile == null) return false;
+    final path = repo.storage.segmentPath(r.id, r.importFile!);
+    await SharePlus.instance.share(ShareParams(
+        files: [XFile(path)], subject: r.title, sharePositionOrigin: origin));
+    await analytics.log(AnalyticsEvent.export,
+        recordingId: r.id, props: {'kind': 'audio_import', 'via': 'share'});
+    return true;
+  }
+
   /// Joins the 5-minute parts into one WAV in the temp folder and shares it.
   /// The original parts are untouched.
   Future<void> shareAudio(Recording r, {Rect? origin}) async {
+    if (await _shareImported(r, origin)) return;
     final parts = await repo.segmentPaths(r.id);
     final dir = await getTemporaryDirectory();
     final out = p.join(dir.path, '${safeFileName(r.title)}.wav');
@@ -104,6 +117,7 @@ class ShareService {
   /// Encodes the parts to one AAC .m4a in the temp folder and shares it
   /// (about 15 MB per hour). The original parts are untouched.
   Future<void> shareAudioM4a(Recording r, {Rect? origin}) async {
+    if (await _shareImported(r, origin)) return;
     final parts = await repo.segmentPaths(r.id);
     final dir = await getTemporaryDirectory();
     final out = p.join(dir.path, '${safeFileName(r.title)}.m4a');

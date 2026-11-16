@@ -109,10 +109,16 @@ class _BenchmarkScreenState extends State<BenchmarkScreen> {
     final sw = Stopwatch();
     try {
       await t.ensureReady(
-          onProgress: (p) => setState(() => _progress = 'Downloading model ${(p * 100).round()}% (not timed)'));
+          onProgress: (p) {
+            if (mounted) {
+              setState(() => _progress =
+                  'Downloading model ${(p * 100).round()}% (not timed)');
+            }
+          });
       sw.start();
       var offset = 0;
       for (var i = 0; i < segs.length; i++) {
+        if (!mounted) break;
         setState(() => _progress = 'Transcribing part ${i + 1} of ${segs.length}...');
         final out = await t.transcribeFile(
             _s.repo.storage.segmentPath(r.id, segs[i].fileName),

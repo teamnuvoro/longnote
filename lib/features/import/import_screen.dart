@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/util/coalescing_runner.dart';
 import '../../app/routes.dart';
 import '../../app/nav.dart';
 import '../../app_services.dart';
@@ -53,9 +54,9 @@ class _ImportBodyState extends State<ImportBody> {
     _c = ImportController.of(context.read<AppServices>());
     _repo = context.read<RecordingRepository>();
     _c.addListener(_changed);
-    _repo.addListener(_loadRecent);
+    _repo.addListener(_recentRunner.request);
     _s = context.read<AppServices>()..noteReadyAskDue.addListener(_maybeAsk);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadRecent());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _recentRunner.request());
   }
 
   late final AppServices _s;
@@ -77,7 +78,8 @@ class _ImportBodyState extends State<ImportBody> {
   void dispose() {
     _s.noteReadyAskDue.removeListener(_maybeAsk);
     _c.removeListener(_changed);
-    _repo.removeListener(_loadRecent);
+    _repo.removeListener(_recentRunner.request);
+    _recentRunner.close();
     super.dispose();
   }
 
@@ -86,6 +88,9 @@ class _ImportBodyState extends State<ImportBody> {
   }
 
   String _recentKey = '';
+
+  /// One reload at a time, however often the repository changes.
+  late final CoalescingRunner _recentRunner = CoalescingRunner(_loadRecent);
 
   /// Reloads on repository changes, but rebuilds only when the recent
   /// imports changed (uploads elsewhere notify many times a minute).

@@ -85,11 +85,13 @@ class _AskViewState extends State<AskView> {
   String? _error;
 
   late final RecordingRepository _repo;
-  AppServices get _s => context.read<AppServices>();
+  // Read once: answers arrive after awaits, possibly after this view closed.
+  late final AppServices _s;
 
   @override
   void initState() {
     super.initState();
+    _s = context.read<AppServices>();
     _repo = context.read<RecordingRepository>();
     _repo.addListener(_onRepo);
     _input.addListener(() => setState(() {}));
@@ -105,9 +107,25 @@ class _AskViewState extends State<AskView> {
     super.dispose();
   }
 
-  /// A note may become ready while Ask is open with nothing picked.
+  /// A note may become ready while Ask is open with nothing picked; the
+  /// picked note may finish processing (enable the composer) or be deleted
+  /// (drop it).
   void _onRepo() {
-    if (_resolved && _note == null && _pending == null) _resolve(null);
+    if (!_resolved || _pending != null) return;
+    final cur = _note;
+    if (cur == null) {
+      _resolve(null);
+      return;
+    }
+    _repo.get(cur.id).then((n) {
+      if (!mounted || _note?.id != cur.id) return;
+      if (n == null) {
+        _resolve(null);
+      } else if (n.processingStatus != cur.processingStatus ||
+          n.title != cur.title) {
+        setState(() => _note = n);
+      }
+    });
   }
 
   Future<void> _resolve(String? requested) async {
@@ -245,7 +263,9 @@ class _AskViewState extends State<AskView> {
         Text(
           n == null && _resolved
               ? 'Record or import a note first. When its transcript is ready, you can ask anything about it here.'
-              : 'Ask anything about this note. Answers come only from what was said, with the moment they came from.',
+              : (n != null && !ready)
+                  ? 'This note is still being processed. You can ask about it as soon as its transcript is ready.'
+                  : 'Ask anything about this note. Answers come only from what was said, with the moment they came from.',
           style: LnText.bullet.copyWith(color: LnColors.ink2, height: 22 / 15),
         ),
         const SizedBox(height: 20),

@@ -11,6 +11,7 @@ import '../../core/analytics/analytics.dart';
 import '../../core/models/recording.dart';
 import '../../core/recording/recording_repository.dart';
 import '../../ui/widgets.dart';
+import '../ask/last_note.dart';
 import '../common/note_ready_ask.dart';
 import 'kit.dart';
 import 'note_model.dart';
@@ -83,16 +84,12 @@ class _NoteScreenState extends State<NoteScreen> {
       return;
     }
     final d = _model.data!;
-    final playable = d.playable;
-    if (_player == null && playable.isNotEmpty && !d.note.status.isLive) {
+    if (_player == null && d.hasPlayback && !d.note.status.isLive) {
       _player = NotePlaybacks.acquire(
           widget.id,
           () => NotePlayback(
-                [
-                  for (final s in playable)
-                    _model.repo.storage.segmentPath(widget.id, s.fileName)
-                ],
-                [for (final s in playable) s.durationMs],
+                d.playbackPaths(_model.repo.storage),
+                d.playbackDurations,
               ))
         ..addListener(_onPlayback);
     }
@@ -145,12 +142,21 @@ class _NoteScreenState extends State<NoteScreen> {
   }
 
   /// The note was deleted (from the actions sheet): leave this screen.
+  /// If another screen is on top (e.g. Ask opened from this note), wait:
+  /// build() calls this again when this screen is visible again, so a
+  /// deleted note never stays open as a ghost.
   void _leave() {
-    if (_popped) return;
-    _popped = true;
+    if (_popped || !mounted) return;
     final route = ModalRoute.of(context);
-    if (route != null && route.isCurrent && context.canPop()) {
+    if (route == null || !route.isCurrent) {
+      setState(() {});
+      return;
+    }
+    _popped = true;
+    if (context.canPop()) {
       context.pop();
+    } else {
+      context.goNamed(R.notes);
     }
   }
 
@@ -225,7 +231,12 @@ class _NoteScreenState extends State<NoteScreen> {
   @override
   Widget build(BuildContext context) {
     final d = _model.data;
-    if (d == null) {
+    if (_model.gone) {
+      // Rebuilt when this route becomes current again (ModalRoute.of).
+      ModalRoute.of(context);
+      WidgetsBinding.instance.addPostFrameCallback((_) => _leave());
+    }
+    if (d == null || _model.gone) {
       return Scaffold(
         backgroundColor: LnColors.paper,
         appBar: LnTopBar(backLabel: 'Notes', onBack: _back),
@@ -233,8 +244,13 @@ class _NoteScreenState extends State<NoteScreen> {
       );
     }
     final n = d.note;
-    final failed = n.processingStatus == ProcessingStatus.failed;
     final hasContent = d.lines.isNotEmpty || d.summary != null;
+    // A failure after the transcript was saved (e.g. the summary, or a usage
+    // limit) must not hide what exists: show it, with a banner.
+    final failed =
+        n.processingStatus == ProcessingStatus.failed && !hasContent;
+    final laterStepFailed =
+        n.processingStatus == ProcessingStatus.failed && hasContent;
     final processing = !failed && !hasContent;
     final ready = !failed && hasContent;
 
@@ -249,12 +265,22 @@ class _NoteScreenState extends State<NoteScreen> {
           if (failed)
             ...failedChildren(
               d,
-              canUsePhone: n.transcriptionMode != TranscriptionMode.onDevice &&
+              // Imports are cloud-only: the phone engine reads recorded
+              // parts, so it would find "no speech" in an imported file.
+              canUsePhone: n.source != 'imported' &&
+                  n.transcriptionMode != TranscriptionMode.onDevice &&
                   (_cloud == true || n.transcriptSource == 'cloud'),
               onTryAgain: () => _s.jobs.retry(widget.id),
               onTranscribeOnPhone: () => _s.transcribeOnPhoneInstead(widget.id),
               onSendReport: () => _sendReport(d),
             ),
+          if (laterStepFailed) ...[
+            _LaterStepFailedBanner(
+              message: n.processingError ?? 'The summary could not be made.',
+              onTryAgain: () => _s.redoSummary(widget.id),
+            ),
+            const SizedBox(height: 14),
+          ],
           if (processing)
             ...processingChildren(
               d,
@@ -297,8 +323,8 @@ class _NoteScreenState extends State<NoteScreen> {
             LnPillButton(
               label: 'Ask',
               icon: LnIcons.sparkle,
-              style: d.lines.isEmpty ? LnPillStyle.fill : LnPillStyle.ink,
-              onPressed: d.lines.isEmpty ? null : _openAsk,
+              style: askable(n) ? LnPillStyle.ink : LnPillStyle.fill,
+              onPressed: askable(n) ? _openAsk : null,
             ),
             LnTopBarIcon(LnIcons.share,
                 semanticLabel: 'Share', onPressed: ready ? _openShare : null),
@@ -500,4 +526,27 @@ class _NoteScreenState extends State<NoteScreen> {
       ),
     );
   }
+}
+
+/// Shown above an existing transcript/summary when a later step failed.
+class _LaterStepFailedBanner extends StatelessWidget {
+  const _LaterStepFailedBanner({required this.message, required this.onTryAgain});
+  final String message;
+  final VoidCallback onTryAgain;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+        decoration: BoxDecoration(
+          color: LnColors.attentionTint,
+          borderRadius: BorderRadius.circular(LnRadius.card),
+        ),
+        child: Row(children: [
+          Expanded(
+            child: Text(message,
+                style: LnText.meta.copyWith(color: LnColors.attention)),
+          ),
+          TextButton(onPressed: onTryAgain, child: const Text('Try again')),
+        ]),
+      );
 }

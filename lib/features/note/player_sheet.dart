@@ -26,6 +26,7 @@ class _PlayerSheetState extends State<PlayerSheet> {
   late final NoteModel _model;
   NotePlayback? _player;
   List<double> _peaks = const [];
+  bool _closing = false;
 
   @override
   void initState() {
@@ -37,20 +38,24 @@ class _PlayerSheetState extends State<PlayerSheet> {
   void _onData() {
     final d = _model.data;
     if (_model.gone) {
-      if (mounted) context.pop();
+      // Once: a second repository change during the dismiss animation would
+      // otherwise pop the screen under this sheet.
+      if (mounted && !_closing) {
+        _closing = true;
+        context.pop();
+      }
       return;
     }
     if (d == null) return;
-    if (_player == null && d.playable.isNotEmpty) {
-      final paths = [
-        for (final s in d.playable)
-          _model.repo.storage.segmentPath(widget.id, s.fileName)
-      ];
-      final ms = [for (final s in d.playable) s.durationMs];
+    if (_player == null && d.hasPlayback) {
+      final paths = d.playbackPaths(_model.repo.storage);
+      final ms = d.playbackDurations;
       _player = NotePlaybacks.acquire(widget.id, () => NotePlayback(paths, ms));
-      PlayerSheet.peaksLoader(paths, ms).then((p) {
-        if (mounted) setState(() => _peaks = p);
-      });
+      if (d.hasWaveform) {
+        PlayerSheet.peaksLoader(paths, ms).then((p) {
+          if (mounted) setState(() => _peaks = p);
+        });
+      }
     }
     setState(() {});
   }

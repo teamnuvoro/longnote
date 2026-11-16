@@ -106,6 +106,11 @@ class _ShareSheetState extends State<ShareSheet> {
   Future<void> _audio() async {
     final n = _note;
     if (n == null) return;
+    if (n.source == 'imported') {
+      // The original file is shared as is; no format to choose.
+      await _run('audio', (n) => _s.share.shareAudio(n, origin: _origin()));
+      return;
+    }
     final choice = await showLnSheet<String>(
       context,
       builder: (c) => LnSheet(

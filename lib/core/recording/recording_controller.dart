@@ -41,7 +41,11 @@ class RecordingController extends ChangeNotifier {
 
   CaptureState state = CaptureState.idle;
   Recording? current;
-  double levelDb = -60;
+  /// Input level in dBFS, ~7 updates a second. A separate notifier so only
+  /// the waveform repaints (the rest of the recording screen follows the
+  /// once-a-second flush notification).
+  final ValueNotifier<double> level = ValueNotifier(-60);
+  double get levelDb => level.value;
 
   /// Honest banner text for interruptions/errors; null when all is well.
   String? banner;
@@ -141,10 +145,7 @@ class RecordingController extends ChangeNotifier {
       current = rec;
 
       _intSub = source.interruptions().listen(_onInterruption);
-      _levelSub = source.levels().listen((db) {
-        levelDb = db;
-        notifyListeners();
-      });
+      _levelSub = source.levels().listen((db) => level.value = db);
       final stream = await source.start();
       _audioSub = stream.listen(
         _onAudio,
@@ -398,6 +399,7 @@ class RecordingController extends ChangeNotifier {
 
   @override
   void dispose() {
+    level.dispose();
     _flushTimer?.cancel();
     _heartbeatTimer?.cancel();
     _source?.dispose();

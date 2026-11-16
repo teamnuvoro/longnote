@@ -59,7 +59,10 @@ class FakeScheduler extends LocalNotificationScheduler {
 
   @override
   Future<void> showNow(
-      {required int id, required String title, required String body}) async {}
+      {required int id,
+      required String title,
+      required String body,
+      String? payload}) async {}
 }
 
 class FakeAskApi extends LongnoteApi {

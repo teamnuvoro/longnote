@@ -73,22 +73,32 @@ class _RecordingScreenState extends State<RecordingScreen> {
   void _minimise() =>
       context.canPop() ? context.pop() : context.goNamed(R.notes);
 
+  /// Set when the user stops or discards: this screen is about to close, so
+  /// it must not show the "recording has ended" card meanwhile.
+  bool _leaving = false;
+
   Future<void> _stop(RecordingController c) async {
     if (_busy) return;
     _busy = true;
+    _leaving = true;
     final router = GoRouter.of(context);
     final rec = await c.stop();
     _busy = false;
     if (!mounted) return;
-    if (router.canPop()) router.pop();
-    if (rec != null) {
-      router.pushNamed(R.note, pathParameters: {'id': rec.id});
+    if (rec == null) {
+      // Could not save the ending (disk full): show the card with the
+      // explanation instead of leaving silently.
+      setState(() => _leaving = false);
+      return;
     }
+    if (router.canPop()) router.pop();
+    router.pushNamed(R.note, pathParameters: {'id': rec.id});
   }
 
   Future<void> _discard() async {
     final ok = await context.pushOnce<bool>(R.discard);
     if (ok != true || !mounted) return;
+    setState(() => _leaving = true);
     final router = GoRouter.of(context);
     await _s.discardRecording();
     if (mounted && router.canPop()) router.pop();
@@ -128,6 +138,9 @@ class _RecordingScreenState extends State<RecordingScreen> {
     final c = context.watch<RecordingController>();
     final bottom = MediaQuery.paddingOf(context).bottom;
 
+    if (_leaving && c.state == CaptureState.idle) {
+      return const Scaffold(backgroundColor: LnColors.night);
+    }
     // Ended on its own (e.g. storage full) while this screen was open.
     if (c.state == CaptureState.idle) {
       return _Ended(
@@ -416,21 +429,21 @@ class _LiveWaveformState extends State<_LiveWaveform> {
   @override
   void initState() {
     super.initState();
-    widget.controller.addListener(_onTick);
+    widget.controller.level.addListener(_onTick);
   }
 
   @override
   void didUpdateWidget(covariant _LiveWaveform old) {
     super.didUpdateWidget(old);
     if (old.controller != widget.controller) {
-      old.controller.removeListener(_onTick);
-      widget.controller.addListener(_onTick);
+      old.controller.level.removeListener(_onTick);
+      widget.controller.level.addListener(_onTick);
     }
   }
 
   @override
   void dispose() {
-    widget.controller.removeListener(_onTick);
+    widget.controller.level.removeListener(_onTick);
     _repaint.dispose();
     super.dispose();
   }

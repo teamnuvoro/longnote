@@ -87,6 +87,29 @@ class LocalNotificationScheduler implements ReminderScheduler {
   final _plugin = FlutterLocalNotificationsPlugin();
   bool _inited = false;
 
+  /// Prefix of the payload of "note ready" notifications.
+  static const notePayload = 'note:';
+
+  /// Called with a note id when the user taps its "note ready" notification
+  /// (set by main.dart to open the note).
+  static void Function(String noteId)? onOpenNote;
+
+  static void _onTap(NotificationResponse r) {
+    final p = r.payload;
+    if (p != null && p.startsWith(notePayload)) {
+      onOpenNote?.call(p.substring(notePayload.length));
+    }
+  }
+
+  /// The note whose notification launched the app, if any (cold start).
+  Future<String?> launchNoteId() async {
+    await _init();
+    final d = await _plugin.getNotificationAppLaunchDetails();
+    final p = d?.notificationResponse?.payload;
+    if (d?.didNotificationLaunchApp != true || p == null) return null;
+    return p.startsWith(notePayload) ? p.substring(notePayload.length) : null;
+  }
+
   Future<void> _init() async {
     if (_inited) return;
     // Only tz.UTC is used (built in), so the time-zone database (a slow
@@ -99,6 +122,7 @@ class LocalNotificationScheduler implements ReminderScheduler {
           requestSoundPermission: false,
         ),
       ),
+      onDidReceiveNotificationResponse: _onTap,
     );
     _inited = true;
   }
@@ -139,12 +163,16 @@ class LocalNotificationScheduler implements ReminderScheduler {
   /// Shows a notification now (e.g. "Your note is ready"). Silently does
   /// nothing if the user has not allowed notifications.
   Future<void> showNow(
-      {required int id, required String title, required String body}) async {
+      {required int id,
+      required String title,
+      required String body,
+      String? payload}) async {
     await _init();
     await _plugin.show(
       id: id,
       title: title,
       body: body,
+      payload: payload,
       notificationDetails: const NotificationDetails(
           iOS: DarwinNotificationDetails(presentAlert: true, presentSound: true)),
     );

@@ -20,15 +20,18 @@ void rememberOpenedNote(BuildContext context, String id) {
   s.kv.set(kvLastOpenedNote, id);
 }
 
-/// A note Ask can answer about: it has a transcript.
-bool askable(Recording n) => n.processingStatus == ProcessingStatus.done;
+/// A note Ask can answer about: it has a finished transcript (done, or only
+/// its summary failed afterwards).
+bool askable(Recording n) =>
+    n.processingStatus == ProcessingStatus.done ||
+    (n.processingStatus == ProcessingStatus.failed && n.transcriptSource != null);
 
 /// Which note Ask starts with: [requested] if given, else the last opened
 /// note, else the newest note with a transcript.
 Future<Recording?> pickAskNote(AppServices s, {String? requested}) async {
   if (requested != null) {
     final r = await s.repo.get(requested);
-    if (r != null) return r;
+    if (r != null && askable(r)) return r;
   }
   final last = await s.kv.get(kvLastOpenedNote);
   if (last != null) {

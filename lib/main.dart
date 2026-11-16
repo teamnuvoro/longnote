@@ -9,7 +9,9 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import 'app/router.dart';
+import 'app/routes.dart';
 import 'app_services.dart';
+import 'core/billing/trial_reminder.dart';
 import 'core/diagnostics/crash_reporter.dart';
 import 'ui/fonts.dart';
 import 'ui/theme.dart';
@@ -53,7 +55,14 @@ Future<void> _launch(CrashReporter reporter) async {
     final uri = router.routerDelegate.currentConfiguration.uri;
     reporter.breadcrumb('route ${uri.path}');
   });
+  // Tapping a "note ready" notification opens that note.
+  void openNote(String id) =>
+      router.pushNamed(R.note, pathParameters: {'id': id});
+  LocalNotificationScheduler.onOpenNote = openNote;
   runApp(LongnoteApp(services: services, router: router));
+  unawaited(services.reminderScheduler.launchNoteId().then((id) {
+    if (id != null) openNote(id);
+  }, onError: (_) {}));
 }
 
 /// Installed first, so errors during start-up are kept too.

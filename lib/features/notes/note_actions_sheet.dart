@@ -83,7 +83,7 @@ class _NoteActionsSheetState extends State<NoteActionsSheet> {
 
   Future<void> _delete() async {
     final n = _note;
-    if (n == null) return;
+    if (n == null || n.status.isLive) return;
     final ok = await confirmDestructive(
       context,
       title: 'Delete this note?',
@@ -142,7 +142,9 @@ class _NoteActionsSheetState extends State<NoteActionsSheet> {
               large: true,
               destructive: true,
               showChevron: false,
-              onTap: n == null ? null : _delete),
+              // The note being recorded is deleted with Discard on the
+              // recording screen, never from under the recorder.
+              onTap: n == null || n.status.isLive ? null : _delete),
         ]),
         const SizedBox(height: 8),
       ]),

@@ -101,9 +101,14 @@ class _SpeakersSheetState extends State<SpeakersSheet> {
     );
     if (pair == null) return;
     await _s.speakers.merge(widget.id, fromKey: pair.$1, intoKey: pair.$2);
-    _ctl.remove(pair.$1)?.dispose();
-    _focus.remove(pair.$1)?.dispose();
     await _load();
+    // Dispose only after the frame that stops using them.
+    final ctl = _ctl.remove(pair.$1);
+    final focus = _focus.remove(pair.$1);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ctl?.dispose();
+      focus?.dispose();
+    });
     if (mounted) showToast(context, 'Speakers merged');
   }
 

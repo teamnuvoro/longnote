@@ -444,7 +444,8 @@ class _LocalNoteReadyNotifier implements NoteReadyNotifier {
       await scheduler.showNow(
           id: 5000 + (note.id.hashCode & 0xffff),
           title: 'Your note is ready',
-          body: note.title);
+          body: note.title,
+          payload: '${LocalNotificationScheduler.notePayload}${note.id}');
     } catch (_) {}
   }
 }

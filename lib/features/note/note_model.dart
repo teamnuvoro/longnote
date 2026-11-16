@@ -37,6 +37,21 @@ class NoteData {
   List<AudioSegment> get playable =>
       segments.where((s) => s.dataBytes > 0).toList();
 
+  bool get _imported => note.source == 'imported' && note.importFile != null;
+
+  /// What the player plays: the recorded parts, or the imported file.
+  List<String> playbackPaths(RecordingStorage st) => _imported
+      ? [st.segmentPath(note.id, note.importFile!)]
+      : [for (final s in playable) st.segmentPath(note.id, s.fileName)];
+
+  List<int> get playbackDurations =>
+      _imported ? [note.durationMs] : [for (final s in playable) s.durationMs];
+
+  bool get hasPlayback => _imported || playable.isNotEmpty;
+
+  /// Waveform peaks are read from our own WAV parts only.
+  bool get hasWaveform => !_imported && playable.isNotEmpty;
+
   bool get hasSpeakers => lines.any((l) => l.speaker != null);
 
   String nameOf(String? key) {

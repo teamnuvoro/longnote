@@ -76,7 +76,7 @@ class NoteSearch {
           highlight(notes_fts, 1, '$markStart', '$markEnd') AS t,
           snippet(notes_fts, 2, '$markStart', '$markEnd', '…', 16) AS s
         FROM notes_fts f JOIN recordings r ON r.id = f.recording_id
-        WHERE notes_fts MATCH ? ORDER BY rank''', [q]);
+        WHERE notes_fts MATCH ? AND r.status NOT IN ('recording', 'paused') ORDER BY rank''', [q]);
       for (final m in notes) {
         final n = note(m['id'] as String, m['title'] as String);
         final t = m['t'] as String? ?? '';
@@ -96,7 +96,7 @@ class NoteSearch {
           snippet(turns_fts, 0, '$markStart', '$markEnd', '…', 16) AS s
         FROM turns_fts JOIN transcript_lines l ON l.id = turns_fts.rowid
         JOIN recordings r ON r.id = l.recording_id
-        WHERE turns_fts MATCH ? ORDER BY rank LIMIT ?''', [q, maxTurnHits]);
+        WHERE turns_fts MATCH ? AND r.status NOT IN ('recording', 'paused') ORDER BY rank LIMIT ?''', [q, maxTurnHits]);
       for (final m in turns) {
         final n = note(m['id'] as String, m['title'] as String);
         n.hits.add(SearchHit(
@@ -111,7 +111,7 @@ class NoteSearch {
     } else {
       final like = '%${input.trim().replaceAll('%', '').replaceAll('_', '')}%';
       for (final m in await _db.rawQuery(
-          'SELECT id, title FROM recordings WHERE title LIKE ? ORDER BY created_at DESC',
+          "SELECT id, title FROM recordings WHERE title LIKE ? AND status NOT IN ('recording', 'paused') ORDER BY created_at DESC",
           [like])) {
         final n = note(m['id'] as String, m['title'] as String);
         n.hits.add(SearchHit(
@@ -123,7 +123,7 @@ class NoteSearch {
           SELECT l.id AS line_id, l.recording_id AS id, r.title AS title,
             l.start_ms, l.speaker, l.text
           FROM transcript_lines l JOIN recordings r ON r.id = l.recording_id
-          WHERE l.text LIKE ? ORDER BY r.created_at DESC, l.start_ms LIMIT ?''',
+          WHERE l.text LIKE ? AND r.status NOT IN ('recording', 'paused') ORDER BY r.created_at DESC, l.start_ms LIMIT ?''',
           [like, maxTurnHits])) {
         final n = note(m['id'] as String, m['title'] as String);
         n.hits.add(SearchHit(

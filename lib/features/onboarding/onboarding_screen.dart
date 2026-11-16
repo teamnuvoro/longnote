@@ -19,6 +19,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   int _page = 0;
   String? _micMessage;
 
+  @override
+  void dispose() {
+    _pages.dispose();
+    super.dispose();
+  }
+
   Future<void> _finish() async {
     final s = context.read<AppServices>();
     await s.kv.setBool(AppServices.kvOnboardingDone, true);

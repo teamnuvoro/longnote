@@ -26,6 +26,10 @@ class NoteProcessor {
   final CloudPipeline? cloud;
 
   Future<TranscriptionMode> modeFor(Recording? note) async {
+    // Imports are cloud-only (the phone engine reads recorded WAV parts).
+    if (note?.source == 'imported' && cloud != null) {
+      return TranscriptionMode.cloud;
+    }
     final m = note?.transcriptionMode ?? await settings.transcriptionMode();
     return m == TranscriptionMode.cloud && cloud == null
         ? TranscriptionMode.onDevice
