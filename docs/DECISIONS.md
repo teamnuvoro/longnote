@@ -90,3 +90,30 @@ Contract: `docs/BACKEND-API.md`. Code: `supabase/`. Test: `tools/e2e/`.
 - **Stable error codes `{error:{code,message,detail}}`** (lead). The app maps codes to plain words.
 - **Function calls require a real user token; the anon key alone gets 401** (build). verify_jwt accepts the anon key, so each function checks the user with GoTrue.
 - **Storage objects are deleted via the `cleanup` function (pg_cron → pg_net), not SQL** (build). Supabase blocks direct deletes from `storage.objects`.
+
+## App v1 build (16 Nov)
+Foundations for the Figma v1 screens. Map: `docs/APP-ARCHITECTURE.md`.
+- **Design tokens copied from the Figma foundations (2:2) into `lib/ui/tokens.dart`; derived colours (fills, tints, night) taken from the frames** (build). One source of truth; screens never use raw colours/fonts.
+- **Fonts bundled as the google/fonts variable TTFs (Newsreader, Geist, Geist Mono) with OFL files; every style sets `fontVariations`** (build). No runtime download (google_fonts would fetch from the network); Flutter does not map `fontWeight` to the `wght` axis by itself.
+- **Figma icons exported as SVG and drawn with flutter_svg, tinted per use** (build). Exact match to the design; one file per icon.
+- **go_router with a `StatefulShellRoute` (4 tabs, each keeps its stack); detail screens, sheets and recording on the root navigator** (build). Matches the frames (no tab bar on D/C screens); named routes for every frame; sheets are routes (`SheetPage`), so they are deep-linkable and testable.
+- **v0.1 detail, recording and paywall screens stay wired into the new routes until the screens session replaces them; Notes (B1) and Settings (G1) got minimal real versions** (build). The app keeps working end to end on TestFlight between sessions.
+- **First run: onboarding → paywall (once) → Notes; phones that already have notes skip it** (lead: paywall first after login).
+- **Plain HTTP for Supabase (auth, functions, TUS), no supabase_flutter** (build; the brief allowed either). Fewer native pods, fully unit-testable with a fake server. The session (anonymous user, refresh token) is stored in the app database; refresh 5 min before expiry; a rejected refresh token signs up a new anonymous user.
+- **Supabase URL + anon key committed in `lib/core/cloud/backend_config.dart`, overridable with `--dart-define` / repo variables** (build). The anon key is public by design (role `anon`, checked); no other key is in the app.
+- **AAC encode in Swift with AVMutableComposition → AVAssetReaderAudioMixOutput (16 kHz mono PCM) → AVAssetWriter (AAC-LC 32 kbps) in AppDelegate.swift** (build). Handles our WAV parts and any imported format (resamples, mixes down); no new Swift file, so no Xcode project edits.
+- **Turns are the existing `transcript_lines` table (speaker = key, + language); names live in `speakers`** (build). The v0.1 transcript, export and PDF code keeps working; rename = one row; merge = rewrite keys + delete.
+- **One `processing_status` column with the richer states (compressing, uploading, queuedOnServer, waitingForNetwork)** (build). One source of truth for the UI; old values still parse.
+- **Waiting is not failing: polling, offline and usage limits defer the job without using a try; only real errors count toward the 4 tries** (build). A long offline period or a daily limit must not end in "failed".
+- **limit_reached shows as failed (with the reason) but retries itself after the reset (00:02 UTC next day, or 15 min for the hourly limit)** (build). The user sees why; nothing to tap.
+- **bad_request / too_long / payload_too_large fail at once** (build). Retrying cannot fix them.
+- **Server-side transcription failure → forget the upload (the server deleted the audio) and upload again on the next try** (build; BACKEND-API 6).
+- **Over 5 h: 4-h pieces (`<note>_pN`), all started before polling, turns offset by the piece start; speaker keys kept distinct per piece ("2:1") for the user to merge** (lead).
+- **Cloud mode summarizes with the cloud summarizer only; a failure retries rather than silently falling back to the offline summary** (build). The offline summary is weak; the user should get the real one or a visible retry. On-device mode keeps the v0.1 engine choice.
+- **Cloud summary and Ask send the user's JWT** (lead; fixes the v0.1 client, which sent the anon key and would get 401). The old cloud-summary test was updated to this contract.
+- **Search: SQLite FTS5 (`unicode61`, diacritics removed, prefix per word, all words must match), external-content index on the turns kept by triggers; LIKE fallback if FTS5 is missing** (build). Fast on long transcripts; Hindi/Devanagari tokenises fine.
+- **"Note ready" = local notification only when the app is in the background; no push server** (lead). Works while iOS keeps the app alive or when it is next opened. The permission is still asked only at trial start (screens session: decide whether to ask after the first recording).
+- **iCloud backup: recordings stay in backups by default; a setting excludes the folder** (build; HANDOFF risk 8). A phone restore should bring recordings back; users short on iCloud space can turn it off.
+- **Default transcription mode = cloud; on-device whisper stays as the fallback and as a per-note "Transcribe on this phone instead"** (owner go on Soniox, 16 Nov).
+- **The compressed m4a is kept next to the WAV parts after upload** (build). Never deleting local audio is the rule; ~14 MB/h extra. Clean-up can come later with the user's consent.
+- **Widget gallery lives under the hidden Benchmark screen (all builds, not only debug)** (build). TestFlight builds are release builds; the owner can still see the components.
