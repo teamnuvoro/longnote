@@ -175,6 +175,33 @@ void main() {
     expect(finished, isEmpty);
     expect(c.banner, contains('repaired'));
   });
+
+  test('a heartbeat still running when Stop is pressed does not wipe the saved '
+      'audio size (QA run 43953197156: "No audio was saved")', () async {
+    final src = FakePcmSource();
+    final repo = _SlowHeartbeatRepo(env);
+    final c = RecordingController(
+      repo: repo,
+      analytics: env.analytics,
+      sourceFactory: () => src,
+      clock: env.clock,
+      useTimers: false,
+    );
+    final rec = await c.start();
+    src.audio.add(pcm(32000 * 3)); // 3 s
+    await pump();
+    c.tickFlush();
+    repo.hold = Completer<void>();
+    final tick = c.tickHeartbeat(); // waits inside repo.heartbeat
+    await pump();
+    final done = await c.stop();
+    expect(done!.durationMs, 3000);
+    repo.hold!.complete();
+    await tick;
+    final segs = await env.repo.segments(rec.id);
+    expect(segs.single.dataBytes, 32000 * 3,
+        reason: 'the late heartbeat overwrote the final segment size');
+  });
 }
 
 /// updateCapture fails like SQLITE_FULL.
@@ -186,5 +213,17 @@ class _FailingRepo extends RecordingRepository {
       throw const FileSystemException('database or disk is full');
     }
     return super.updateCapture(r, notify: notify);
+  }
+}
+
+/// heartbeat() waits for [hold] (a slow database write).
+class _SlowHeartbeatRepo extends RecordingRepository {
+  _SlowHeartbeatRepo(TestEnv env) : super(env.db.db, env.repo.storage);
+  Completer<void>? hold;
+  @override
+  Future<void> heartbeat(String id, DateTime at, int durationMs) async {
+    final h = hold;
+    if (h != null) await h.future;
+    return super.heartbeat(id, at, durationMs);
   }
 }

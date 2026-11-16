@@ -221,6 +221,10 @@ class RecordingController extends ChangeNotifier {
     rec.heartbeatAt = _clock.now();
     rec.durationMs = sink.totalDuration.inMilliseconds;
     await repo.heartbeat(rec.id, rec.heartbeatAt!, rec.durationMs);
+    // Stop may have run while we waited: it closed the sink (its byte count
+    // is now 0) and wrote the final segment row. Writing now would set that
+    // row to 0 bytes and the note would fail with "No audio was saved".
+    if (!identical(_sink, sink) || !isActive) return;
     // Keep the open segment's byte count current too.
     await repo.upsertSegment(
       AudioSegment(
