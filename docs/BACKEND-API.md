@@ -27,7 +27,13 @@ Content-Type: application/json
 ```
 
 Access tokens last 1 hour. Refresh before long uploads and before each call.
-Supabase limits anonymous sign-ups to 30 per hour per IP (default).
+Supabase limits anonymous sign-ups to **10 per hour per IP** (lowered from the default 30 on 16 Nov).
+
+**Refresh failures:** only a 400/401/403 whose `error_code` says the refresh token is dead (`refresh_token_not_found`,
+`refresh_token_already_used`, `session_not_found`, `session_expired`, `user_not_found`, `user_banned`) means "sign up again".
+Real reply: `400 {"code":400,"error_code":"refresh_token_not_found","msg":"Invalid Refresh Token: Refresh Token Not Found"}`.
+Anything else (5xx, 429, network) is temporary: retry later with the same user. A new user cannot see the old user's
+jobs or uploads (`not_found`), so the app uploads those notes again under the new user.
 
 ## 2. Upload the audio
 
@@ -101,7 +107,7 @@ All are `POST {SUPABASE_URL}/functions/v1/<name>` with a JSON body and JSON repl
 |---|---|---|---|
 | `bad_request` | 400 | "Something in the request was wrong." | invalid field; `detail` may say which |
 | `unauthorized` | 401 | "Please reopen the app to sign in again." | no/expired user token, or anon key used as token |
-| `not_found` | 404 | "We could not find that upload/job." | `transcribe-start` before the upload finished; unknown job |
+| `not_found` | 404 | "We could not find that upload/job." | `transcribe-start` before the upload finished (or its audio was swept); unknown job, or another user's job. App: upload again and start again |
 | `method_not_allowed` | 405 | — | not POST |
 | `payload_too_large` | 413 | "This is too long to send at once." | body/transcript over the caps below; `detail.max_*` |
 | `too_long` | 422 | "Recordings over 5 hours can't be transcribed in one piece." | audio over 300 min; `detail.max_seconds` |
@@ -110,7 +116,8 @@ All are `POST {SUPABASE_URL}/functions/v1/<name>` with a JSON body and JSON repl
 | `server_error` | 500 | "Something went wrong on our side. Try again." | our bug or DB trouble |
 
 `limit_reached` scopes: `user_day` ("Daily limit reached, resets 00:00 UTC"), `user_hour`
-("Too much audio in the last hour, try again later"), `global_day` ("Service is busy today, try tomorrow").
+("Too much audio in the last hour, try again later"), `global_day` ("Service is busy today, try tomorrow"),
+`ip_day` ("Too much use from this network today, resets 00:00 UTC"; per-IP cap, section 5).
 
 ### 4.1 `transcribe-start`
 
@@ -129,12 +136,15 @@ Reply `200`:
 {"job_id": "3d3ed4a4-44aa-4cbd-a3c2-b8dc91e1558e", "client_note_id": "n_2026_11_16_0930", "status": "transcribing"}
 ```
 - **Idempotent** on (user, `client_note_id`): calling again returns the same job and does not start a second transcription
-  while it is `transcribing`/`done`. If the job is `failed` or `fetched` and a **new** upload exists at the path, it starts over
-  (and is counted against limits again). If no new upload exists, it returns the job as is.
+  while it is `transcribing`/`done`. Parallel calls are safe: an atomic claim lets exactly one of them charge and call Soniox;
+  the others get `200` with the same `job_id` and `status` `uploaded` or `transcribing` (poll as usual; `uploaded` → call
+  start again). Tested with 5 parallel calls: one job, one Soniox transcription. If the job is `failed` or `fetched` and a **new** upload exists at the path, it starts over
+  (and is counted against limits again). If no new upload exists, it returns the job as is. A job still `uploaded` whose audio is gone → `not_found`.
 - Errors: `not_found` (object missing), `bad_request`, `too_long`, `limit_reached`, `upstream_failed`
   (`detail.tries_left`; after 3 failed starts the job is `failed` and the audio is deleted: re-upload to retry).
-- Server side: checks the object exists and is the user's, charges `max(audio_seconds, bytes / 12000)` seconds against limits
-  (the floor stops an understated length), makes a signed URL valid 3 h, starts Soniox `stt-async-v6` with speaker diarization,
+- Server side: checks the object exists and is the user's, charges `max(audio_seconds, bytes / 4000)` seconds against limits
+  (the floor = our 32 kbps format; it stops an understated length; `too_long` if bytes / 4000 > 1.05 × the max seconds),
+  checks the per-IP audio cap, makes a signed URL valid 3 h, starts Soniox `stt-async-v6` with speaker diarization,
   language identification, language hints, and our webhook. The charge is corrected to Soniox's real duration when done,
   and refunded if Soniox fails.
 
@@ -207,7 +217,8 @@ Reply `200`:
 ```
 Same keys as `MeetingSummary` in `lib/core/summary/summary_models.dart`, plus the new `in_short` (2-3 sentences).
 `owner`/`due` are `null` unless said. For multi-part transcripts each part has its own `in_short`; the app should merge
-(e.g. show part 1's, or join them). Counts 1 `summary_calls`. Errors: `bad_request`, `payload_too_large`, `limit_reached`, `upstream_failed`.
+(e.g. show part 1's, or join them). Counts 1 `summary_calls`. Before calling OpenAI it reserves an upper-bound cost
+(~$0.055) against the global cap atomically, then settles to the real cost. Errors: `bad_request`, `payload_too_large`, `limit_reached`, `upstream_failed`.
 
 ### 4.4 `ask`
 
@@ -231,7 +242,7 @@ Reply `200`:
 - **Size cap:** the transcript sent to the model is at most **240,000 chars** (~60k tokens, ~4.5 h of speech). Above that the
   server keeps the turns sharing the most words with the question (and recent user messages), plus each one's neighbours,
   in time order, with `[...]` at the gaps, and returns `truncated: true`. The app need not trim.
-- Limit: **60 asks per user per UTC day**.
+- Limit: **60 asks per user per UTC day**; reserves ~$0.02 against the global cap before the model call (settled after).
 
 ## 5. Limits (env-configurable function secrets)
 
@@ -243,6 +254,15 @@ Reply `200`:
 | `LIMIT_GLOBAL_USD_PER_DAY` | 20 | estimated spend (Soniox + OpenAI) for all users per UTC day |
 | `LIMIT_ASK_PER_DAY` | 60 | ask calls per user per day |
 | `LIMIT_SUMMARY_PER_DAY` | 40 | summarize calls per user per day (a 3-h note uses 2 parts) |
+| `LIMIT_IP_AUDIO_SECONDS_PER_DAY` | 144000 (40 h) | audio per client IP per UTC day (scope `ip_day`) |
+| `LIMIT_IP_SUMMARY_PER_DAY` | 300 | summarize calls per client IP per day |
+| `LIMIT_IP_ASK_PER_DAY` | 600 | ask calls per client IP per day |
+
+The global cap is **reserve-then-settle** everywhere: audio is charged before Soniox starts (`ln_reserve_audio`), summarize/ask
+reserve an upper-bound estimate before OpenAI (`ln_reserve_call`: one conditional UPDATE, so parallel calls cannot overshoot)
+and settle to the real cost after (`ln_settle_cost`). Per-IP caps are generous because Indian carriers share one IP across many
+phones (CGNAT); the IP is stored only as HMAC-SHA256 with a server secret (`IP_HASH_SECRET`, else `CLEANUP_SECRET`), rows
+kept 2 days. Interim abuse guard until App Attest (DECISIONS.md).
 
 Other knobs: `OPENAI_MODEL` (default `gpt-5.4-mini`), `SONIOX_MODEL` (`stt-async-v6`), `SIGNED_URL_SECONDS` (10800),
 `WEBHOOK_GRACE_SECONDS` (120), `SONIOX_CHECK_EVERY_SECONDS` (20), `ASK_MAX_TRANSCRIPT_CHARS` (240000), prices
@@ -259,6 +279,7 @@ Usage is readable by the app: `select * from usage_daily where day = <today UTC>
 | transcript (`jobs.result`) | our DB | on `ack`; else 15-30 min after first fetch; else 7 days after the job was created (never fetched) |
 | job row (no content: status, lengths, error) | our DB | 30 days after creation |
 | `usage_daily` | our DB | after 90 days |
+| `ip_daily` (hashed IP, counts) | our DB | after 2 days |
 | summaries and Ask | nowhere | never stored; OpenAI API data is not used for training (OpenAI API policy; their abuse-monitoring retention applies) |
 
 Schedules (pg_cron): `longnote-cleanup-db` every 15 min (SQL), `longnote-cleanup-storage` at :07 every hour (calls the `cleanup`
@@ -319,7 +340,7 @@ the hourly 24 h storage sweep on a real stale object (the delete call it uses is
 ## 10. Operations
 
 - Deploy functions: `SUPABASE_ACCESS_TOKEN=... supabase functions deploy --use-api --project-ref <ref>` (verify_jwt per function in `supabase/config.toml`: off only for `soniox-webhook` and `cleanup`, which check their own secret headers).
-- Migrations: `supabase/migrations/*.sql` were applied with psql and recorded in `supabase_migrations.schema_migrations`.
+- Migrations: `supabase/migrations/*.sql` (00001-00005) were applied with psql and recorded in `supabase_migrations.schema_migrations`.
 - Server secrets (names only): `OPENAI_API_KEY`, `SONIOX_API_KEY`, `SONIOX_WEBHOOK_SECRET`, `CLEANUP_SECRET`, `LIMIT_*`.
   The two generated secrets are also in `.env.local`. Vault (for pg_cron): `project_url`, `cleanup_secret`.
 - Soniox account limits to watch: 100 pending and 2,000 stored transcriptions (we delete each one), 10 GB / 1,000 files (we use URLs, not files).

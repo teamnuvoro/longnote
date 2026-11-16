@@ -8,8 +8,8 @@
 // Response: {"summary": {in_short, key_points, decisions, action_items,
 //            numbers_and_dates, open_questions}, "model": string, "style": string}
 
-import { admin, ApiError, handle, json, limitError, limits, readJson, requireUser } from "../_shared/common.ts";
-import { OPENAI_MODEL, structuredChat } from "../_shared/openai.ts";
+import { ApiError, handle, json, limits, readJson, requireUser, reserveIp } from "../_shared/common.ts";
+import { type ChatMessage, estimateUsd, OPENAI_MODEL, reserveCall, structuredChat } from "../_shared/openai.ts";
 
 const MAX_TRANSCRIPT_CHARS = 120_000; // the app chunks at 100k
 
@@ -97,13 +97,6 @@ Deno.serve(handle(async (req) => {
     throw new ApiError("bad_request", "output_language must be 'same' or a language name.");
   }
 
-  const lim = limits();
-  const { data: verdict, error } = await admin().rpc("ln_count_call", {
-    p_user: user.id, p_kind: "summary", p_limit: lim.summaryPerDay, p_global_cap: lim.globalUsdPerDay,
-  });
-  if (error) throw new ApiError("server_error", "limit check failed");
-  if (verdict !== "ok") throw limitError(String(verdict));
-
   const langLine = outLang === "same"
     ? "Write the notes in the main language of the transcript."
     : `Write the notes in ${outLang}. Keep names and quoted numbers as said.`;
@@ -115,14 +108,21 @@ Deno.serve(handle(async (req) => {
     ? `This is part ${part} of ${parts} of a long transcript. Summarize only this part.\n\n`
     : "";
 
+  const messages: ChatMessage[] = [
+    { role: "system", content: system },
+    { role: "user", content: `${prefs}${header}Transcript:\n${transcript}` },
+  ];
+  const MAX_OUT = 12_000;
+
+  // Limits: per IP, then per user + global cost reserved atomically before
+  // the OpenAI call (settled to the real cost inside structuredChat).
+  const lim = limits();
+  await reserveIp(req, "summary", 1, lim.ipSummaryPerDay);
+  const reservation = await reserveCall(
+    user.id, "summary", lim.summaryPerDay, lim.globalUsdPerDay, estimateUsd(messages, MAX_OUT),
+  );
   const { value } = await structuredChat<Record<string, unknown>>(
-    [
-      { role: "system", content: system },
-      { role: "user", content: `${prefs}${header}Transcript:\n${transcript}` },
-    ],
-    "notes",
-    SUMMARY_SCHEMA,
-    12_000,
+    messages, "notes", SUMMARY_SCHEMA, MAX_OUT, reservation,
   );
   // Do not log the transcript or the summary (privacy promise).
   return json(200, { summary: value, model: OPENAI_MODEL, style });

@@ -3,6 +3,9 @@
 
   python3 tools/e2e/make_audio.py /tmp/longnote-e2e   # once
   python3 tools/e2e/e2e.py /tmp/longnote-e2e
+  python3 tools/e2e/e2e.py /tmp/longnote-e2e --webhook-off   # after
+      `supabase secrets set SONIOX_WEBHOOKS=off`; meeting only, checks the
+      status-poll fallback finalised it (unset the secret afterwards)
 
 Signs in anonymously (like the app), uploads with TUS (meeting) and with the
 standard upload (Hinglish), runs transcribe-start / transcribe-status /
@@ -161,9 +164,19 @@ def run_transcription(token, uid, note_id, audio_file, language, upload, hints=N
 
 
 def main():
-    audio_dir = sys.argv[1] if len(sys.argv) > 1 else "/tmp/longnote-e2e"
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    audio_dir = args[0] if args else "/tmp/longnote-e2e"
     token, uid = sign_in()
     print("signed in anonymously")
+
+    if "--webhook-off" in sys.argv:
+        print("webhook off: meeting only, status-poll fallback")
+        _, _, out = run_transcription(token, uid, f"e2e-nohook-{int(time.time())}", f"{audio_dir}/meeting.m4a",
+                                      "en", tus_upload)
+        check(not out["webhook_arrived"], "no webhook arrived: the status poll finalised the job")
+        print(json.dumps(out, indent=1))
+        print("FAILED:" if fails else "ALL PASSED", *fails, sep="\n  ")
+        sys.exit(1 if fails else 0)
 
     # Negative checks.
     print("negative checks")

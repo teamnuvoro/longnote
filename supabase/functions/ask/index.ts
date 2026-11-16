@@ -3,8 +3,8 @@
 // app sent; anything the model made up is dropped. Nothing is stored.
 // Contract: docs/BACKEND-API.md.
 
-import { admin, ApiError, envNum, handle, json, limitError, limits, readJson, requireUser } from "../_shared/common.ts";
-import { type ChatMessage, OPENAI_MODEL, structuredChat } from "../_shared/openai.ts";
+import { ApiError, envNum, handle, json, limits, readJson, requireUser, reserveIp } from "../_shared/common.ts";
+import { type ChatMessage, estimateUsd, OPENAI_MODEL, reserveCall, structuredChat } from "../_shared/openai.ts";
 
 /** Transcript text sent to the model (about 60k tokens; ~4.5 h of speech). */
 const MAX_TRANSCRIPT_CHARS = envNum("ASK_MAX_TRANSCRIPT_CHARS", 240_000);
@@ -125,13 +125,6 @@ Deno.serve(handle(async (req) => {
     }
   }
 
-  const lim = limits();
-  const { data: verdict, error } = await admin().rpc("ln_count_call", {
-    p_user: user.id, p_kind: "ask", p_limit: lim.askPerDay, p_global_cap: lim.globalUsdPerDay,
-  });
-  if (error) throw new ApiError("server_error", "limit check failed");
-  if (verdict !== "ok") throw limitError(String(verdict));
-
   const recentUser = history.filter((m) => m.role === "user").map((m) => m.content).join(" ");
   const { text, truncated } = fit(turns, `${question} ${recentUser}`);
   const transcriptNote = truncated
@@ -144,8 +137,17 @@ Deno.serve(handle(async (req) => {
     ...history,
     { role: "user", content: question },
   ];
+  const MAX_OUT = 4_000;
+
+  // Limits: per IP, then per user + global cost reserved atomically before
+  // the OpenAI call (settled to the real cost inside structuredChat).
+  const lim = limits();
+  await reserveIp(req, "ask", 1, lim.ipAskPerDay);
+  const reservation = await reserveCall(
+    user.id, "ask", lim.askPerDay, lim.globalUsdPerDay, estimateUsd(messages, MAX_OUT),
+  );
   const { value } = await structuredChat<{ found: boolean; answer: string; sources: { speaker: string; start_ms: number }[] }>(
-    messages, "answer", ASK_SCHEMA, 4_000,
+    messages, "answer", ASK_SCHEMA, MAX_OUT, reservation,
   );
 
   // Keep only sources that are real turn start times from the input.

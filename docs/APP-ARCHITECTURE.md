@@ -135,6 +135,9 @@ bad_request / too_long ─> failed at once (no retries)
   resume) → `transcribe-start` → poll `transcribe-status` → save turns + speakers → `ack` → summary (style, own instructions,
   output language; 100k-char parts merged) → done → local notification if the app is in the background.
 - Over 5 h: 4-h pieces `<note>_p1..`, started together, stitched by start offset.
+- Lost server state: `transcribe-status` → `not_found` (job cleaned up, or the anonymous user changed because its refresh
+  token died) resets the piece and uploads + starts it again from the phone's m4a; pieces whose job belongs to an older
+  user id are reset before polling. An existing on-device transcript is replaced only when the first cloud turns are saved.
 - Waiting states do not use up tries (`JobDeferral`). App start and return to foreground poll at once (`pokeAll`);
   network back wakes waiters (`wakeNetworkWaiters`).
 - Local audio is never modified or deleted by processing. The m4a is a derived copy (kept; can be cleaned later).

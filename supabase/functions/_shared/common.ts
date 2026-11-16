@@ -81,6 +81,12 @@ export const limits = () => ({
   summaryPerDay: envNum("LIMIT_SUMMARY_PER_DAY", 40),
   // Soniox async hard limit is 300 min per file.
   maxAudioSeconds: envNum("LIMIT_MAX_AUDIO_SECONDS", 300 * 60),
+  // Per client IP per UTC day (anti-abuse: new anonymous users are free to
+  // make). Generous because Indian mobile carriers put many phones behind one
+  // IP (CGNAT). App Attest is the real fix at launch (DECISIONS.md).
+  ipAudioSecondsPerDay: envNum("LIMIT_IP_AUDIO_SECONDS_PER_DAY", 40 * 3600),
+  ipSummaryPerDay: envNum("LIMIT_IP_SUMMARY_PER_DAY", 300),
+  ipAskPerDay: envNum("LIMIT_IP_ASK_PER_DAY", 600),
 });
 
 /** Soniox async price, USD per audio hour (estimate for the global cap). */
@@ -139,6 +145,7 @@ export function limitError(scope: string): ApiError {
     user_day: "Daily limit reached. It resets at 00:00 UTC.",
     user_hour: "Too much audio in the last hour. Try again later.",
     global_day: "The service is busy today. Try again tomorrow.",
+    ip_day: "Too much use from this network today. It resets at 00:00 UTC.",
   };
   return new ApiError("limit_reached", msg[scope] ?? "Limit reached.", { scope });
 }
@@ -165,4 +172,48 @@ export function constantTimeEqual(a: string, b: string): boolean {
   let diff = 0;
   for (let i = 0; i < ea.length; i++) diff |= ea[i] ^ eb[i];
   return diff === 0;
+}
+
+/**
+ * Client IP as set by the edge in front of the functions. cf-connecting-ip
+ * and x-real-ip are overwritten by the proxy (a client cannot spoof them);
+ * x-forwarded-for is the last resort (its first hop is client-controlled).
+ */
+export function clientIp(req: Request): string | null {
+  const v = req.headers.get("cf-connecting-ip")?.trim() || req.headers.get("x-real-ip")?.trim() ||
+    req.headers.get("x-forwarded-for")?.split(",").map((s) => s.trim()).filter(Boolean).pop();
+  return v || null;
+}
+
+/** HMAC-SHA256(server secret, ip) as hex. The raw IP is never stored. */
+export async function ipHash(req: Request): Promise<string | null> {
+  const ip = clientIp(req);
+  if (!ip) return null;
+  const secret = Deno.env.get("IP_HASH_SECRET") || env("CLEANUP_SECRET");
+  const key = await crypto.subtle.importKey(
+    "raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"],
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(ip));
+  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * Charge `amount` against this IP's daily cap for `kind`; throws
+ * limit_reached (scope ip_day) when it would go over. No IP header -> no
+ * check (logged). Returns the hash so a caller can release on refusal.
+ */
+export async function reserveIp(
+  req: Request, kind: "audio" | "summary" | "ask", amount: number, limit: number,
+): Promise<string | null> {
+  const h = await ipHash(req);
+  if (!h) {
+    console.error("no_client_ip");
+    return null;
+  }
+  const { data, error } = await admin().rpc("ln_ip_reserve", {
+    p_ip_hash: h, p_kind: kind, p_amount: amount, p_limit: limit,
+  });
+  if (error) throw new ApiError("server_error", "limit check failed");
+  if (data !== true) throw limitError("ip_day");
+  return h;
 }
