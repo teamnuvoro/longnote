@@ -77,10 +77,11 @@ class LnSheet extends StatelessWidget {
         children: [
           const LnGrabber(),
           Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: header),
-          if (scrollable)
-            Flexible(child: SingleChildScrollView(child: body))
-          else
-            body,
+          // Loose: as tall as its content, but never taller than the space
+          // the sheet has (a list inside then scrolls instead of
+          // overflowing, e.g. E3 with many notes).
+          Flexible(
+              child: scrollable ? SingleChildScrollView(child: body) : body),
         ],
       ),
     );

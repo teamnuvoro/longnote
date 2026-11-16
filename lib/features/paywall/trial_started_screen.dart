@@ -28,6 +28,7 @@ class _TrialStartedScreenState extends State<TrialStartedScreen> {
     setState(() => _busy = true);
     var granted = false;
     try {
+      await s.kv.setBool(AppServices.kvNotificationsAsked, true);
       granted = await s.reminderScheduler.requestPermission();
       if (granted && e.trialEndsAt != null) {
         await s.reminders.onTrialStarted(planForId(e.planId), e.trialEndsAt!);

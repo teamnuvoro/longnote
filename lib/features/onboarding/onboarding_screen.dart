@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 
 import '../../app/routes.dart';
 import '../../app_services.dart';
-import '../../core/audio/pcm_source.dart';
 
 /// Three short screens: what it does, the privacy promise, mic permission.
 /// No sign-in, no account.
@@ -29,7 +28,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   Future<void> _askMic() async {
-    final src = RecordPcmSource();
+    // The recorder's own microphone source (a fake one in tests).
+    final src = context.read<AppServices>().recorder.sourceFactory();
     bool ok;
     try {
       ok = await src.hasPermission(request: true);
@@ -61,12 +61,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       ),
       const _Page(
         icon: Icons.lock_outline,
-        title: 'Your audio stays on your phone',
+        title: 'Where your audio goes',
         body:
-            'Audio is saved on this phone while you record. Transcripts are made on this phone. '
-            'Nothing is uploaded unless you turn on cloud summaries in Settings - and then only the text is sent, never the audio.\n\n'
-            'No account. No sign-in. No ads or trackers.\n\n'
-            'Please get consent before recording other people.',
+            'Audio is saved on this phone while you record, so a locked screen or a closed app never loses it.\n\n'
+            'To write the transcript, Longnote sends the audio to our speech-to-text provider. '
+            'It is deleted from their servers and ours as soon as the transcript is back; the original stays on your phone until you delete it.\n\n'
+            'Prefer nothing to leave your phone? Choose "On this phone" in Settings › Transcription. It is slower and has no speaker labels.\n\n'
+            'No account. No ads. Please ask people before you record them.',
       ),
       _Page(
         icon: Icons.mic_none,

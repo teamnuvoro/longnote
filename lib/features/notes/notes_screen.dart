@@ -2,10 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/routes.dart';
+import '../../app/nav.dart';
 import '../../app_services.dart';
 import '../../core/billing/billing_service.dart';
 import '../../core/models/recording.dart';
@@ -105,7 +105,7 @@ class _NotesScreenState extends State<NotesScreen> {
 
   Future<void> _onRecord() async {
     if (_s.recorder.isActive) {
-      context.pushNamed(R.record);
+      context.pushOnce(R.record);
       return;
     }
     if (_starting) return;
@@ -113,7 +113,7 @@ class _NotesScreenState extends State<NotesScreen> {
     try {
       if (!await _s.canStartRecording()) {
         if (!mounted) return;
-        final ok = await context.pushNamed<bool>(R.paywall);
+        final ok = await context.pushOnce<bool>(R.paywall);
         if (ok != true) return;
       }
       try {
@@ -127,16 +127,16 @@ class _NotesScreenState extends State<NotesScreen> {
                 : 'Could not start recording. Please try again.');
         return;
       }
-      if (mounted) context.pushNamed(R.record);
+      if (mounted) context.pushOnce(R.record);
     } finally {
       _starting = false;
     }
   }
 
   void _open(Recording n) =>
-      context.pushNamed(R.note, pathParameters: {'id': n.id});
+      context.pushOnce(R.note, pathParameters: {'id': n.id});
   void _actions(Recording n) =>
-      context.pushNamed(R.noteActions, pathParameters: {'id': n.id});
+      context.pushOnce(R.noteActions, pathParameters: {'id': n.id});
 
   @override
   Widget build(BuildContext context) {
@@ -162,7 +162,7 @@ class _NotesScreenState extends State<NotesScreen> {
           LnLargeTitle('Notes', trailing: _TrialChip(billing: _s.billing)),
           if (!empty) ...[
             LnSearchField(
-                readOnly: true, onTap: () => context.pushNamed(R.search)),
+                readOnly: true, onTap: () => context.pushOnce(R.search)),
             const SizedBox(height: 20),
           ],
           if (_showRecovered && recovered.isNotEmpty) ...[
@@ -344,7 +344,7 @@ class _TrialChip extends StatelessWidget {
           final label = days <= 0
               ? 'Trial · ends today'
               : 'Trial · $days ${days == 1 ? 'day' : 'days'} left';
-          return LnChip(label, onTap: () => context.pushNamed(R.plan));
+          return LnChip(label, onTap: () => context.pushOnce(R.plan));
         },
       );
 }

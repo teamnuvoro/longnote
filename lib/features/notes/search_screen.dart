@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/routes.dart';
+import '../../app/nav.dart';
 import '../../app_services.dart';
 import '../../core/notes/search.dart';
 import '../../ui/widgets.dart';
@@ -96,11 +97,11 @@ class _SearchScreenState extends State<SearchScreen> {
   void _openHit(_Hit h) {
     final id = h.hit.recordingId;
     if (h.hit.kind == SearchHitKind.transcript && h.hit.startMs != null) {
-      context.pushNamed(R.note,
+      context.pushOnce(R.note,
           pathParameters: {'id': id},
           queryParameters: {'tab': 'transcript', 'at': '${h.hit.startMs}'});
     } else {
-      context.pushNamed(R.note, pathParameters: {'id': id});
+      context.pushOnce(R.note, pathParameters: {'id': id});
     }
   }
 

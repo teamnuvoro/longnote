@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/routes.dart';
+import '../../app/nav.dart';
 import '../../app_services.dart';
 import '../../core/models/recording.dart';
 import '../../core/recording/recording_repository.dart';
 import '../../ui/widgets.dart';
 import '../common/external.dart';
 import '../common/widgets.dart';
+import '../common/note_ready_ask.dart';
 import 'import_controller.dart';
 import 'import_widgets.dart';
 
@@ -53,11 +54,27 @@ class _ImportBodyState extends State<ImportBody> {
     _repo = context.read<RecordingRepository>();
     _c.addListener(_changed);
     _repo.addListener(_loadRecent);
+    _s = context.read<AppServices>()..noteReadyAskDue.addListener(_maybeAsk);
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadRecent());
+  }
+
+  late final AppServices _s;
+
+  /// The first imported note was queued: ask about "note ready" alerts once
+  /// (only while this tab is what the user sees).
+  void _maybeAsk() {
+    if (!_s.noteReadyAskDue.value) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final route = ModalRoute.of(context);
+      if (mounted && (route?.isCurrent ?? false) && TickerMode.valuesOf(context).enabled) {
+        askNoteReadyOnce(context);
+      }
+    });
   }
 
   @override
   void dispose() {
+    _s.noteReadyAskDue.removeListener(_maybeAsk);
     _c.removeListener(_changed);
     _repo.removeListener(_loadRecent);
     super.dispose();
@@ -80,7 +97,7 @@ class _ImportBodyState extends State<ImportBody> {
     try {
       final m = await _c.pick(video: video);
       if (m == null || !mounted) return;
-      await context.pushNamed(R.importDetails);
+      await context.pushOnce(R.importDetails);
     } catch (_) {
       if (mounted) {
         showNote(context, 'Could not open the picker. Try again.');

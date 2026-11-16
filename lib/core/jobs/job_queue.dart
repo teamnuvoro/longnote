@@ -188,10 +188,11 @@ class ProcessingJobQueue {
     try {
       while (!_paused) {
         final now = _clock.now().millisecondsSinceEpoch;
+        // Ties (notes queued in the same millisecond) go in queue order.
         final due = await _db.query('jobs',
             where: 'state = ? AND next_attempt_at <= ?',
             whereArgs: [JobState.pending.name, now],
-            orderBy: 'next_attempt_at ASC',
+            orderBy: 'next_attempt_at ASC, rowid ASC',
             limit: 1);
         if (due.isEmpty) break;
         await _runOne(due.first);

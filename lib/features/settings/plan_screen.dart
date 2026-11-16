@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/routes.dart';
+import '../../app/nav.dart';
 import '../../app_services.dart';
 import '../../core/billing/billing_service.dart';
 import '../../core/config.dart';
@@ -67,7 +67,7 @@ class PlanScreen extends StatelessWidget {
               const SizedBox(height: 16),
               LnPrimaryButton(
                   label: 'See plans',
-                  onPressed: () => context.pushNamed<bool>(R.paywall)),
+                  onPressed: () => context.pushOnce<bool>(R.paywall)),
             ],
             const SizedBox(height: 10),
             Center(

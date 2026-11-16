@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../app/routes.dart';
+import '../../app/nav.dart';
 import '../../core/models/recording.dart';
 import '../../core/util/clock.dart';
 import '../../ui/widgets.dart';
@@ -140,7 +140,7 @@ class _RecentRow extends StatelessWidget {
       line = 'Saved · ${formatDuration(note.duration)}';
     }
     return LnPressable(
-      onPressed: () => context.pushNamed(R.note, pathParameters: {'id': note.id}),
+      onPressed: () => context.pushOnce(R.note, pathParameters: {'id': note.id}),
       pressedOpacity: 0.7,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),

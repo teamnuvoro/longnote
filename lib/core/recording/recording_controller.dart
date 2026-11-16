@@ -107,7 +107,7 @@ class RecordingController extends ChangeNotifier {
           repo.upsertSegment(AudioSegment(
               recordingId: rec.id, index: i, fileName: name));
           rec.segmentCount = i + 1;
-          repo.update(rec);
+          repo.updateCapture(rec);
         },
         onSegmentClosed: (i, name, bytes) {
           repo.upsertSegment(AudioSegment(
@@ -214,7 +214,7 @@ class RecordingController extends ChangeNotifier {
     if (rec == null) return;
     rec.status = s;
     state = cs;
-    await repo.update(rec);
+    await repo.updateCapture(rec);
     notifyListeners();
   }
 
@@ -312,7 +312,7 @@ class RecordingController extends ChangeNotifier {
       ..heartbeatAt = _clock.now()
       ..segmentCount = sink.currentIndex + 1
       ..note = reason == 'error' ? banner : null;
-    await repo.update(rec);
+    await repo.updateCapture(rec);
     await analytics.log(AnalyticsEvent.recordingCompleted,
         recordingId: rec.id,
         props: {'duration_ms': rec.durationMs, 'reason': reason});

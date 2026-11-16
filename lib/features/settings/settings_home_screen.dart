@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/routes.dart';
+import '../../app/nav.dart';
 import '../../app_services.dart';
 import '../../core/billing/billing_service.dart';
 import '../../core/models/recording.dart';
@@ -62,7 +62,7 @@ class _SettingsHomeScreenState extends State<SettingsHomeScreen> {
   }
 
   Future<void> _open(String route) async {
-    await context.pushNamed(route);
+    await context.pushOnce(route);
     await _reload();
   }
 
@@ -98,7 +98,7 @@ class _SettingsHomeScreenState extends State<SettingsHomeScreen> {
   void _versionTap() {
     if (++_taps >= 7) {
       _taps = 0;
-      context.pushNamed(R.benchmark);
+      context.pushOnce(R.benchmark);
     }
   }
 

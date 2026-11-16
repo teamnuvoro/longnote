@@ -36,6 +36,7 @@ import 'core/recording/recovery_service.dart';
 import 'core/settings/app_settings.dart';
 import 'core/summary/summary_service.dart';
 import 'core/util/backup_exclusion.dart';
+import 'core/util/clock.dart';
 import 'core/transcription/fake_transcriber.dart';
 import 'core/transcription/transcriber.dart';
 import 'core/transcription/whisper_transcriber.dart';
@@ -110,6 +111,34 @@ class AppServices {
   static const kvWhisper = 'whisper_model';
   static const kvFakeTranscriber = 'dev_fake_transcriber';
 
+  /// Set once the notification permission was asked (A2 trial reminder or
+  /// the "note ready" ask), so it is never asked twice.
+  static const kvNotificationsAsked = 'notifications_asked';
+
+  /// True when the user's first note has just started processing and the
+  /// notification permission was never asked: the note screen (or Import)
+  /// asks once, with a plain sentence ([answerNoteReadyAsk]).
+  final ValueNotifier<bool> noteReadyAskDue = ValueNotifier(false);
+
+  /// A note the user made (recording stopped / file imported) was queued.
+  Future<void> noteQueuedByUser() async {
+    if (await kv.getBool(kvNotificationsAsked)) return;
+    noteReadyAskDue.value = true;
+  }
+
+  /// The answer to the "note ready" ask. [allow] = show iOS's permission
+  /// prompt. Returns whether notifications are allowed.
+  Future<bool> answerNoteReadyAsk({required bool allow}) async {
+    noteReadyAskDue.value = false;
+    await kv.setBool(kvNotificationsAsked, true);
+    if (!allow) return false;
+    try {
+      return await reminderScheduler.requestPermission();
+    } catch (_) {
+      return false;
+    }
+  }
+
   WhisperTranscriber get whisper {
     final c = whisperChoice.value;
     if (_whisper == null || _whisper!.choice != c) {
@@ -142,6 +171,8 @@ class AppServices {
     JobProcessor? processor,
     SupabaseAuth? auth,
     LongnoteApi? api,
+    CloudPipeline Function(AppServices s, NoteReadyNotifier notifier)? cloud,
+    Clock clock = const SystemClock(),
   }) {
     final kv = KvStore(db.db);
     final settings = AppSettings(kv);
@@ -163,10 +194,13 @@ class AppServices {
       auth: auth,
       api: api,
     );
+    s.cloud = cloud?.call(
+        s, _LocalNoteReadyNotifier(sched, () => s.inForeground));
     s.processor = NoteProcessor(
       repo: repo,
       settings: settings,
       pieces: CloudPieceStore(db.db),
+      cloud: s.cloud,
       onDevice: ProcessingPipeline(
           repo: repo, transcriber: s.currentTranscriber, summaries: s.summaries),
     );
@@ -175,6 +209,7 @@ class AppServices {
       repo: repo,
       analytics: analytics,
       processor: processor ?? s.processor.process,
+      clock: clock,
       autoSchedule: false,
     );
     if (recorder != null) s.recorder = recorder(s);
@@ -272,25 +307,36 @@ class AppServices {
     }
     s.recoveredAtLaunch = recovered;
 
-    // 2) Resume processing that was cut off; check server jobs at once.
-    await s.jobs.resetInterrupted();
-    await s.jobs.pokeAll();
-    unawaited(s.jobs.runDue());
-
-    // 3) Network back -> resume uploads; app back on screen -> check jobs.
-    s._netSub = network.changes.listen((online) {
-      if (online) s.jobs.wakeNetworkWaiters();
-    });
-    s._lifecycleListener = AppLifecycleListener(onStateChange: (st) {
-      s._lifecycle = st;
-      if (st == AppLifecycleState.resumed) s.jobs.pokeAll();
-    });
+    // 2) + 3) Resume processing, wire network/foreground wake-ups.
+    await s.start();
 
     // 4) iCloud backup choice for the recordings folder.
     if (await settings.excludeFromBackup()) {
       unawaited(const BackupExclusion().setExcluded(recRoot.path, true));
     }
     return s;
+  }
+
+  /// The queue run started by [start] (tests wait for it).
+  @visibleForTesting
+  Future<int>? startupRun;
+
+  /// Resume processing that was cut off (app killed mid-job), check server
+  /// jobs at once, and wire the wake-ups: network back -> resume uploads;
+  /// app back on screen -> check jobs. Called once per launch ([boot]; tests
+  /// call it on services rebuilt over the same database = an app restart).
+  Future<void> start() async {
+    await jobs.resetInterrupted();
+    await jobs.pokeAll();
+    startupRun = jobs.runDue();
+    unawaited(startupRun);
+    _netSub ??= network.changes.listen((online) {
+      if (online) jobs.wakeNetworkWaiters();
+    });
+    _lifecycleListener ??= AppLifecycleListener(onStateChange: (st) {
+      _lifecycle = st;
+      if (st == AppLifecycleState.resumed) jobs.pokeAll();
+    });
   }
 
   /// Settings > "Keep recordings out of iCloud backup".
@@ -330,6 +376,7 @@ class AppServices {
     if (r.id == _discarding) return;
     await _afterRecording(r);
     jobs.resume();
+    if (r.durationMs > 0) await noteQueuedByUser();
   }
 
   Future<void> _afterRecording(Recording r) async {

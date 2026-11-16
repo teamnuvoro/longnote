@@ -234,6 +234,8 @@ GoRouter buildRouter({required String initialLocation}) => GoRouter(
               ),
             ]),
             // ---- Settings ----------------------------------------------------
+            // G2-G4 and the other settings pages are pushed above the shell
+            // (no tab bar, as in the Figma frames).
             StatefulShellBranch(routes: [
               GoRoute(
                 path: '/settings',
@@ -243,11 +245,13 @@ GoRouter buildRouter({required String initialLocation}) => GoRouter(
                   GoRoute(
                     path: 'audio-language',
                     name: R.audioLanguage,
+                    parentNavigatorKey: rootNavigatorKey,
                     pageBuilder: (c, s) => _push(s, const AudioLanguageScreen()),
                   ),
                   GoRoute(
                     path: 'summary-language',
                     name: R.summaryLanguage,
+                    parentNavigatorKey: rootNavigatorKey,
                     pageBuilder: (c, s) =>
                         _push(s, const AudioLanguageScreen(summary: true)),
                   ),
@@ -260,31 +264,37 @@ GoRouter buildRouter({required String initialLocation}) => GoRouter(
                   GoRoute(
                     path: 'transcription',
                     name: R.transcription,
+                    parentNavigatorKey: rootNavigatorKey,
                     pageBuilder: (c, s) => _push(s, const TranscriptionScreen()),
                   ),
                   GoRoute(
                     path: 'plan',
                     name: R.plan,
+                    parentNavigatorKey: rootNavigatorKey,
                     pageBuilder: (c, s) => _push(s, const PlanScreen()),
                   ),
                   GoRoute(
                     path: 'privacy',
                     name: R.privacy,
+                    parentNavigatorKey: rootNavigatorKey,
                     pageBuilder: (c, s) => _push(s, const PrivacyScreen()),
                   ),
                   GoRoute(
                     path: 'advanced',
                     name: R.advanced,
+                    parentNavigatorKey: rootNavigatorKey,
                     pageBuilder: (c, s) => _push(s, const SettingsScreen()),
                     routes: [
                       GoRoute(
                         path: 'benchmark',
                         name: R.benchmark,
+                        parentNavigatorKey: rootNavigatorKey,
                         pageBuilder: (c, s) => _push(s, const BenchmarkScreen()),
                         routes: [
                           GoRoute(
                             path: 'gallery',
                             name: R.gallery,
+                            parentNavigatorKey: rootNavigatorKey,
                             pageBuilder: (c, s) =>
                                 _push(s, const WidgetGalleryScreen()),
                           ),

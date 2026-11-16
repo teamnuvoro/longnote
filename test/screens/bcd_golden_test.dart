@@ -3,6 +3,8 @@
 // test/screens/bcd_golden_test.dart
 library;
 
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:longnote/app/routes.dart';
@@ -13,6 +15,10 @@ import 'package:longnote/features/recording/recording_screen.dart';
 import 'package:longnote/main.dart';
 
 import 'harness.dart';
+
+// Goldens are made on Linux; macOS (CI) rasterises text differently, so they
+// are skipped there.
+final _skip = !Platform.isLinux;
 
 void main() {
   setUpAll(loadAppFonts);
@@ -62,19 +68,19 @@ void main() {
   }
 
   // ---- B ---------------------------------------------------------------------
-  testWidgets('B1 notes home', (tester) async {
+  testWidgets('B1 notes home', skip: _skip, (tester) async {
     await tester.runAsync(() => make());
     await open(tester);
     await shot(tester, 'b1_notes');
   });
 
-  testWidgets('B2 empty', (tester) async {
+  testWidgets('B2 empty', skip: _skip, (tester) async {
     await tester.runAsync(() => make(seed: false));
     await open(tester);
     await shot(tester, 'b2_empty');
   });
 
-  testWidgets('B3 search', (tester) async {
+  testWidgets('B3 search', skip: _skip, (tester) async {
     await tester.runAsync(() => make());
     await open(tester);
     await push(tester, R.search);
@@ -84,7 +90,7 @@ void main() {
     await shot(tester, 'b3_search');
   });
 
-  testWidgets('B4 note actions', (tester) async {
+  testWidgets('B4 note actions', skip: _skip, (tester) async {
     await tester.runAsync(() => make());
     await open(tester);
     await push(tester, R.noteActions, params: {'id': q3});
@@ -118,19 +124,19 @@ void main() {
     await push(tester, R.record);
   }
 
-  testWidgets('C1 recording', (tester) async {
+  testWidgets('C1 recording', skip: _skip, (tester) async {
     await recording(tester,
         state: CaptureState.recording, elapsed: const Duration(minutes: 42, seconds: 17));
     await shot(tester, 'c1_recording');
   });
 
-  testWidgets('C2 paused', (tester) async {
+  testWidgets('C2 paused', skip: _skip, (tester) async {
     await recording(tester,
         state: CaptureState.paused, elapsed: const Duration(minutes: 31, seconds: 5));
     await shot(tester, 'c2_paused');
   });
 
-  testWidgets('C3 phone call', (tester) async {
+  testWidgets('C3 phone call', skip: _skip, (tester) async {
     await recording(tester,
         state: CaptureState.paused,
         elapsed: const Duration(minutes: 31, seconds: 5),
@@ -138,7 +144,7 @@ void main() {
     await shot(tester, 'c3_call');
   });
 
-  testWidgets('C4 discard', (tester) async {
+  testWidgets('C4 discard', skip: _skip, (tester) async {
     await recording(tester,
         state: CaptureState.recording, elapsed: const Duration(minutes: 42, seconds: 17));
     await push(tester, R.discard);
@@ -146,14 +152,14 @@ void main() {
   });
 
   // ---- D ---------------------------------------------------------------------
-  testWidgets('D1 processing', (tester) async {
+  testWidgets('D1 processing', skip: _skip, (tester) async {
     await tester.runAsync(() => make());
     await open(tester);
     await push(tester, R.note, params: {'id': weekly});
     await shot(tester, 'd1_processing');
   });
 
-  testWidgets('D2 summary', (tester) async {
+  testWidgets('D2 summary', skip: _skip, (tester) async {
     await tester.runAsync(() => make());
     await open(tester);
     await push(tester, R.note, params: {'id': q3});
@@ -168,18 +174,18 @@ void main() {
         query: {'tab': 'transcript', 'at': '${ms(0, 14, 19)}'});
   }
 
-  testWidgets('D3 transcript', (tester) async {
+  testWidgets('D3 transcript', skip: _skip, (tester) async {
     await transcript(tester);
     await shot(tester, 'd3_transcript');
   });
 
-  testWidgets('D4 speakers', (tester) async {
+  testWidgets('D4 speakers', skip: _skip, (tester) async {
     await transcript(tester);
     await push(tester, R.speakers, params: {'id': q3});
     await shot(tester, 'd4_speakers');
   });
 
-  testWidgets('D5 share', (tester) async {
+  testWidgets('D5 share', skip: _skip, (tester) async {
     await tester.runAsync(() => make());
     await open(tester);
     await push(tester, R.note, params: {'id': q3});
@@ -187,7 +193,7 @@ void main() {
     await shot(tester, 'd5_share');
   });
 
-  testWidgets('D6 summary style', (tester) async {
+  testWidgets('D6 summary style', skip: _skip, (tester) async {
     await tester.runAsync(() => make());
     await open(tester);
     await push(tester, R.note, params: {'id': q3});
@@ -195,13 +201,13 @@ void main() {
     await shot(tester, 'd6_style');
   });
 
-  testWidgets('D7 player', (tester) async {
+  testWidgets('D7 player', skip: _skip, (tester) async {
     await transcript(tester);
     await push(tester, R.player, params: {'id': q3});
     await shot(tester, 'd7_player');
   });
 
-  testWidgets('D8 failed', (tester) async {
+  testWidgets('D8 failed', skip: _skip, (tester) async {
     await tester.runAsync(() => make());
     await open(tester);
     await push(tester, R.note, params: {'id': lecture});

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/routes.dart';
+import '../../app/nav.dart';
 import '../../app_services.dart';
 import '../../core/notes/languages.dart';
 import '../../core/recording/recording_controller.dart';
@@ -86,7 +87,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
   }
 
   Future<void> _discard() async {
-    final ok = await context.pushNamed<bool>(R.discard);
+    final ok = await context.pushOnce<bool>(R.discard);
     if (ok != true || !mounted) return;
     final router = GoRouter.of(context);
     await _s.discardRecording();

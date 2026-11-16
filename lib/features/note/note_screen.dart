@@ -5,11 +5,13 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/routes.dart';
+import '../../app/nav.dart';
 import '../../app_services.dart';
 import '../../core/analytics/analytics.dart';
 import '../../core/models/recording.dart';
 import '../../core/recording/recording_repository.dart';
 import '../../ui/widgets.dart';
+import '../common/note_ready_ask.dart';
 import 'kit.dart';
 import 'note_model.dart';
 import 'note_playback.dart';
@@ -63,6 +65,7 @@ class _NoteScreenState extends State<NoteScreen> {
 
   @override
   void dispose() {
+    _askTimer?.cancel();
     _model
       ..removeListener(_onData)
       ..dispose();
@@ -109,7 +112,18 @@ class _NoteScreenState extends State<NoteScreen> {
     }
     _logView();
     setState(() {});
+    if (_askTimer == null &&
+        d.note.processingStatus.inProgress &&
+        _s.noteReadyAskDue.value) {
+      // After the push animation, so the sheet is not pushed under it.
+      _askTimer = Timer(const Duration(milliseconds: 450), () {
+        final route = ModalRoute.of(context);
+        if (mounted && (route?.isCurrent ?? false)) askNoteReadyOnce(context);
+      });
+    }
   }
+
+  Timer? _askTimer;
 
   void _logView() {
     final d = _model.data;
@@ -168,14 +182,14 @@ class _NoteScreenState extends State<NoteScreen> {
 
   // ---- actions -------------------------------------------------------------------
   void _openActions() =>
-      context.pushNamed(R.noteActions, pathParameters: {'id': widget.id});
-  void _openShare() => context.pushNamed(R.share, pathParameters: {'id': widget.id});
-  void _openAsk() => context.pushNamed(R.askChat, pathParameters: {'id': widget.id});
+      context.pushOnce(R.noteActions, pathParameters: {'id': widget.id});
+  void _openShare() => context.pushOnce(R.share, pathParameters: {'id': widget.id});
+  void _openAsk() => context.pushOnce(R.askChat, pathParameters: {'id': widget.id});
   void _openStyle() =>
-      context.pushNamed(R.summaryStyle, pathParameters: {'id': widget.id});
+      context.pushOnce(R.summaryStyle, pathParameters: {'id': widget.id});
   void _openSpeakers() =>
-      context.pushNamed(R.speakers, pathParameters: {'id': widget.id});
-  void _openPlayer() => context.pushNamed(R.player, pathParameters: {'id': widget.id});
+      context.pushOnce(R.speakers, pathParameters: {'id': widget.id});
+  void _openPlayer() => context.pushOnce(R.player, pathParameters: {'id': widget.id});
 
   Future<void> _sendReport(NoteData d) async {
     final n = d.note;
@@ -246,8 +260,8 @@ class _NoteScreenState extends State<NoteScreen> {
               d,
               cloud: n.transcriptionMode != TranscriptionMode.onDevice &&
                   (_cloud == true || n.transcriptSource == 'cloud'),
-              onWhereAudioGoes: () => context.pushNamed(R.transcription),
-              onBackToRecording: () => context.pushNamed(R.record),
+              onWhereAudioGoes: () => context.pushOnce(R.transcription),
+              onBackToRecording: () => context.pushOnce(R.record),
             ),
           if (ready) ...[
             LnSegmentedControl<NoteTab>(

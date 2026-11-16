@@ -1,10 +1,10 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/routes.dart';
+import '../../app/nav.dart';
 import '../../app_services.dart';
 import '../../core/cloud/api_error.dart';
 import '../../core/models/recording.dart';
@@ -138,7 +138,7 @@ class _AskViewState extends State<AskView> {
   }
 
   Future<void> _choose() async {
-    final id = await context.pushNamed<String>(R.askChoose);
+    final id = await context.pushOnce<String>(R.askChoose);
     if (id == null || !mounted) return;
     await _select(await _s.repo.get(id));
   }
@@ -200,7 +200,7 @@ class _AskViewState extends State<AskView> {
   void _openSource(AskSource src) {
     final n = _note;
     if (n == null) return;
-    context.pushNamed(R.note,
+    context.pushOnce(R.note,
         pathParameters: {'id': n.id},
         queryParameters: {'tab': 'transcript', 'at': '${src.startMs}'});
   }

@@ -145,6 +145,9 @@ void main() {
     expect(c.state, CaptureState.idle);
     expect(find.byType(NoteScreen), findsOneWidget);
     expect(find.text('Saved on your phone'), findsOneWidget);
+    // First note processing: the one-time "note ready" ask.
+    expect(find.text('Tell you when it’s ready?'), findsOneWidget);
+    await tap(tester, find.text('Not now'));
 
     await tap(tester, find.text('Notes'));
     final all = await tester.runAsync(() => h.repo.all());

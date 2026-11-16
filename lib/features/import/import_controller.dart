@@ -194,6 +194,7 @@ class ImportController extends ChangeNotifier {
       jobs.remove(job);
       notifyListeners();
       await s.jobs.enqueue(id);
+      await s.noteQueuedByUser();
       return id;
     } on FileSystemException catch (e) {
       await _cleanup(dir);
