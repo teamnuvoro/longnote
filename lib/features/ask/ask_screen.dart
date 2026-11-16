@@ -1,18 +1,15 @@
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 
-import '../../app/placeholder.dart';
-import '../../app/routes.dart';
+import '../../ui/widgets.dart';
+import 'ask_view.dart';
 
-/// PLACEHOLDER for the screens session. Figma: see routeFrames[R.ask].
+/// E1/E2 Ask tab (Figma 9:364, 9:465). The note picker (E3) is a sheet route.
 class AskScreen extends StatelessWidget {
   const AskScreen({super.key});
 
   @override
-  Widget build(BuildContext context) => PlaceholderScreen(
-    title: 'Ask',
-    route: R.ask,
-    tabRoot: true,
-    purpose:
-        'Ask questions about a note: note picker (E3), starter questions, then the chat (E2). AskService in lib/core/notes/ask_service.dart.',
-  );
+  Widget build(BuildContext context) => const Scaffold(
+        backgroundColor: LnColors.paper,
+        body: AskView(),
+      );
 }

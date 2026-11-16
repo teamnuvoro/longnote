@@ -60,6 +60,50 @@ class AppServices {
     this.api,
   });
 
+  /// Tests: a container built from parts, without plugins or boot work
+  /// (no recovery, no network listener). `recorder`, `processor` and `cloud`
+  /// are not set; the job queue runs [processor] only when asked.
+  @visibleForTesting
+  static AppServices forTesting({
+    required AppDatabase db,
+    required RecordingRepository repo,
+    required Analytics analytics,
+    required BillingService billing,
+    required LocalNotificationScheduler scheduler,
+    required String recordingsRoot,
+    NetworkMonitor? network,
+    SupabaseAuth? auth,
+    LongnoteApi? api,
+    JobProcessor? processor,
+  }) {
+    final kv = KvStore(db.db);
+    final s = AppServices._(
+      db: db,
+      kv: kv,
+      repo: repo,
+      analytics: analytics,
+      billing: billing,
+      gate: PaywallGate(kv),
+      reminders: TrialReminderService(scheduler),
+      reminderScheduler: scheduler,
+      summaries: SummaryService.standard(kv, api: api),
+      share: ShareService(repo: repo, analytics: analytics),
+      settings: AppSettings(kv),
+      network: network ?? ManualNetworkMonitor(),
+      recordingsRoot: recordingsRoot,
+      auth: auth,
+      api: api,
+    );
+    s.jobs = ProcessingJobQueue(
+      db: db.db,
+      repo: repo,
+      analytics: analytics,
+      processor: processor ?? (_, _) async {},
+      autoSchedule: false,
+    );
+    return s;
+  }
+
   final AppDatabase db;
   final KvStore kv;
   final RecordingRepository repo;

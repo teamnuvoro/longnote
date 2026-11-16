@@ -7,6 +7,7 @@ import '../app_services.dart';
 import '../features/ask/ask_chat_screen.dart';
 import '../features/ask/ask_screen.dart';
 import '../features/ask/choose_note_sheet.dart';
+import '../features/ask/last_note.dart';
 import '../features/benchmark/benchmark_screen.dart';
 import '../features/detail/detail_screen.dart';
 import '../features/dev/widget_gallery_screen.dart';
@@ -138,8 +139,10 @@ GoRouter buildRouter({required String initialLocation}) => GoRouter(
                     parentNavigatorKey: rootNavigatorKey,
                     // D1/D2/D3/D8 = states of one screen. Still the v0.1
                     // DetailScreen until the screens session builds NoteScreen.
-                    pageBuilder: (c, s) =>
-                        _push(s, DetailScreen(recordingId: _id(s))),
+                    pageBuilder: (c, s) {
+                      rememberOpenedNote(c, _id(s)); // Ask preselects it
+                      return _push(s, DetailScreen(recordingId: _id(s)));
+                    },
                     routes: [
                       GoRoute(
                         path: 'actions',

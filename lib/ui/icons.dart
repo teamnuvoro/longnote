@@ -39,7 +39,20 @@ enum LnIcons {
   check('check'),
   bookmark('bookmark'),
   lock('lock'),
-  x('x');
+  x('x'),
+  // Added by the A/E/F/G screens (paywall, Ask, Import, Settings).
+  infinity('infinity'),
+  list('list'),
+  unlock('unlock'),
+  bell('bell'),
+  card('card'),
+  document('file'),
+  arrowUp('arrow_up'),
+  folder('folder'),
+  image('image'),
+  mic('mic'),
+  backup('backup'),
+  refresh('refresh');
 
   const LnIcons(this.file);
   final String file;

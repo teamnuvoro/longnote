@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 
 import '../jobs/job_queue.dart';
 import '../models/recording.dart';
+import '../notes/languages.dart';
 import '../notes/speakers.dart';
 import '../recording/recording_repository.dart';
 import '../settings/app_settings.dart';
@@ -327,14 +328,16 @@ class CloudPipeline {
   Future<void> _start(Recording note, CloudPiece piece) async {
     await repo.setProcessing(note.id, ProcessingStatus.queuedOnServer,
         progress: 'Waiting for the server', progressValue: null);
-    final language = note.language ?? await settings.audioLanguage();
+    final language =
+        languageRequest(note.language ?? await settings.audioLanguage());
     final ms = piece.audioMs ?? piece.durationMs;
     try {
       final r = await api.transcribeStart(
         clientNoteId: piece.clientId,
         audioPath: '${piece.userId}/${piece.clientId}.m4a',
         audioSeconds: (ms <= 0 ? 100 : ms) / 1000.0,
-        language: language,
+        language: language.language,
+        languageHints: language.hints,
       );
       piece
         ..serverJobId = r.jobId
