@@ -202,6 +202,65 @@ void main() {
     expect(segs.single.dataBytes, 32000 * 3,
         reason: 'the late heartbeat overwrote the final segment size');
   });
+
+  test('a phone call that lands while Stop runs does not reopen the recorder '
+      '(Fable F1)', () async {
+    final src = FakePcmSource();
+    final repo = _SlowHeartbeatRepo(env);
+    final c = RecordingController(
+      repo: repo,
+      analytics: env.analytics,
+      sourceFactory: () => src,
+      clock: env.clock,
+      useTimers: false,
+    );
+    final rec = await c.start();
+    src.audio.add(pcm(32000 * 2));
+    await pump();
+    repo.holdGap = Completer<void>();
+    src.ints.add(InterruptionPhase.began); // parks in addGap
+    await pump();
+    final stopping = c.stop();
+    await pump();
+    repo.holdGap!.complete();
+    final done = await stopping;
+    await pump();
+    expect(done!.status, RecordingStatus.completed);
+    expect(c.state, CaptureState.idle);
+    expect(c.isActive, isFalse);
+    final row = (await env.repo.get(rec.id))!;
+    expect(row.status, RecordingStatus.completed);
+    expect((await env.repo.segments(rec.id)).single.dataBytes, 64000);
+    expect((await env.repo.gaps(rec.id)).every((g) => g.endedAt != null), isTrue,
+        reason: 'gap left open');
+    expect(await c.stop(), isNull, reason: 'a second Stop must do nothing');
+  });
+
+  test('Pause then Stop does not stop the next recording from resuming '
+      'after a call (Fable F2)', () async {
+    final sources = <FakePcmSource>[];
+    final c = RecordingController(
+      repo: env.repo,
+      analytics: env.analytics,
+      sourceFactory: () => (sources..add(FakePcmSource())).last,
+      clock: env.clock,
+      useTimers: false,
+    );
+    await c.start();
+    sources.last.audio.add(pcm(32000));
+    await pump();
+    await c.pause();
+    await c.stop();
+    await c.start();
+    final src = sources.last;
+    src.audio.add(pcm(32000));
+    await pump();
+    src.ints.add(InterruptionPhase.began);
+    await waitFor(() => c.state == CaptureState.paused);
+    src.ints.add(InterruptionPhase.endedResumable);
+    await waitFor(() => c.state == CaptureState.recording);
+    await c.stop();
+  });
 }
 
 /// updateCapture fails like SQLITE_FULL.
@@ -220,6 +279,14 @@ class _FailingRepo extends RecordingRepository {
 class _SlowHeartbeatRepo extends RecordingRepository {
   _SlowHeartbeatRepo(TestEnv env) : super(env.db.db, env.repo.storage);
   Completer<void>? hold;
+  Completer<void>? holdGap;
+  @override
+  Future<int> addGap(RecordingGap g) async {
+    final h = holdGap;
+    if (h != null) await h.future;
+    return super.addGap(g);
+  }
+
   @override
   Future<void> heartbeat(String id, DateTime at, int durationMs) async {
     final h = hold;

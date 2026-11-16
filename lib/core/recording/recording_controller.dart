@@ -99,6 +99,11 @@ class RecordingController extends ChangeNotifier {
     if (state != CaptureState.idle) throw StateError('already recording');
     state = CaptureState.starting;
     banner = null;
+    // Nothing from the last recording carries over (a Pause before Stop left
+    // _userPaused set, which made the next call never resume by itself).
+    _userPaused = false;
+    _openGapId = null;
+    _gapStartedAt = null;
     notifyListeners();
     try {
       final source = sourceFactory();
@@ -176,6 +181,23 @@ class RecordingController extends ChangeNotifier {
       notifyListeners();
       return rec;
     } catch (_) {
+      // The source failed to start: free the file, the mic and the
+      // listeners. The row stays "recording" and is repaired at next launch.
+      _flushTimer?.cancel();
+      _heartbeatTimer?.cancel();
+      await _intSub?.cancel();
+      await _levelSub?.cancel();
+      _intSub = null;
+      _levelSub = null;
+      try {
+        _sink?.close();
+      } catch (_) {}
+      try {
+        _source?.dispose();
+      } catch (_) {}
+      _sink = null;
+      _source = null;
+      current = null;
       state = CaptureState.idle;
       notifyListeners();
       rethrow;
@@ -255,7 +277,9 @@ class RecordingController extends ChangeNotifier {
 
   Future<void> _setStatus(RecordingStatus s, CaptureState cs) async {
     final rec = current;
-    if (rec == null) return;
+    // Stop (or a failed Start) owns the ending: a pause/resume/interruption
+    // that resumes after an await must not reopen the recorder.
+    if (rec == null || !isActive) return;
     rec.status = s;
     state = cs;
     await repo.updateCapture(rec);
@@ -271,7 +295,7 @@ class RecordingController extends ChangeNotifier {
         sink.flushNow();
         if (_openGapId != null) return;
         _gapStartedAt = _clock.now();
-        _openGapId = await repo.addGap(
+        final gapId = await repo.addGap(
           RecordingGap(
             recordingId: rec.id,
             atMs: sink.totalDuration.inMilliseconds,
@@ -279,6 +303,14 @@ class RecordingController extends ChangeNotifier {
             reason: 'interruption',
           ),
         );
+        if (!isActive || !identical(_sink, sink)) {
+          // Stop ran while the gap was being saved: close it right away.
+          await repo.endGap(gapId, _clock.now());
+          // Clear our start time unless a new recording already owns it.
+          if (_sink == null || identical(_sink, sink)) _gapStartedAt = null;
+          return;
+        }
+        _openGapId = gapId;
         banner =
             'Paused by a phone call or another app. Audio up to now is saved.';
         await analytics.log(
@@ -335,6 +367,10 @@ class RecordingController extends ChangeNotifier {
     _flushTimer?.cancel();
     _heartbeatTimer?.cancel();
     final rec = current!;
+    // No interruption events once Stop has begun. cancel() takes effect at
+    // once; its future (source cleanup) is not waited for.
+    unawaited(_intSub?.cancel());
+    _intSub = null;
     try {
       await _source?.stop();
     } catch (_) {}
@@ -342,7 +378,6 @@ class RecordingController extends ChangeNotifier {
     try {
       await _audioSub?.cancel();
       await _levelSub?.cancel();
-      await _intSub?.cancel();
       final sink = _sink!;
       final lastBytes = sink.currentSegmentBytes;
       try {
