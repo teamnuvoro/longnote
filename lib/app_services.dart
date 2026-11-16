@@ -134,12 +134,14 @@ class AppServices {
     required RecordingRepository repo,
     required Analytics analytics,
     required BillingService billing,
-    required ShareService share,
-    required NetworkMonitor network,
-    required RecordingController Function(AppServices s) recorder,
     required String recordingsRoot,
+    ShareService? share,
+    NetworkMonitor? network,
+    RecordingController Function(AppServices s)? recorder,
     LocalNotificationScheduler? scheduler,
     JobProcessor? processor,
+    SupabaseAuth? auth,
+    LongnoteApi? api,
   }) {
     final kv = KvStore(db.db);
     final settings = AppSettings(kv);
@@ -153,11 +155,13 @@ class AppServices {
       gate: PaywallGate(kv),
       reminders: TrialReminderService(sched),
       reminderScheduler: sched,
-      summaries: SummaryService.standard(kv),
-      share: share,
+      summaries: SummaryService.standard(kv, api: api),
+      share: share ?? ShareService(repo: repo, analytics: analytics),
       settings: settings,
-      network: network,
+      network: network ?? ManualNetworkMonitor(),
       recordingsRoot: recordingsRoot,
+      auth: auth,
+      api: api,
     );
     s.processor = NoteProcessor(
       repo: repo,
@@ -173,7 +177,7 @@ class AppServices {
       processor: processor ?? s.processor.process,
       autoSchedule: false,
     );
-    s.recorder = recorder(s);
+    if (recorder != null) s.recorder = recorder(s);
     return s;
   }
 

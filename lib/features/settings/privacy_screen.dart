@@ -1,43 +1,46 @@
 import 'package:flutter/material.dart';
 
-/// Plain-language privacy explainer. Keep this TRUE: update it whenever data
-/// handling changes.
+import '../../ui/widgets.dart';
+import '../common/widgets.dart';
+
+/// "What happens to your audio": plain-language privacy explainer. Keep this
+/// TRUE: update it whenever data handling changes (BACKEND-API 6 is the
+/// source for the deletion rules).
 class PrivacyScreen extends StatelessWidget {
   const PrivacyScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context).textTheme;
     Widget h(String s) => Padding(
-          padding: const EdgeInsets.only(top: 20, bottom: 6),
-          child: Text(s, style: t.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+          padding: const EdgeInsets.only(top: 22, bottom: 6),
+          child: Text(s, style: LnText.rowTitle),
         );
     Widget p(String s) => Padding(
           padding: const EdgeInsets.only(bottom: 8),
-          child: Text(s, style: t.bodyLarge?.copyWith(height: 1.45)),
+          child: Text(s, style: LnText.body.copyWith(color: LnColors.ink2)),
         );
-    return Scaffold(
-      appBar: AppBar(title: const Text('Privacy')),
+    return LnScaffold(
+      backgroundColor: LnColors.paper,
+      appBar: const LnNavBar(title: 'Your audio', backLabel: 'Settings'),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 40),
         children: [
-          h('What stays on your phone'),
-          p('Your audio. It is saved on this phone while you record and never uploaded by Longnote.'),
-          p('Your transcripts. Speech-to-text runs on this phone.'),
-          p('Your summaries, when you use "Automatic", "Apple Intelligence" or "Basic offline summary". Apple Intelligence runs on the phone too.'),
-          p('A small usage log (for example "recording started", "export"). It stays on the phone; you can read it in Settings > Usage log.'),
-          h('What goes over the internet'),
-          p('Once: the speech-to-text model file is downloaded from Hugging Face (a public model host). No audio or text is sent to download it.'),
-          p('Only if you choose "Cloud" as the summary engine: the transcript TEXT (never the audio) is sent to our server, which passes it to Anthropic (the company that makes the Claude AI model) to write the summary. The summary is sent back to your phone. Our server does not store the transcript.'),
-          p('Anthropic\'s commercial terms say it does not train its models on this data. It may keep it for a limited time for safety checks, as its policy describes.'),
+          h('On your phone'),
+          p('Your recordings are saved on this phone while you record. Longnote never deletes them; only you can, from a note.'),
+          p('Transcripts, summaries and Ask chats are kept on this phone too.'),
+          h('Cloud transcription (the default)'),
+          p('To make the transcript, a compressed copy of the audio is uploaded to our server and given to our speech-to-text provider (Soniox).'),
+          p('As soon as the transcript is back, the audio is deleted from the provider and from our server. Anything left over is removed within 24 hours. The transcript is sent to your phone and then deleted from our server.'),
+          h('On this phone'),
+          p('If you choose “On this phone” in Settings → Transcription, the audio never leaves your phone. It is slower and has no speaker labels.'),
+          h('Summaries and Ask'),
+          p('To write a summary or answer a question, the transcript text (never the audio) is sent to our server and to our AI provider (OpenAI). Neither keeps it: the answer comes back to your phone. OpenAI does not train on data sent through its API.'),
+          h('iCloud backup'),
+          p('Recordings are included in your iPhone’s iCloud backup unless you turn that off in Settings → Transcription.'),
           h('What we never do'),
-          p('No account, no sign-in, no ads, no tracking SDKs, no selling data.'),
-          h('Payments'),
-          p('Subscriptions go through Apple. We never see your card details.'),
+          p('No account, no ads, no tracking SDKs, no selling data. A hidden user id lets our server apply fair-use limits.'),
           h('Recording other people'),
-          p('Please tell people you are recording and get their consent. The laws differ by place.'),
-          h('Deleting'),
-          p('Delete a recording from its share menu: the audio, transcript and summary are removed from this phone. Deleting the app removes everything.'),
+          p('Tell people you are recording and get their consent. The laws differ by place.'),
         ],
       ),
     );

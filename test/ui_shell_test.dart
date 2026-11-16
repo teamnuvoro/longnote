@@ -2,17 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:longnote/app/router.dart';
 import 'package:longnote/app/routes.dart';
-import 'package:longnote/features/ask/ask_chat_screen.dart';
-import 'package:longnote/features/ask/ask_screen.dart';
-import 'package:longnote/features/ask/choose_note_sheet.dart';
 import 'package:longnote/features/dev/widget_gallery_screen.dart';
-import 'package:longnote/features/import/import_details_sheet.dart';
-import 'package:longnote/features/import/import_progress_screen.dart';
-import 'package:longnote/features/import/import_screen.dart';
-import 'package:longnote/features/paywall/trial_started_screen.dart';
-import 'package:longnote/features/settings/audio_language_screen.dart';
-import 'package:longnote/features/settings/plan_screen.dart';
-import 'package:longnote/features/settings/transcription_screen.dart';
 import 'package:longnote/ui/widgets.dart';
 
 Widget _app(Widget child) =>
@@ -77,29 +67,5 @@ void main() {
     expect(initialLocation(onboarded: true, paywallSeen: true), '/notes');
   });
 
-  // B/C/D screens are real now: see test/screens/bcd_*_test.dart.
-  testWidgets('every placeholder screen and sheet builds', (tester) async {
-    final widgets = <Widget>[
-      const TrialStartedScreen(),
-      const AskScreen(),
-      const AskChatScreen(id: 'n'),
-      const ChooseNoteSheet(),
-      const ImportScreen(),
-      const ImportDetailsSheet(),
-      const ImportProgressScreen(id: 'n'),
-      const AudioLanguageScreen(),
-      const AudioLanguageScreen(summary: true),
-      const TranscriptionScreen(),
-      const PlanScreen(),
-    ];
-    for (final w in widgets) {
-      await tester.pumpWidget(_app(w));
-      await tester.pump();
-      expect(find.textContaining(RegExp('figma', caseSensitive: false)),
-          findsWidgets,
-          reason: '$w');
-    }
-    await tester.pumpWidget(_app(const AudioLanguageScreen(summary: true)));
-    expect(find.text('Summary language'), findsOneWidget);
-  });
+  // All A-G screens are real now: see test/screens/ and test/goldens/.
 }

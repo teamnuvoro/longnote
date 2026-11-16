@@ -1,18 +1,27 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../app/routes.dart';
 import '../../app_services.dart';
 import '../../core/analytics/analytics.dart';
 import '../../core/billing/billing_service.dart';
-import '../../core/billing/trial_reminder.dart';
-import '../../core/config.dart';
+import '../../ui/widgets.dart';
+import '../common/dates.dart';
+import '../common/external.dart';
+import '../common/links.dart';
+import '../common/screen_clock.dart';
+import '../common/widgets.dart';
+import 'trial_copy.dart';
 
-/// Honest paywall. Shown when starting the 2nd recording.
-/// - Monthly and annual only (no weekly plan).
-/// - Shows the full price, the date of the first charge, and that it renews.
-/// - "How to cancel" is on screen BEFORE the buy button.
-/// - A reminder is scheduled ~1 day before the trial ends.
-/// Pops with `true` when the user now has access.
+/// A1 Paywall (Figma 5:167). Honest: yearly preselected, the trial timeline
+/// with real dates (today, the reminder 26 h before the end, the charge
+/// date), the exact price and date above the button, how to cancel.
+/// Billing is still [FakeBillingService]: a chip says purchases are simulated.
+///
+/// After a trial starts, A2 (trial started) asks for the reminder permission;
+/// then the paywall closes. Pops with `true` when the user now has access,
+/// or calls [onDone] on the first run.
 class PaywallScreen extends StatefulWidget {
   const PaywallScreen({super.key, this.onDone, this.placement = 'second_recording'});
 
@@ -28,9 +37,10 @@ class PaywallScreen extends StatefulWidget {
 }
 
 class _PaywallScreenState extends State<PaywallScreen> {
-  List<Plan> _plans = const [];
-  Plan? _selected;
+  List<Plan> _plans = const [annualPlan, monthlyPlan];
+  Plan _selected = annualPlan;
   bool _busy = false;
+  bool _closed = false;
 
   AppServices get _s => context.read<AppServices>();
 
@@ -38,10 +48,12 @@ class _PaywallScreenState extends State<PaywallScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await _s.analytics.log(AnalyticsEvent.paywallViewed,
-          props: {'placement': widget.placement});
-      final plans = await _s.billing.loadPlans();
       if (!mounted) return;
+      final s = _s;
+      await s.analytics.log(AnalyticsEvent.paywallViewed,
+          props: {'placement': widget.placement});
+      final plans = await s.billing.loadPlans();
+      if (!mounted || plans.isEmpty) return;
       setState(() {
         _plans = plans;
         _selected = plans.firstWhere((p) => p.period == PlanPeriod.year,
@@ -50,35 +62,50 @@ class _PaywallScreenState extends State<PaywallScreen> {
     });
   }
 
+  Plan? _plan(PlanPeriod p) {
+    for (final x in _plans) {
+      if (x.period == p) return x;
+    }
+    return null;
+  }
+
   Future<void> _buy() async {
     final plan = _selected;
-    if (plan == null) return;
+    final s = _s;
     setState(() => _busy = true);
-    final trial = _s.billing.trialEligible;
-    final res = await _s.billing.purchase(plan);
+    final trial = s.billing.trialEligible;
+    final res = await s.billing.purchase(plan);
     if (!mounted) return;
     setState(() => _busy = false);
     if (!res.success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(res.error ?? 'Purchase did not complete.')));
+      showNote(context, res.error ?? 'Purchase did not complete. Nothing was charged.');
       return;
     }
     if (res.startedTrial && trial) {
-      final ends = _s.billing.entitlement.value.trialEndsAt!;
-      await _s.analytics.log(AnalyticsEvent.trialStarted,
+      final ends = s.billing.entitlement.value.trialEndsAt!;
+      await s.analytics.log(AnalyticsEvent.trialStarted,
           props: {'plan': plan.id, 'trial_ends_at': ends.toIso8601String()});
-      // Permission prompt comes with a clear reason: the reminder itself.
-      try {
-        await _s.reminderScheduler.requestPermission();
-        await _s.reminders.onTrialStarted(plan, ends);
-      } catch (_) {
-        // Notifications unavailable: the paywall already showed the date.
-      }
+      if (!mounted) return;
+      // A2: the reminder permission is asked there, with its reason.
+      await context.pushNamed(R.trialStarted);
     }
     if (mounted) _close(true);
   }
 
+  Future<void> _restore() async {
+    final s = _s;
+    await s.billing.restore();
+    if (!mounted) return;
+    if (s.billing.entitlement.value.isActive) {
+      _close(true);
+    } else {
+      showNote(context, 'No purchase found to restore on this Apple ID.');
+    }
+  }
+
   void _close(bool subscribed) {
+    if (_closed) return;
+    _closed = true;
     final done = widget.onDone;
     if (done != null) {
       done(context, subscribed);
@@ -89,143 +116,306 @@ class _PaywallScreenState extends State<PaywallScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context).textTheme;
-    final cs = Theme.of(context).colorScheme;
+    final trial = context.read<AppServices>().billing.trialEligible;
+    final now = screenNow();
     final plan = _selected;
-    final trial = _s.billing.trialEligible;
-    final now = DateTime.now();
-    final firstCharge = plan == null
-        ? null
-        : (trial ? now.add(Duration(days: plan.trialDays)) : now);
-    final cancelBy = firstCharge?.subtract(const Duration(hours: 24));
-
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          tooltip: 'Not now',
-          icon: const Icon(Icons.close),
-          onPressed: () => _close(false),
-        ),
-        title: const Text('Keep recording'),
-      ),
+    final yearly = _plan(PlanPeriod.year);
+    final monthly = _plan(PlanPeriod.month);
+    return LnScaffold(
+      backgroundColor: LnColors.paper,
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              color: cs.tertiaryContainer,
-              child: Text('Test build: purchases here are simulated. No money is charged.',
-                  style: t.bodySmall?.copyWith(color: cs.onTertiaryContainer)),
-            ),
-            const SizedBox(height: 16),
-            Text('You have used your free recording', style: t.headlineSmall),
-            const SizedBox(height: 8),
-            Text(
-              'Subscribe to record as much as you want, as long as you want. '
-              'Your free recording and its notes stay yours either way.',
-              style: t.bodyLarge,
-            ),
-            const SizedBox(height: 16),
-            for (final f in const [
-              'Unlimited recordings, hours long',
-              'Transcripts made on your phone',
-              'Summaries with decisions and action items',
-              'PDF, text and audio export',
-            ])
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 3),
-                child: Row(children: [
-                  Icon(Icons.check, color: cs.primary, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text(f)),
-                ]),
-              ),
-            const SizedBox(height: 16),
-            for (final p in _plans)
-              Card(
-                margin: const EdgeInsets.symmetric(vertical: 6),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  side: BorderSide(
-                      color: p == plan ? cs.primary : cs.outlineVariant,
-                      width: p == plan ? 2 : 1),
-                ),
-                child: RadioListTile<Plan>(
-                  value: p,
-                  // ignore: deprecated_member_use
-                  groupValue: plan,
-                  // ignore: deprecated_member_use
-                  onChanged: (v) => setState(() => _selected = v),
-                  title: Text(p.period == PlanPeriod.year ? 'Yearly' : 'Monthly',
-                      style: t.titleMedium),
-                  subtitle: Text(p.period == PlanPeriod.year
-                      ? '${p.priceLabel} per year (about \$${(p.price / 12).toStringAsFixed(2)} a month)'
-                      : '${p.priceLabel} per month'),
-                ),
-              ),
-            const SizedBox(height: 12),
-            if (plan != null && firstCharge != null)
-              Card(
-                margin: EdgeInsets.zero,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('What you will pay', style: t.titleSmall),
+        child: Column(children: [
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(24, 4, 20, 0),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      const LnChip('Test build: purchases are simulated'),
+                      const Spacer(),
+                      LnIconButton(
+                        icon: LnIcons.x,
+                        size: 32,
+                        iconSize: 16,
+                        color: LnColors.ink2,
+                        semanticLabel: 'Close',
+                        onPressed: () => _close(false),
+                      ),
+                    ]),
                     const SizedBox(height: 6),
-                    Text(trial
-                        ? 'Today: \$0. Free for ${plan.trialDays} days.\n'
-                            'On ${formatDate(firstCharge)}: ${plan.priceLabel}, then ${plan.priceLabel} every ${plan.periodWord} until you cancel.'
-                        : 'Today: ${plan.priceLabel}, then ${plan.priceLabel} every ${plan.periodWord} until you cancel.'),
-                    if (trial) ...[
-                      const SizedBox(height: 6),
-                      Text('We will send you a reminder about a day before the trial ends.',
-                          style: t.bodySmall),
-                    ],
-                    const SizedBox(height: 12),
-                    Text('How to cancel', style: t.titleSmall),
-                    const SizedBox(height: 6),
-                    Text(
-                      'iPhone Settings > your name > Subscriptions > Longnote > Cancel Subscription. '
-                      '${trial ? 'Cancel before ${formatDate(cancelBy!)} and you pay nothing. ' : ''}'
-                      'Cancelling stops the next renewal; you keep access until the end of the period you paid for.',
+                    Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SizedBox(
+                              width: 300,
+                              child: Text('Every word of every meeting.',
+                                  style: LnText.largeTitle
+                                      .copyWith(fontSize: 31, height: 36 / 31)),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                                trial
+                                    ? 'Try everything free for ${plan.trialDays} days.'
+                                    : 'Keep recording, as long as you want.',
+                                style: LnText.body
+                                    .copyWith(color: LnColors.ink2, height: null)),
+                            const SizedBox(height: 20),
+                            const _Feature(LnIcons.infinity,
+                                'Record for hours. No minute counter.'),
+                            const _Feature(
+                                LnIcons.users, 'Every word, and who said it'),
+                            const _Feature(LnIcons.list,
+                                'Summaries with decisions and action items'),
+                            const _Feature(
+                                LnIcons.tabAsk, 'Ask anything about a note'),
+                            const _Feature(LnIcons.shield,
+                                'Audio saved on your phone as you record',
+                                last: true),
+                            const SizedBox(height: 22),
+                            _Timeline(plan: plan, trial: trial, now: now),
+                            const SizedBox(height: 14),
+                            Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (yearly != null)
+                                    Expanded(
+                                      child: _PlanCard(
+                                        name: 'Yearly',
+                                        price: yearly.priceLabel,
+                                        sub: monthlyEquivalent(yearly),
+                                        tag: monthly == null
+                                            ? null
+                                            : 'Save ${yearlySavingPercent(yearly, monthly)}%',
+                                        selected: plan == yearly,
+                                        onTap: () =>
+                                            setState(() => _selected = yearly),
+                                      ),
+                                    ),
+                                  if (yearly != null && monthly != null)
+                                    const SizedBox(width: 10),
+                                  if (monthly != null)
+                                    Expanded(
+                                      child: _PlanCard(
+                                        name: 'Monthly',
+                                        price: monthly.priceLabel,
+                                        sub: 'per month',
+                                        selected: plan == monthly,
+                                        onTap: () =>
+                                            setState(() => _selected = monthly),
+                                      ),
+                                    ),
+                                ]),
+                            const SizedBox(height: 16),
+                          ]),
                     ),
                   ]),
-                ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 5),
+            child: Column(children: [
+              LnPrimaryButton(
+                label: trial ? 'Start free trial' : 'Subscribe',
+                busy: _busy,
+                onPressed: _buy,
               ),
-            const SizedBox(height: 20),
-            SizedBox(
-              height: 54,
-              child: FilledButton(
-                onPressed: _busy || plan == null ? null : _buy,
-                child: _busy
-                    ? const SizedBox(
-                        width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
-                    : Text(trial ? 'Start ${AppConfig.trialDays}-day free trial' : 'Subscribe'),
-              ),
-            ),
-            const SizedBox(height: 8),
-            TextButton(
-              onPressed: () async {
-                await _s.billing.restore();
-                if (!context.mounted) return;
-                if (_s.billing.entitlement.value.isActive) {
-                  _close(true);
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                      content: Text('No active subscription found.')));
-                }
-              },
-              child: const Text('Restore purchases'),
-            ),
-            Text(
-              'Payment is charged to your Apple ID. The subscription renews automatically unless cancelled at least 24 hours before the end of the current period.',
-              style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
+              const SizedBox(height: 10),
+              Text(priceLine(plan, trial: trial, now: now),
+                  key: const ValueKey('paywall-price-line'),
+                  textAlign: TextAlign.center,
+                  style: LnText.meta.copyWith(fontSize: 12, height: 17 / 12)),
+              const SizedBox(height: 10),
+              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                _Link('Restore purchase', _restore),
+                const SizedBox(width: 18),
+                _Link('Terms',
+                    () => openOrExplain(context, AppLinks.terms)),
+                const SizedBox(width: 18),
+                _Link('Privacy',
+                    () => openOrExplain(context, AppLinks.privacyPolicy)),
+              ]),
+            ]),
+          ),
+        ]),
       ),
     );
   }
+}
+
+class _Feature extends StatelessWidget {
+  const _Feature(this.icon, this.text, {this.last = false});
+  final LnIcons icon;
+  final String text;
+  final bool last;
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: EdgeInsets.only(bottom: last ? 0 : 10),
+        child: Row(children: [
+          LnIcon(icon, size: 20),
+          const SizedBox(width: 12),
+          Expanded(child: Text(text, style: LnText.rowLabel)),
+        ]),
+      );
+}
+
+/// Today -> reminder -> first charge, with real dates.
+class _Timeline extends StatelessWidget {
+  const _Timeline({required this.plan, required this.trial, required this.now});
+  final Plan plan;
+  final bool trial;
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = <Widget>[];
+    if (trial) {
+      final d = TrialDates.from(now, plan);
+      rows.add(const _Step(
+          icon: LnIcons.unlock,
+          dark: true,
+          title: 'Today',
+          text: 'Full access. Nothing to pay.'));
+      if (d.reminderAt != null) {
+        rows.add(_Step(
+            icon: LnIcons.bell,
+            title: weekdayMonthDay(d.reminderAt!),
+            text: 'We remind you the trial is ending.'));
+      }
+      rows.add(_Step(
+          icon: LnIcons.card,
+          title: weekdayMonthDay(d.chargeAt),
+          text:
+              'You pay ${plan.priceLabel} ${forPeriodWords(plan)}, unless you cancel before.'));
+    } else {
+      rows.add(_Step(
+          icon: LnIcons.card,
+          dark: true,
+          title: 'Today',
+          text: 'You pay ${plan.priceLabel} ${forPeriodWords(plan)}.'));
+      rows.add(_Step(
+          icon: LnIcons.refresh,
+          title: weekdayMonthDay(addPeriod(now, plan.period)),
+          text: 'It renews, unless you cancel before.'));
+    }
+    return LnCard(
+      child: Column(children: [
+        for (var i = 0; i < rows.length; i++)
+          Padding(
+            padding: EdgeInsets.only(bottom: i == rows.length - 1 ? 0 : 12),
+            child: rows[i],
+          ),
+      ]),
+    );
+  }
+}
+
+class _Step extends StatelessWidget {
+  const _Step(
+      {required this.icon,
+      required this.title,
+      required this.text,
+      this.dark = false});
+  final LnIcons icon;
+  final String title;
+  final String text;
+  final bool dark;
+  @override
+  Widget build(BuildContext context) => Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 28,
+            height: 28,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+                color: dark ? LnColors.ink : LnColors.fill,
+                shape: BoxShape.circle),
+            child: LnIcon(icon,
+                size: 14, color: dark ? LnColors.card : LnColors.ink),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: LnText.speakerName),
+                  const SizedBox(height: 1),
+                  Text(text, style: LnText.meta.copyWith(height: 18 / 13)),
+                ]),
+          ),
+        ],
+      );
+}
+
+class _PlanCard extends StatelessWidget {
+  const _PlanCard({
+    required this.name,
+    required this.price,
+    required this.sub,
+    required this.selected,
+    required this.onTap,
+    this.tag,
+  });
+  final String name;
+  final String price;
+  final String sub;
+  final String? tag;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+        selected: selected,
+        child: LnPressable(
+          onPressed: onTap,
+          pressedOpacity: 0.8,
+          child: LnCard(
+            selected: selected,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(children: [
+                    Expanded(
+                        child: Text(name,
+                            style: LnText.rowLabel.copyWith(
+                                fontWeight: FontWeight.w600,
+                                fontVariations: const [
+                                  FontVariation('wght', 600)
+                                ]))),
+                    LnRadioMark(selected: selected),
+                  ]),
+                  const SizedBox(height: 4),
+                  Text(price,
+                      style: LnText.noteTitle.copyWith(fontSize: 24)),
+                  const SizedBox(height: 4),
+                  Row(children: [
+                    Text(sub, style: LnText.meta.copyWith(fontSize: 12)),
+                    if (tag != null) ...[
+                      const SizedBox(width: 6),
+                      LnGreenTag(tag!),
+                    ],
+                  ]),
+                ]),
+          ),
+        ),
+      );
+}
+
+class _Link extends StatelessWidget {
+  const _Link(this.label, this.onTap);
+  final String label;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) => LnPressable(
+        onPressed: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Text(label,
+              style: LnText.chip.copyWith(color: LnColors.ink3)),
+        ),
+      );
 }

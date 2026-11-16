@@ -10,6 +10,16 @@ class AudioLanguage {
 
 const autoDetect = AudioLanguage('auto', 'Detect automatically');
 
+/// Hindi and English mixed in one recording. Not a server code: it is sent as
+/// language `hi` with the hints `["hi", "en"]` (see [languageRequest]).
+const hinglish = AudioLanguage('hi_en', 'Hinglish (Hindi + English)');
+
+/// What the server gets for a stored language code (BACKEND-API 4.1).
+({String language, List<String> hints}) languageRequest(String code) =>
+    code == hinglish.code
+        ? (language: 'hi', hints: const ['hi', 'en'])
+        : (language: code, hints: const <String>[]);
+
 const audioLanguages = <AudioLanguage>[
   AudioLanguage('af', 'Afrikaans'),
   AudioLanguage('sq', 'Albanian', 'Shqip'),
@@ -75,6 +85,7 @@ const audioLanguages = <AudioLanguage>[
 
 AudioLanguage audioLanguageFor(String? code) {
   if (code == null || code == 'auto') return autoDetect;
+  if (code == hinglish.code) return hinglish;
   return audioLanguages.firstWhere((l) => l.code == code,
       orElse: () => AudioLanguage(code, code));
 }

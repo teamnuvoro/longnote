@@ -1,19 +1,22 @@
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 
-import '../../app/placeholder.dart';
-import '../../app/routes.dart';
+import '../../ui/widgets.dart';
+import 'ask_view.dart';
+import '../common/widgets.dart';
 
-/// PLACEHOLDER for the screens session. Figma: see routeFrames[R.askChat].
+/// E2 opened from a note (/ask/:id): the same Ask view with that note
+/// preselected and a back button (covers the tab bar, like the note screen).
 class AskChatScreen extends StatelessWidget {
   const AskChatScreen({super.key, required this.id});
   final String id;
 
   @override
-  Widget build(BuildContext context) => PlaceholderScreen(
-    title: 'Ask',
-    route: R.askChat,
-    tabRoot: false,
-    purpose:
-        'Chat about one note: questions, answers with source chips (speaker + time, tap to play from there), "not in this recording" when found = false. History in ChatStore.',
-  );
+  Widget build(BuildContext context) => LnScaffold(
+        backgroundColor: LnColors.paper,
+        body: SafeArea(
+          top: false,
+          child: AskView(
+              noteId: id, onBack: () => Navigator.of(context).maybePop()),
+        ),
+      );
 }

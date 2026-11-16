@@ -7,6 +7,7 @@ import '../app_services.dart';
 import '../features/ask/ask_chat_screen.dart';
 import '../features/ask/ask_screen.dart';
 import '../features/ask/choose_note_sheet.dart';
+import '../features/ask/last_note.dart';
 import '../features/benchmark/benchmark_screen.dart';
 import '../features/dev/widget_gallery_screen.dart';
 import '../features/import/import_details_sheet.dart';
@@ -138,7 +139,9 @@ GoRouter buildRouter({required String initialLocation}) => GoRouter(
                     name: R.note,
                     parentNavigatorKey: rootNavigatorKey,
                     // D1/D2/D3/D8 = states of one screen.
-                    pageBuilder: (c, s) => _push(
+                    pageBuilder: (c, s) {
+                      rememberOpenedNote(c, _id(s)); // Ask preselects it
+                      return _push(
                         s,
                         NoteScreen(
                           id: _id(s),
@@ -146,7 +149,8 @@ GoRouter buildRouter({required String initialLocation}) => GoRouter(
                               ? NoteTab.transcript
                               : null,
                           atMs: int.tryParse(s.uri.queryParameters['at'] ?? ''),
-                        )),
+                        ));
+                    },
                     routes: [
                       GoRoute(
                         path: 'actions',
