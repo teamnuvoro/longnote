@@ -117,8 +117,8 @@ class _NoteScreenState extends State<NoteScreen> {
         _s.noteReadyAskDue.value) {
       // After the push animation, so the sheet is not pushed under it.
       _askTimer = Timer(const Duration(milliseconds: 450), () {
-        final route = ModalRoute.of(context);
-        if (mounted && (route?.isCurrent ?? false)) askNoteReadyOnce(context);
+        if (!mounted) return;
+        if (ModalRoute.of(context)?.isCurrent ?? false) askNoteReadyOnce(context);
       });
     }
   }
@@ -408,7 +408,8 @@ class _NoteScreenState extends State<NoteScreen> {
     }
     final canToggle = d.hasSpeakers;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
+      // Figma D3: 52 px from the toolbar's centre to the first speaker.
+      padding: const EdgeInsets.only(bottom: 16),
       child: Row(children: [
         LnToggle(
           small: true,

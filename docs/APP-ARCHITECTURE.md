@@ -169,8 +169,18 @@ Other entry points: `CloudPipeline.resummarize(id)` (D6 after changing style), `
 - **Ask** preselects kv `last_opened_note` (written when a note route opens and when a note is picked in Ask).
   Source chips open `R.note` with `?tab=transcript&at=<ms>`.
 - **Hinglish** is stored as `hi_en` and sent as `language: hi`, `language_hints: [hi, en]` (`languageRequest`).
-- **Text line height:** Material's default text style (theme bodyMedium = LnText.turn, 22/15, merged with the
-  typography's 1.43) is inherited by every Text whose style has no height, so lines are 2-5 px taller than Figma.
-  A/E/F/G screens use `LnScaffold` / `LnPlainSheet` (lib/features/common/widgets.dart) to reset it. Better fixed once
-  in lib/ui/theme.dart.
-- Links (privacy, terms, App Store id) are TODO constants in lib/features/common/links.dart.
+- **Text line height:** FIXED in lib/ui/theme.dart (QA pass, 16 Nov): the theme's typography geometry has no
+  heights/letter spacing (Material merged M3's 1.43 / 0.25 under every style at runtime), every textTheme slot comes
+  from LnText, bodyMedium = `LnText.base` (Geist 15, normal leading). `LnScaffold`/`LnPlainSheet` no longer reset it.
+- Links (privacy, terms, support email, App Store id): lib/features/common/links.dart, with TODOs for the owner.
+
+## 8. QA pass (16 Nov)
+
+- Whole-app flow tests: `test/flows/app_flow_test.dart` (harness `test/flows/flow_env.dart`: real router, screens,
+  DB, queue and cloud pipeline; fake server/encoder/mic/network). Smoothness: `test/flows/smoothness_test.dart`.
+- Navigate from user taps with `context.pushOnce(...)` (lib/app/nav.dart): a second push within 400 ms is dropped.
+- The recorder writes only capture columns (`repo.updateCapture`), never the whole row.
+- Notes list is built row by row (a day with hundreds of notes stays lazy); recording ticks rebuild only the bar.
+- Settings pages are pushed above the shell (no tab bar). "Note ready" notification is asked once
+  (`AppServices.noteQueuedByUser` -> NoteScreen / Import show `NoteReadyAskSheet`).
+- Goldens compare on Linux only (skipped on macOS CI).

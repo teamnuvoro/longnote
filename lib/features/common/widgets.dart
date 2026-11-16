@@ -245,23 +245,8 @@ class LnCardSlice extends StatelessWidget {
   }
 }
 
-/// Figma's "leading: normal" for text without its own line height.
-///
-/// Material puts the theme's bodyMedium (LnText.turn, 22/15, merged with the
-/// typography's 1.43 height) around every page, and a Text whose style has
-/// no height inherits it, so single lines grow 2-5 px taller than in the
-/// frames. These screens replace the default text style below the Material,
-/// so text gets the font's own line height like in Figma.
-/// (Design-system note: better fixed once in lib/ui/theme.dart.)
-class NormalLeading extends StatelessWidget {
-  const NormalLeading({super.key, required this.child});
-  final Widget child;
-  @override
-  Widget build(BuildContext context) =>
-      DefaultTextStyle(style: LnText.rowLabel, child: child);
-}
-
-/// [Scaffold] whose body uses [NormalLeading].
+/// [Scaffold] on the paper background. (It used to reset the default text
+/// style to fix line heights; that is now done once in lib/ui/theme.dart.)
 class LnScaffold extends StatelessWidget {
   const LnScaffold(
       {super.key, this.backgroundColor = LnColors.paper, this.appBar, this.body});
@@ -270,12 +255,10 @@ class LnScaffold extends StatelessWidget {
   final Widget? body;
   @override
   Widget build(BuildContext context) => Scaffold(
-      backgroundColor: backgroundColor,
-      appBar: appBar,
-      body: body == null ? null : NormalLeading(child: body!));
+      backgroundColor: backgroundColor, appBar: appBar, body: body);
 }
 
-/// [LnSheet] whose content uses [NormalLeading].
+/// [LnSheet] with the A/E/F/G sheet padding.
 class LnPlainSheet extends StatelessWidget {
   const LnPlainSheet({
     super.key,
@@ -293,6 +276,6 @@ class LnPlainSheet extends StatelessWidget {
         title: title,
         scrollable: scrollable,
         padding: padding,
-        child: NormalLeading(child: child),
+        child: child,
       );
 }

@@ -171,6 +171,8 @@ TextStyle _style(String family, double size, int weight,
     // Variable fonts: the weight axis must be set explicitly.
     fontVariations: [FontVariation('wght', weight.toDouble())],
     height: lineHeightPx == null ? null : lineHeightPx / size,
+    // Figma centres text in its line height.
+    leadingDistribution: TextLeadingDistribution.even,
     color: color,
     letterSpacing: letterSpacing,
   );
@@ -201,6 +203,11 @@ abstract final class LnText {
   // Geist (UI)
   /// Headline: Geist SemiBold 17. Also the button label.
   static final headline = _style(LnFonts.sans, 17, 600);
+
+  /// Default text (anything without its own style): Geist Regular 15 with
+  /// the font's own line height ("leading: normal" in Figma). The theme uses
+  /// it as bodyMedium, which Material puts around every page.
+  static final base = _style(LnFonts.sans, 15, 400);
 
   /// Body: Geist Regular 16 / 24.
   static final body = _style(LnFonts.sans, 16, 400, lineHeightPx: 24);

@@ -730,4 +730,44 @@ void main() {
     expect(n.summaryStyle, 'meeting');
     expect(find.text('Cours de chimie'), findsOneWidget);
   });
+
+  testWidgets('fast double taps push one screen, not two', (t) async {
+    await t.runAsync(() async => env = await FlowEnv.create());
+    await t.runAsync(() => env.seedHome(older: 3));
+    phoneView(t);
+    mockPlatform();
+    await env.pumpApp(t);
+
+    int count(Type t) => find.byType(t, skipOffstage: false).evaluate().length;
+    final row = find.text('Q3 budget review with Priya');
+    // Second tap before the next frame (the page has not moved yet).
+    await t.tap(row);
+    await t.tap(row, warnIfMissed: false);
+    await settle(t);
+    expect(count(NoteScreen), 1);
+    await back(t);
+    expect(count(NoteScreen), 0);
+
+    // Two different rows in quick succession: still one screen.
+    await t.tap(find.text('Older note 0'));
+    await t.pump(const Duration(milliseconds: 16));
+    await t.tap(find.text('Older note 1'), warnIfMissed: false);
+    await settle(t);
+    expect(count(NoteScreen), 1);
+    await back(t);
+
+    // Search, Record: same.
+    await t.tap(find.byType(LnSearchField));
+    await t.pump(const Duration(milliseconds: 40));
+    await t.tap(find.byType(LnSearchField), warnIfMissed: false);
+    await settle(t);
+    expect(count(SearchScreen), 1);
+    await tapAndSettle(t, byLabel('Cancel'));
+    final pill = t.getCenter(find.text('Record'));
+    await t.tapAt(pill);
+    await t.pump(const Duration(milliseconds: 40));
+    await t.tapAt(pill);
+    await settle(t);
+    expect(count(RecordingScreen), 1);
+  });
 }

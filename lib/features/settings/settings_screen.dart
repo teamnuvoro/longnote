@@ -219,7 +219,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ? (v) async {
               if (v == null) return;
               await _s.summaries.setEngine(v);
-              setState(() => _engine = v);
+              if (mounted) setState(() => _engine = v);
             }
           : null,
       title: Text(e.label),
@@ -240,13 +240,21 @@ class _Header extends StatelessWidget {
       );
 }
 
-class _PlanTile extends StatelessWidget {
+class _PlanTile extends StatefulWidget {
   const _PlanTile({required this.e});
   final Entitlement e;
   @override
+  State<_PlanTile> createState() => _PlanTileState();
+}
+
+class _PlanTileState extends State<_PlanTile> {
+  // Read once, not on every build.
+  late final Future<int> _freeUsed = context.read<AppServices>().gate.freeUsed();
+
+  @override
   Widget build(BuildContext context) {
+    final e = widget.e;
     final plan = e.planId == monthlyPlan.id ? monthlyPlan : annualPlan;
-    final s = context.read<AppServices>();
     return switch (e.status) {
       EntitlementStatus.trial => ListTile(
           leading: const Icon(Icons.workspace_premium_outlined),
@@ -262,7 +270,7 @@ class _PlanTile extends StatelessWidget {
               : Text('Renews ${formatDate(e.renewsAt!)} for ${plan.priceLabel}.'),
         ),
       _ => FutureBuilder<int>(
-          future: s.gate.freeUsed(),
+          future: _freeUsed,
           builder: (_, snap) => ListTile(
             leading: const Icon(Icons.card_giftcard),
             title: const Text('Free'),
@@ -275,15 +283,22 @@ class _PlanTile extends StatelessWidget {
   }
 }
 
-class _UsageLogScreen extends StatelessWidget {
+class _UsageLogScreen extends StatefulWidget {
   const _UsageLogScreen();
   @override
+  State<_UsageLogScreen> createState() => _UsageLogScreenState();
+}
+
+class _UsageLogScreenState extends State<_UsageLogScreen> {
+  late final Future<List<LoggedEvent>> _recent =
+      context.read<AppServices>().analytics.recent();
+
+  @override
   Widget build(BuildContext context) {
-    final s = context.read<AppServices>();
     return Scaffold(
       appBar: AppBar(title: const Text('Usage log')),
       body: FutureBuilder<List<LoggedEvent>>(
-        future: s.analytics.recent(),
+        future: _recent,
         builder: (_, snap) {
           final ev = snap.data;
           if (ev == null) return const Center(child: CircularProgressIndicator());

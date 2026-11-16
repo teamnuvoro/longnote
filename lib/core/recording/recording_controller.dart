@@ -107,7 +107,9 @@ class RecordingController extends ChangeNotifier {
           repo.upsertSegment(AudioSegment(
               recordingId: rec.id, index: i, fileName: name));
           rec.segmentCount = i + 1;
-          repo.updateCapture(rec);
+          // Quiet: a new part every 5 minutes must not refresh the Notes
+          // list under a running recording.
+          repo.updateCapture(rec, notify: false);
         },
         onSegmentClosed: (i, name, bytes) {
           repo.upsertSegment(AudioSegment(

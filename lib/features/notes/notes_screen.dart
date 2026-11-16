@@ -149,7 +149,7 @@ class _NotesScreenState extends State<NotesScreen> {
     final attention =
         notes.where((n) => n.processingStatus.needsAttention).toList();
     final rest = notes.where((n) => !n.processingStatus.needsAttention).toList();
-    final groups = _byDay(rest);
+    final entries = _entries(rest);
     final recovered =
         _s.recoveredAtLaunch.where((r) => r.durationMs > 0).toList();
     final empty = all != null && notes.isEmpty;
@@ -201,21 +201,21 @@ class _NotesScreenState extends State<NotesScreen> {
         ]),
       ),
       if (empty) const SliverFillRemaining(hasScrollBody: false, child: _Empty()),
-      // Day groups: one lazily built item per group card.
+      // Day groups, built lazily ROW by row (a day with hundreds of notes
+      // must not build them all at once): a label item, then each row as a
+      // slice of the group's card.
       SliverPadding(
         padding: const EdgeInsets.symmetric(horizontal: LnSpace.page),
         sliver: SliverList.builder(
-          itemCount: groups.length,
+          itemCount: entries.length,
           itemBuilder: (context, i) {
-            final g = groups[i];
-            return Padding(
-              padding: const EdgeInsets.only(bottom: LnSpace.section),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                LnSectionLabel(g.$1),
-                LnCardGroup(children: [
-                  for (final n in g.$2) _row(n, _model.previews[n.id]),
-                ]),
-              ]),
+            final e = entries[i];
+            final n = e.note;
+            if (n == null) return LnSectionLabel(e.label!);
+            return _CardSlice(
+              first: e.first,
+              last: e.last,
+              child: _row(n, _model.previews[n.id]),
             );
           },
         ),
@@ -273,15 +273,79 @@ class _NotesScreenState extends State<NotesScreen> {
     );
   }
 
-  static List<(String, List<Recording>)> _byDay(List<Recording> notes) {
+  static List<_Entry> _entries(List<Recording> notes) {
     final now = DateTime.now();
-    final out = <(String, List<Recording>)>[];
-    for (final n in notes) {
+    final out = <_Entry>[];
+    String? day;
+    for (var i = 0; i < notes.length; i++) {
+      final n = notes[i];
       final l = dayGroupLabel(n.createdAt, now);
-      if (out.isEmpty || out.last.$1 != l) out.add((l, []));
-      out.last.$2.add(n);
+      final first = l != day;
+      if (first) out.add(_Entry.label(l));
+      day = l;
+      final last = i == notes.length - 1 ||
+          dayGroupLabel(notes[i + 1].createdAt, now) != l;
+      out.add(_Entry.note(n, first: first, last: last));
     }
     return out;
+  }
+}
+
+class _Entry {
+  const _Entry.label(this.label)
+      : note = null,
+        first = false,
+        last = false;
+  const _Entry.note(this.note, {required this.first, required this.last})
+      : label = null;
+  final String? label;
+  final Recording? note;
+  final bool first;
+  final bool last;
+}
+
+/// One row of a day's card (looks like [LnCardGroup]: white, 16 radius,
+/// hairline border, dividers inset 16 on both sides).
+class _CardSlice extends StatelessWidget {
+  const _CardSlice({required this.first, required this.last, required this.child});
+  final bool first;
+  final bool last;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    const r = Radius.circular(LnRadius.card);
+    final radius = BorderRadius.only(
+      topLeft: first ? r : Radius.zero,
+      topRight: first ? r : Radius.zero,
+      bottomLeft: last ? r : Radius.zero,
+      bottomRight: last ? r : Radius.zero,
+    );
+    const side = BorderSide(color: LnColors.line);
+    return Padding(
+      padding: EdgeInsets.only(bottom: last ? LnSpace.section : 0),
+      child: Container(
+        width: double.infinity,
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: LnColors.card,
+          borderRadius: radius,
+          border: Border(
+            left: side,
+            right: side,
+            top: first ? side : BorderSide.none,
+            bottom: last ? side : BorderSide.none,
+          ),
+        ),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          if (!first)
+            const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                child: LnHairline()),
+          child,
+        ]),
+      ),
+    );
   }
 }
 

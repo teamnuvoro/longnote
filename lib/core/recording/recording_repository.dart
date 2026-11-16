@@ -47,7 +47,8 @@ class RecordingRepository extends ChangeNotifier {
   /// What the recorder owns: capture state only. Writing the whole row would
   /// wipe what was set on the note meanwhile (the C1 language chip, defaults
   /// from Settings, a rename), since the recorder's copy does not have them.
-  Future<void> updateCapture(Recording r) async {
+  /// [notify] false for bookkeeping nobody looks at (a new 5-minute part).
+  Future<void> updateCapture(Recording r, {bool notify = true}) async {
     await _db.update(
         'recordings',
         {
@@ -59,7 +60,7 @@ class RecordingRepository extends ChangeNotifier {
         },
         where: 'id = ?',
         whereArgs: [r.id]);
-    notifyListeners();
+    if (notify) notifyListeners();
   }
 
   /// Quiet update for the 5-second heartbeat (no UI rebuild storm).

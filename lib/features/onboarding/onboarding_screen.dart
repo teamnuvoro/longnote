@@ -40,7 +40,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     }
     if (ok) {
       await _finish();
-    } else {
+    } else if (mounted) {
       setState(() => _micMessage =
           'No problem. You can turn the microphone on later in iPhone Settings > Longnote. Recording needs it.');
     }

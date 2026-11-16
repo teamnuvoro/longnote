@@ -1,12 +1,18 @@
-/// Addresses the Settings and paywall screens open.
+/// THE one place for every outside address the app shows or opens: privacy
+/// policy, terms, support email, App Store id. Paywall (A1), Settings (G1),
+/// Plan (G4) and the share text read from here; nothing else hard-codes them.
 abstract final class AppLinks {
+  // TODO(owner): confirm the support inbox exists and is read.
   static const supportEmail = 'support@novaralabs.in';
 
-  // TODO(owner): real URLs once the site pages exist.
+  // TODO(owner): publish these pages (App Store review needs a live privacy
+  // policy URL), then replace the placeholders if the paths differ.
   static const privacyPolicy = 'https://novaralabs.in/longnote/privacy';
   static const terms = 'https://novaralabs.in/longnote/terms';
 
-  // TODO(owner): App Store id after the app is created in App Store Connect.
+  // TODO(owner): the numeric Apple ID from App Store Connect (App
+  // Information -> Apple ID), e.g. '6501234567'. Until set, "Rate" and
+  // "Share with a friend" use the website below.
   static const appStoreId = '';
   static String get appStoreUrl => appStoreId.isEmpty
       ? 'https://novaralabs.in/longnote'

@@ -65,8 +65,9 @@ class _ImportBodyState extends State<ImportBody> {
   void _maybeAsk() {
     if (!_s.noteReadyAskDue.value) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       final route = ModalRoute.of(context);
-      if (mounted && (route?.isCurrent ?? false) && TickerMode.valuesOf(context).enabled) {
+      if ((route?.isCurrent ?? false) && TickerMode.valuesOf(context).enabled) {
         askNoteReadyOnce(context);
       }
     });
@@ -84,13 +85,23 @@ class _ImportBodyState extends State<ImportBody> {
     if (mounted) setState(() {});
   }
 
+  String _recentKey = '';
+
+  /// Reloads on repository changes, but rebuilds only when the recent
+  /// imports changed (uploads elsewhere notify many times a minute).
   Future<void> _loadRecent() async {
     final all = await _repo.all();
     final r = [
       for (final n in all)
         if (n.source == 'imported') n
     ].take(5).toList();
-    if (mounted) setState(() => _recent = r);
+    final key = [
+      for (final n in r)
+        '${n.id}|${n.title}|${n.processingStatus.name}|${n.progress}|${n.processingProgress}'
+    ].join(',');
+    if (!mounted || key == _recentKey) return;
+    _recentKey = key;
+    setState(() => _recent = r);
   }
 
   Future<void> _pick({bool video = false}) async {

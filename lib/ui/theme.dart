@@ -55,23 +55,77 @@ ThemeData lnRecordingTheme() {
   return _base(scheme, LnColors.night, Brightness.dark);
 }
 
+/// Material's text geometry without line heights or letter spacing.
+///
+/// Theme/MaterialApp merge the script's geometry (M3: bodyMedium height 1.43,
+/// letter spacing 0.25 ...) UNDER the theme's text styles at runtime
+/// (ThemeData.localize). A Text whose style leaves height or letter spacing
+/// unset then picked those up: lines 2-5 px taller and text wider than in
+/// Figma. With this geometry, only LnText decides.
+TextTheme _plainGeometry(TextTheme g) {
+  TextStyle? plain(TextStyle? s) => s == null
+      ? null
+      : TextStyle(
+          inherit: s.inherit,
+          fontSize: s.fontSize,
+          fontWeight: s.fontWeight,
+          textBaseline: s.textBaseline,
+          leadingDistribution: TextLeadingDistribution.even,
+        );
+  return TextTheme(
+    displayLarge: plain(g.displayLarge),
+    displayMedium: plain(g.displayMedium),
+    displaySmall: plain(g.displaySmall),
+    headlineLarge: plain(g.headlineLarge),
+    headlineMedium: plain(g.headlineMedium),
+    headlineSmall: plain(g.headlineSmall),
+    titleLarge: plain(g.titleLarge),
+    titleMedium: plain(g.titleMedium),
+    titleSmall: plain(g.titleSmall),
+    bodyLarge: plain(g.bodyLarge),
+    bodyMedium: plain(g.bodyMedium),
+    bodySmall: plain(g.bodySmall),
+    labelLarge: plain(g.labelLarge),
+    labelMedium: plain(g.labelMedium),
+    labelSmall: plain(g.labelSmall),
+  );
+}
+
+final _typography = Typography.material2021(
+  platform: TargetPlatform.iOS,
+  englishLike: _plainGeometry(Typography.englishLike2021),
+  dense: _plainGeometry(Typography.dense2021),
+  tall: _plainGeometry(Typography.tall2021),
+);
+
 ThemeData _base(ColorScheme scheme, Color background, Brightness b) {
   final onBg = scheme.onSurface;
+  // Every slot is set from LnText. ThemeData merges a given textTheme over
+  // Material's typography (M3 heights like 1.43 and letter spacing like
+  // 0.25), and Text without its own height/spacing inherits those through
+  // the page's DefaultTextStyle: lines came out 2-5 px taller (and wider)
+  // than Figma. The full theme is set again below with copyWith, which
+  // replaces instead of merging.
   final text = TextTheme(
+    displayLarge: LnText.largeTitle.copyWith(color: onBg),
+    displayMedium: LnText.largeTitle.copyWith(color: onBg),
     displaySmall: LnText.largeTitle.copyWith(color: onBg),
+    headlineLarge: LnText.detailTitle.copyWith(color: onBg),
+    headlineMedium: LnText.detailTitle.copyWith(color: onBg),
     headlineSmall: LnText.detailTitle.copyWith(color: onBg),
     titleLarge: LnText.noteTitle.copyWith(color: onBg),
     titleMedium: LnText.headline.copyWith(color: onBg),
     titleSmall: LnText.rowTitleSmall.copyWith(color: onBg),
     bodyLarge: LnText.body.copyWith(color: onBg),
-    bodyMedium: LnText.turn.copyWith(color: onBg),
+    bodyMedium: LnText.base.copyWith(color: onBg),
     bodySmall: LnText.meta.copyWith(color: scheme.onSurfaceVariant),
     labelLarge: LnText.headline.copyWith(color: onBg),
     labelMedium: LnText.caption.copyWith(color: scheme.onSurfaceVariant),
     labelSmall: LnText.chip.copyWith(color: scheme.onSurfaceVariant),
   );
-  return ThemeData(
+  final theme = ThemeData(
     useMaterial3: true,
+    typography: _typography,
     brightness: b,
     colorScheme: scheme,
     scaffoldBackgroundColor: background,
@@ -136,4 +190,5 @@ ThemeData _base(ColorScheme scheme, Color background, Brightness b) {
       subtitleTextStyle: LnText.meta.copyWith(color: scheme.onSurfaceVariant),
     ),
   );
+  return theme.copyWith(textTheme: text, primaryTextTheme: text);
 }
