@@ -4,7 +4,13 @@ name: iOS simulator QA
 # Manual only: macOS minutes cost money, and each run sends ~60 s of audio to
 # the real backend (Soniox + OpenAI, a few cents). No secrets: the Supabase URL
 # and anon key are the committed defaults in lib/core/cloud/backend_config.dart.
+# workflow_dispatch needs this file on the default branch (master); until
+# v1-build is merged, a v1-build push that changes tools/qa/run-request.txt
+# starts a run (only QA commits touch that file).
 on:
+  push:
+    branches: [v1-build]
+    paths: [tools/qa/run-request.txt]
   workflow_dispatch:
     inputs:
       only:
@@ -37,7 +43,7 @@ jobs:
       - name: Run the app in the simulator (4 launches)
         env:
           QA_OUT: ${{ github.workspace }}/qa_out
-          QA_ONLY: ${{ inputs.only }}
+          QA_ONLY: ${{ inputs.only || '' }}
         run: tools/qa/run_sim_qa.sh
       - name: Results on the run page
         if: always()
