@@ -32,3 +32,10 @@ Weekly plan, "80% off", "99% accurate / GPT-6 / 100,000 users" claims, dark+blue
 - Copy and prices are placeholders where dates are shown (trial dates assume a start on Sun, Nov 16).
 - Template list (9) is my pick for our audiences (meetings, students, sermons); change freely.
 - Not drawn yet: onboarding/login, widget/Control Center (later), dark mode for non-recording screens.
+
+## Figma node ids (fileKey lGFjCA8QrgEbWcjVk6CP19)
+Foundations & components section 2:2 (TabBar set 2:165, RecordPill 2:166, Buttons 2:170/2:172/2:174).
+A1 5:167 · A2 5:275 · B1 3:7 · B2 3:141 · B3 3:243 · B4 3:300 · C1 6:191 · C2 6:322 · C3 6:448 · C4 6:579 ·
+D1 7:235 · D2 7:332 · D3 7:439 · D4 7:546 · D5 8:288 · D6 8:470 · D7 8:694 · D8 8:923 ·
+E1 9:364 · E2 9:465 · E3 9:569 · F1 9:684 · F2 9:781 · F3 9:889 · G1 10:643 · G2 10:803 · G3 10:879 · G4 10:961
+Read a frame with the Figma MCP: get_screenshot(fileKey, nodeId) for the picture, get_metadata for structure.
