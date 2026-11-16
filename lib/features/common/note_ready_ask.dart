@@ -34,7 +34,10 @@ class NoteReadyAskSheet extends StatelessWidget {
   Widget build(BuildContext context) => LnSheet(
         title: 'Tell you when it’s ready?',
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
           Text(
               'A long recording takes a few minutes to become a note. We can send one notification when each note is ready, and nothing else.',
               style: LnText.body.copyWith(color: LnColors.ink2)),
