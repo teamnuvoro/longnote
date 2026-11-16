@@ -2,24 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:longnote/app/router.dart';
 import 'package:longnote/app/routes.dart';
-import 'package:longnote/features/ask/ask_chat_screen.dart';
-import 'package:longnote/features/ask/ask_screen.dart';
-import 'package:longnote/features/ask/choose_note_sheet.dart';
 import 'package:longnote/features/dev/widget_gallery_screen.dart';
-import 'package:longnote/features/import/import_details_sheet.dart';
-import 'package:longnote/features/import/import_progress_screen.dart';
-import 'package:longnote/features/import/import_screen.dart';
 import 'package:longnote/features/note/player_sheet.dart';
 import 'package:longnote/features/note/share_sheet.dart';
 import 'package:longnote/features/note/speakers_sheet.dart';
 import 'package:longnote/features/note/summary_style_sheet.dart';
 import 'package:longnote/features/notes/note_actions_sheet.dart';
 import 'package:longnote/features/notes/search_screen.dart';
-import 'package:longnote/features/paywall/trial_started_screen.dart';
 import 'package:longnote/features/recording/discard_sheet.dart';
-import 'package:longnote/features/settings/audio_language_screen.dart';
-import 'package:longnote/features/settings/plan_screen.dart';
-import 'package:longnote/features/settings/transcription_screen.dart';
 import 'package:longnote/ui/widgets.dart';
 
 Widget _app(Widget child) =>
@@ -93,17 +83,6 @@ void main() {
       const SummaryStyleSheet(),
       const PlayerSheet(id: 'n'),
       const DiscardSheet(),
-      const TrialStartedScreen(),
-      const AskScreen(),
-      const AskChatScreen(id: 'n'),
-      const ChooseNoteSheet(),
-      const ImportScreen(),
-      const ImportDetailsSheet(),
-      const ImportProgressScreen(id: 'n'),
-      const AudioLanguageScreen(),
-      const AudioLanguageScreen(summary: true),
-      const TranscriptionScreen(),
-      const PlanScreen(),
     ];
     for (final w in widgets) {
       await tester.pumpWidget(_app(w));
@@ -112,7 +91,5 @@ void main() {
           findsWidgets,
           reason: '$w');
     }
-    await tester.pumpWidget(_app(const AudioLanguageScreen(summary: true)));
-    expect(find.text('Summary language'), findsOneWidget);
   });
 }

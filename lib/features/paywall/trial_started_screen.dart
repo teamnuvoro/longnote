@@ -57,7 +57,7 @@ class _TrialStartedScreenState extends State<TrialStartedScreen> {
     final body = at == null
         ? 'Nothing is charged today. Your first payment of ${plan.priceLabel} is on ${longWeekdayMonthDay(end)}.'
         : 'Nothing is charged today. On ${longWeekdayMonthDay(at)} we’ll send one reminder, a day before your first payment of ${plan.priceLabel}.';
-    return Scaffold(
+    return LnScaffold(
       backgroundColor: LnColors.paper,
       body: SafeArea(
         child: Column(children: [

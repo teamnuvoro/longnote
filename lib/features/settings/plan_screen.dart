@@ -43,7 +43,7 @@ class PlanScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = context.read<AppServices>();
-    return Scaffold(
+    return LnScaffold(
       backgroundColor: LnColors.paper,
       appBar: const LnNavBar(title: 'Plan & billing', backLabel: 'Settings'),
       body: ValueListenableBuilder<Entitlement>(

@@ -145,7 +145,7 @@ class _AskViewState extends State<AskView> {
 
   void _toEnd() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scroll.hasClients) {
+      if (_scroll.positions.length == 1) {
         _scroll.animateTo(_scroll.position.maxScrollExtent,
             duration: const Duration(milliseconds: 250),
             curve: Curves.easeOutCubic);
@@ -237,7 +237,6 @@ class _AskViewState extends State<AskView> {
     final ready = n != null && askable(n);
     return ListView(
       key: const ValueKey('ask-start'),
-      controller: _scroll,
       padding: const EdgeInsets.symmetric(horizontal: LnSpace.page),
       children: [
         const LnLargeTitle('Ask'),
@@ -709,6 +708,7 @@ class _Composer extends StatelessWidget {
         ),
         const SizedBox(width: 10),
         GestureDetector(
+          key: const ValueKey('ask-send'),
           onTap: canSend ? onSend : null,
           child: Semantics(
           button: true,

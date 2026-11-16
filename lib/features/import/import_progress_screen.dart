@@ -11,7 +11,7 @@ class ImportProgressScreen extends StatelessWidget {
   final String id;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) => LnScaffold(
         backgroundColor: LnColors.paper,
         appBar: const LnNavBar(title: 'Import', backLabel: 'Back'),
         body: ImportBody(tabRoot: false, onlyJob: id),

@@ -14,6 +14,7 @@ import '../common/dates.dart';
 import '../common/external.dart';
 import '../common/links.dart';
 import '../paywall/trial_copy.dart';
+import '../common/widgets.dart';
 
 /// G1 Settings (Figma 10:643). Plan card -> G4; note defaults; transcription
 /// and privacy; help (mail, review, share); legal links; restore; version.
@@ -105,7 +106,7 @@ class _SettingsHomeScreenState extends State<SettingsHomeScreen> {
   Widget build(BuildContext context) {
     final v = _v;
     final s = _s;
-    return Scaffold(
+    return LnScaffold(
       backgroundColor: LnColors.paper,
       body: SafeArea(
         bottom: false,

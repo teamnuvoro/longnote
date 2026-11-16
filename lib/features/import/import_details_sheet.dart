@@ -101,7 +101,7 @@ class _ImportDetailsSheetState extends State<ImportDetailsSheet> {
   Widget build(BuildContext context) {
     final m = _m;
     if (m == null) {
-      return LnSheet(
+      return LnPlainSheet(
         title: 'Import',
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Text('No file was chosen. Pick one from Files or Photos.',
@@ -116,7 +116,7 @@ class _ImportDetailsSheetState extends State<ImportDetailsSheet> {
         ? formatDuration(Duration(milliseconds: m.durationMs!))
         : (m.probed ? 'length unknown' : 'reading…');
     final blocked = _needsCloud && !_cloudAvailable;
-    return LnSheet(
+    return LnPlainSheet(
       scrollable: true,
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -196,11 +196,12 @@ class _OptionRow extends StatelessWidget {
           child: Row(children: [
             LnIcon(icon, size: 20),
             const SizedBox(width: 12),
-            Expanded(child: Text(label, style: LnText.rowLabel)),
+            Text(label, style: LnText.rowLabel),
             const SizedBox(width: 8),
-            Flexible(
+            Expanded(
               child: Text(value,
                   maxLines: 1,
+                  textAlign: TextAlign.right,
                   overflow: TextOverflow.ellipsis,
                   style: LnText.rowValue),
             ),
@@ -217,7 +218,7 @@ class _StylePicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const all = SummaryStyle.values;
-    return LnSheet(
+    return LnPlainSheet(
       title: 'Summary style',
       scrollable: true,
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),

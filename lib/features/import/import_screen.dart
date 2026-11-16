@@ -23,7 +23,7 @@ class ImportScreen extends StatelessWidget {
   const ImportScreen({super.key});
 
   @override
-  Widget build(BuildContext context) => const Scaffold(
+  Widget build(BuildContext context) => const LnScaffold(
         backgroundColor: LnColors.paper,
         body: SafeArea(bottom: false, child: ImportBody(tabRoot: true)),
       );
@@ -155,7 +155,7 @@ class _ImportBodyState extends State<ImportBody> {
               textAlign: TextAlign.center,
               style: LnText.meta.copyWith(color: LnColors.ink3)),
         ],
-        RecentImports(notes: _recent),
+        RecentImports(notes: _recent, topGap: copying ? 4 : 18),
         const SizedBox(height: 24),
       ],
     );
@@ -230,7 +230,7 @@ class _VoiceMemosHelp extends StatelessWidget {
                 child: Text(t, style: LnText.preview.copyWith(color: LnColors.ink))),
           ]),
         );
-    return LnSheet(
+    return LnPlainSheet(
       title: 'From Voice Memos',
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

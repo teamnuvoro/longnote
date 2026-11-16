@@ -156,7 +156,7 @@ class _AudioLanguageScreenState extends State<AudioLanguageScreen> {
   Widget build(BuildContext context) {
     final searching = _q.trim().isNotEmpty;
     final results = searching ? _results : const <_Choice>[];
-    return Scaffold(
+    return LnScaffold(
       backgroundColor: LnColors.paper,
       appBar: LnNavBar(
           title: widget.summary ? 'Summary language' : 'Audio language',

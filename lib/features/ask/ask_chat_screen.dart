@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../ui/widgets.dart';
 import 'ask_view.dart';
+import '../common/widgets.dart';
 
 /// E2 opened from a note (/ask/:id): the same Ask view with that note
 /// preselected and a back button (covers the tab bar, like the note screen).
@@ -10,7 +11,7 @@ class AskChatScreen extends StatelessWidget {
   final String id;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) => LnScaffold(
         backgroundColor: LnColors.paper,
         body: SafeArea(
           top: false,

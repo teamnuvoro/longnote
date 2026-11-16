@@ -26,6 +26,7 @@ class LnNavBar extends StatelessWidget implements PreferredSizeWidget {
             top: 0,
             bottom: 0,
             child: LnPressable(
+              key: const ValueKey('nav-back'),
               onPressed: onBack ?? () => Navigator.of(context).maybePop(),
               semanticLabel: backLabel,
               child: Row(children: [
@@ -151,7 +152,9 @@ class LnCheckRow extends StatelessWidget {
     this.onTap,
     this.padding = const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
     this.labelStyle,
+    this.subtitleColor = LnColors.ink2,
   });
+  final Color subtitleColor;
   final String label;
   final String? subtitle;
   final bool checked;
@@ -178,7 +181,7 @@ class LnCheckRow extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: LnText.meta.copyWith(
                       height: 18 / 13,
-                      color: enabled ? LnColors.ink2 : LnColors.ink3)),
+                      color: enabled ? subtitleColor : LnColors.ink3)),
             ],
           ]),
         ),
@@ -240,4 +243,56 @@ class LnCardSlice extends StatelessWidget {
       ]),
     );
   }
+}
+
+/// Figma's "leading: normal" for text without its own line height.
+///
+/// Material puts the theme's bodyMedium (LnText.turn, 22/15, merged with the
+/// typography's 1.43 height) around every page, and a Text whose style has
+/// no height inherits it, so single lines grow 2-5 px taller than in the
+/// frames. These screens replace the default text style below the Material,
+/// so text gets the font's own line height like in Figma.
+/// (Design-system note: better fixed once in lib/ui/theme.dart.)
+class NormalLeading extends StatelessWidget {
+  const NormalLeading({super.key, required this.child});
+  final Widget child;
+  @override
+  Widget build(BuildContext context) =>
+      DefaultTextStyle(style: LnText.rowLabel, child: child);
+}
+
+/// [Scaffold] whose body uses [NormalLeading].
+class LnScaffold extends StatelessWidget {
+  const LnScaffold(
+      {super.key, this.backgroundColor = LnColors.paper, this.appBar, this.body});
+  final Color backgroundColor;
+  final PreferredSizeWidget? appBar;
+  final Widget? body;
+  @override
+  Widget build(BuildContext context) => Scaffold(
+      backgroundColor: backgroundColor,
+      appBar: appBar,
+      body: body == null ? null : NormalLeading(child: body!));
+}
+
+/// [LnSheet] whose content uses [NormalLeading].
+class LnPlainSheet extends StatelessWidget {
+  const LnPlainSheet({
+    super.key,
+    required this.child,
+    this.title,
+    this.scrollable = false,
+    this.padding = const EdgeInsets.fromLTRB(16, 0, 16, 16),
+  });
+  final Widget child;
+  final String? title;
+  final bool scrollable;
+  final EdgeInsets padding;
+  @override
+  Widget build(BuildContext context) => LnSheet(
+        title: title,
+        scrollable: scrollable,
+        padding: padding,
+        child: NormalLeading(child: child),
+      );
 }

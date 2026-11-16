@@ -19,7 +19,7 @@ class PrivacyScreen extends StatelessWidget {
           padding: const EdgeInsets.only(bottom: 8),
           child: Text(s, style: LnText.body.copyWith(color: LnColors.ink2)),
         );
-    return Scaffold(
+    return LnScaffold(
       backgroundColor: LnColors.paper,
       appBar: const LnNavBar(title: 'Your audio', backLabel: 'Settings'),
       body: ListView(

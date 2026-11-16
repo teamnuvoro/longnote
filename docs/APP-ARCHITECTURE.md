@@ -155,3 +155,22 @@ Other entry points: `CloudPipeline.resummarize(id)` (D6 after changing style), `
 5. New screen? Add a name to `R`, a frame to `routeFrames`, a `GoRoute` in `router.dart` (root navigator for detail
    screens/sheets), and a line in `test/ui_shell_test.dart`.
 6. `flutter analyze` and `flutter test` must stay clean; iOS compile: `gh workflow run ios-build-check.yml -R teamnuvoro/longnote --ref <branch>`.
+
+## 7. Screens A/E/F/G notes (screens session, 16 Nov)
+
+- **Import:** Files and Photos use `file_picker` (Photos = `FileType.video`, PHPicker, no permission prompt). The file is
+  copied into `<recordings>/<note>/import.<ext>` with MB progress (cancellable), its length read with just_audio, then a
+  note `source = imported` is queued. Video is imported as is: the native compress step (`AudioEncoderPlugin`) reads its
+  audio track. Imports always go to the cloud pipeline: the on-device pipeline reads WAV parts only, so in "On this
+  phone" mode F2 says so and the button reads "Import and transcribe in the cloud" (per-note override).
+- **TODO: files shared INTO the app** (share sheet / "Open in"). Needs a Share Extension target or
+  `scene(_:openURLContexts:)` + `CFBundleDocumentTypes`, which means Xcode project edits not checkable here. Voice Memos
+  row shows how to Save to Files and pick it instead.
+- **Ask** preselects kv `last_opened_note` (written when a note route opens and when a note is picked in Ask).
+  Source chips open `R.note` with `?tab=transcript&at=<ms>`.
+- **Hinglish** is stored as `hi_en` and sent as `language: hi`, `language_hints: [hi, en]` (`languageRequest`).
+- **Text line height:** Material's default text style (theme bodyMedium = LnText.turn, 22/15, merged with the
+  typography's 1.43) is inherited by every Text whose style has no height, so lines are 2-5 px taller than Figma.
+  A/E/F/G screens use `LnScaffold` / `LnPlainSheet` (lib/features/common/widgets.dart) to reset it. Better fixed once
+  in lib/ui/theme.dart.
+- Links (privacy, terms, App Store id) are TODO constants in lib/features/common/links.dart.

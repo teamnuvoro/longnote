@@ -103,14 +103,15 @@ class _Bar extends StatelessWidget {
 /// "Recent imports" card (F3): ready notes get a green check and length;
 /// others show where they are in the pipeline.
 class RecentImports extends StatelessWidget {
-  const RecentImports({super.key, required this.notes});
+  const RecentImports({super.key, required this.notes, this.topGap = 18});
   final List<Recording> notes;
+  final double topGap;
 
   @override
   Widget build(BuildContext context) {
     if (notes.isEmpty) return const SizedBox.shrink();
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const SizedBox(height: 18),
+      SizedBox(height: topGap),
       const LnSectionLabel('Recent imports'),
       LnCardGroup(children: [
         for (final n in notes) _RecentRow(note: n),
@@ -183,7 +184,7 @@ class DashedBorder extends StatelessWidget {
   final double radius;
   @override
   Widget build(BuildContext context) => CustomPaint(
-        painter: _DashPainter(radius),
+        foregroundPainter: _DashPainter(radius),
         child: child,
       );
 }

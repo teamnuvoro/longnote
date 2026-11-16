@@ -121,7 +121,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
     final plan = _selected;
     final yearly = _plan(PlanPeriod.year);
     final monthly = _plan(PlanPeriod.month);
-    return Scaffold(
+    return LnScaffold(
       backgroundColor: LnColors.paper,
       body: SafeArea(
         child: Column(children: [

@@ -49,7 +49,7 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
   @override
   Widget build(BuildContext context) {
     final cloud = (_mode ?? TranscriptionMode.cloud) == TranscriptionMode.cloud;
-    return Scaffold(
+    return LnScaffold(
       backgroundColor: LnColors.paper,
       appBar: const LnNavBar(title: 'Transcription', backLabel: 'Settings'),
       body: ListView(

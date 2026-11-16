@@ -62,7 +62,7 @@ class _ChooseNoteSheetState extends State<ChooseNoteSheet> {
     final maxH = MediaQuery.sizeOf(context).height * 0.86;
     return ConstrainedBox(
       constraints: BoxConstraints(maxHeight: maxH),
-      child: LnSheet(
+      child: LnPlainSheet(
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Padding(
@@ -106,6 +106,7 @@ class _ChooseNoteSheetState extends State<ChooseNoteSheet> {
                       label: n.title,
                       subtitle: _sub(n),
                       labelStyle: LnText.rowTitleSmall,
+                      subtitleColor: LnColors.ink3,
                       checked: n.id == _current,
                       enabled: askable(n),
                       padding: const EdgeInsets.symmetric(
