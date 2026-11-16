@@ -3,7 +3,7 @@
 One line each: the decision, then why. "Lead" = set in the brief. "Build" = made during the build.
 
 ## Product and scope
-- **No Supabase, no account, no sign-in in v1** (lead). Nothing to sign up for; less to break; the privacy promise is simpler.
+- ~~**No Supabase, no account, no sign-in in v1**~~ **SUPERSEDED 16 Nov:** v1 uses Supabase with a hidden anonymous sign-in (see "Backend (16 Nov)"). Still no account screen.
 - **App name "Longnote", bundle id `com.novaralabs.longnote`, iOS 16+** (lead). Placeholder; ASO later.
 - **Consent line in onboarding and privacy screen** (build). The research says not to copy Summary's "secretly record" hook; recording others needs consent.
 - **A user can delete a recording, only with a confirmation dialog** (build). Users expect it; it is the only code path that deletes audio.
@@ -70,3 +70,23 @@ One line each: the decision, then why. "Lead" = set in the brief. "Build" = made
 - **Apple summarizer Swift code lives in `AppDelegate.swift`** (build). Adding a new Swift file needs Xcode project edits that cannot be checked here; AppDelegate is already in the target.
 - **Hidden Benchmark screen (tap version 7 times)** (lead: hidden). Includes dev toggles: fake transcriber, reset test billing.
 - **PDF uses bundled Noto Sans (+ Devanagari fallback)** (build). The default PDF font cannot show ₹, Hindi, or many names.
+
+## Backend (16 Nov)
+Contract: `docs/BACKEND-API.md`. Code: `supabase/`. Test: `tools/e2e/`.
+- **Cloud transcription = Soniox async `stt-async-v6`, diarization + language ID on** (owner go 16 Nov). $0.10/audio hour with speaker labels; what Summary AI uses (R4).
+- **Supabase anonymous sign-in, one hidden user per install** (owner go). Per-user limits and RLS need a user id; no account screen.
+- **Soniox fetches our audio from a 3-h signed URL, not via its Files API** (build). No 40 MB pass-through in an edge function; one less copy to delete. 3 h covers Soniox queue time.
+- **Upload: TUS resumable to the private `uploads` bucket, `<uid>/<note>.m4a`, 6 MB chunks, x-upsert** (build). Survives network loss on 40-70 MB files; one path per note makes retries idempotent.
+- **Bucket/project file cap 500 MB; real cap is Soniox's fixed 300 min per file** (build). The app splits >5 h recordings.
+- **Webhook first, poll fallback** (build). Webhook has a secret header; if it does not arrive 2 min after Soniox finishes, `transcribe-status` pulls the result; hourly cleanup catches the rest.
+- **Audio deleted from our bucket and Soniox as soon as a job ends; any object >24 h swept hourly** (lead). "Audio does not linger" is the privacy promise.
+- **Transcript held only until the app acks it (else 15-30 min after fetch, else 7 days)** (build; the brief said "cleared once fetched"). A lost reply must not lose the transcript; the ack keeps the window near zero.
+- **Turns = same-speaker tokens merged, split at a sentence end after 30 s and anyway after 90 s** (build). Lectures would otherwise be one giant turn; Ask sources need fine timestamps.
+- **Limits: 8 h audio/day, 4 h/rolling hour, 5 h/file, 40 summaries/day, 60 asks/day, $20/day global estimated spend; all env secrets** (lead). TestFlight abuse guard until App Attest. Charged on start (max of claimed length and bytes/12 kB), corrected to Soniox's duration, refunded on failure.
+- **Summary + Ask on OpenAI `gpt-5.4-mini` (Structured Outputs, `reasoning_effort: low`); Anthropic removed** (owner: use the OpenAI key). Picked from `GET /v1/models` on 16 Nov: current small model, 400k context, $0.75/$4.50 per M tokens. Override with `OPENAI_MODEL`.
+- **Summary JSON keeps the old keys + adds `in_short`; 9 styles; user `custom_instructions` are preferences inside the user message, never system rules** (lead). Old Dart parser keeps working; prompt injection cannot lift the anti-invention rules. Note: `summarizer.dart`'s Apple prompt no longer matches the server prompt word for word.
+- **Ask returns `found` + sources; sources not matching a real input `start_ms` are dropped server-side** (lead). The model cannot invent a timestamp.
+- **Ask transcript cap 240k chars; above it keep the turns most related to the question + neighbours, `truncated: true`** (build). Fits ~4.5 h verbatim; simple, no embeddings.
+- **Stable error codes `{error:{code,message,detail}}`** (lead). The app maps codes to plain words.
+- **Function calls require a real user token; the anon key alone gets 401** (build). verify_jwt accepts the anon key, so each function checks the user with GoTrue.
+- **Storage objects are deleted via the `cleanup` function (pg_cron → pg_net), not SQL** (build). Supabase blocks direct deletes from `storage.objects`.

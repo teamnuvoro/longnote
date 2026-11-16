@@ -46,3 +46,6 @@ app.*.map.json
 
 # local secrets (never commit)
 .env.local
+
+# Supabase CLI local state
+supabase/.temp/

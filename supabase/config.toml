@@ -1,0 +1,23 @@
+# Minimal Supabase CLI config for Longnote (functions deploy only).
+# Deploy: supabase functions deploy --use-api --project-ref twbqmfbaotdcxdpsylpn
+project_id = "twbqmfbaotdcxdpsylpn"
+
+[functions.transcribe-start]
+verify_jwt = true
+
+[functions.transcribe-status]
+verify_jwt = true
+
+[functions.summarize]
+verify_jwt = true
+
+[functions.ask]
+verify_jwt = true
+
+# Called by Soniox; authenticated by the x-longnote-webhook-secret header.
+[functions.soniox-webhook]
+verify_jwt = false
+
+# Called by pg_cron; authenticated by the x-cleanup-secret header.
+[functions.cleanup]
+verify_jwt = false
