@@ -117,4 +117,18 @@ class LocalNotificationScheduler implements ReminderScheduler {
     await _init();
     await _plugin.cancel(id: id);
   }
+
+  /// Shows a notification now (e.g. "Your note is ready"). Silently does
+  /// nothing if the user has not allowed notifications.
+  Future<void> showNow(
+      {required int id, required String title, required String body}) async {
+    await _init();
+    await _plugin.show(
+      id: id,
+      title: title,
+      body: body,
+      notificationDetails: const NotificationDetails(
+          iOS: DarwinNotificationDetails(presentAlert: true, presentSound: true)),
+    );
+  }
 }

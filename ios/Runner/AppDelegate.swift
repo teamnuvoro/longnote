@@ -1,3 +1,4 @@
+import AVFoundation
 import Flutter
 import UIKit
 import UserNotifications
@@ -20,6 +21,234 @@ import FoundationModels
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "AppleSummarizerPlugin") {
       AppleSummarizerPlugin.register(with: registrar)
+    }
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "AudioEncoderPlugin") {
+      AudioEncoderPlugin.register(with: registrar)
+    }
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "FilesPlugin") {
+      FilesPlugin.register(with: registrar)
+    }
+  }
+}
+
+// MARK: - Audio encoder (cloud upload format)
+//
+// Channel "longnote/audio_encoder":
+//   encodeM4a {inputs: [path], output: path, startMs: Int, durationMs: Int?,
+//              sampleRate: Double, bitRate: Int}
+//     -> {durationMs: Int, bytes: Int}
+//
+// Joins the inputs (our 5-minute WAV parts, or an imported file) with an
+// AVMutableComposition, reads the requested time range as 16 kHz mono PCM
+// (AVAssetReaderAudioMixOutput resamples and mixes down), and writes AAC-LC
+// in an .m4a with AVAssetWriter. Inputs are only read, never changed.
+public class AudioEncoderPlugin: NSObject, FlutterPlugin {
+  public static func register(with registrar: FlutterPluginRegistrar) {
+    let channel = FlutterMethodChannel(
+      name: "longnote/audio_encoder",
+      binaryMessenger: registrar.messenger())
+    registrar.addMethodCallDelegate(AudioEncoderPlugin(), channel: channel)
+  }
+
+  public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    guard call.method == "encodeM4a" else {
+      result(FlutterMethodNotImplemented)
+      return
+    }
+    guard let args = call.arguments as? [String: Any],
+          let inputs = args["inputs"] as? [String], !inputs.isEmpty,
+          let output = args["output"] as? String else {
+      result(FlutterError(code: "bad_args", message: "inputs and output are required", details: nil))
+      return
+    }
+    let startMs = (args["startMs"] as? NSNumber)?.int64Value ?? 0
+    let durationMs = (args["durationMs"] as? NSNumber)?.int64Value
+    let sampleRate = (args["sampleRate"] as? NSNumber)?.doubleValue ?? 16000
+    let bitRate = (args["bitRate"] as? NSNumber)?.intValue ?? 32000
+    Task.detached(priority: .utility) {
+      do {
+        let out = try await AudioEncoderPlugin.encode(
+          inputs: inputs, output: output, startMs: startMs, durationMs: durationMs,
+          sampleRate: sampleRate, bitRate: bitRate)
+        DispatchQueue.main.async { result(out) }
+      } catch {
+        let message = String(describing: error)
+        DispatchQueue.main.async {
+          result(FlutterError(code: "encode_failed", message: message, details: nil))
+        }
+      }
+    }
+  }
+
+  enum EncodeError: Error {
+    case noAudioTrack(String)
+    case empty
+    case reader(String)
+    case writer(String)
+  }
+
+  /// Mutable flag shared with the writer callback (a class, so the
+  /// @Sendable callback captures a reference, not a mutable var).
+  final class Once: @unchecked Sendable {
+    private var done = false
+    private let lock = NSLock()
+    func claim() -> Bool {
+      lock.lock(); defer { lock.unlock() }
+      if done { return false }
+      done = true
+      return true
+    }
+  }
+
+  static func encode(inputs: [String], output: String, startMs: Int64, durationMs: Int64?,
+                     sampleRate: Double, bitRate: Int) async throws -> [String: Any] {
+    // 1) Join the inputs.
+    let composition = AVMutableComposition()
+    guard let track = composition.addMutableTrack(
+      withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) else {
+      throw EncodeError.writer("could not create a composition track")
+    }
+    var cursor = CMTime.zero
+    for path in inputs {
+      let asset = AVURLAsset(url: URL(fileURLWithPath: path))
+      let tracks = try await asset.loadTracks(withMediaType: .audio)
+      guard let source = tracks.first else { throw EncodeError.noAudioTrack(path) }
+      let duration = try await asset.load(.duration)
+      if !(duration.seconds > 0) { continue }
+      try track.insertTimeRange(
+        CMTimeRange(start: .zero, duration: duration), of: source, at: cursor)
+      cursor = CMTimeAdd(cursor, duration)
+    }
+    let start = CMTime(value: startMs, timescale: 1000)
+    var end = cursor
+    if let d = durationMs {
+      let wanted = CMTimeAdd(start, CMTime(value: d, timescale: 1000))
+      if CMTimeCompare(wanted, end) < 0 { end = wanted }
+    }
+    if CMTimeCompare(end, start) <= 0 { throw EncodeError.empty }
+    let range = CMTimeRange(start: start, end: end)
+
+    // 2) Reader: 16-bit PCM, mono, target rate.
+    let reader = try AVAssetReader(asset: composition)
+    reader.timeRange = range
+    let pcm: [String: Any] = [
+      AVFormatIDKey: kAudioFormatLinearPCM,
+      AVSampleRateKey: sampleRate,
+      AVNumberOfChannelsKey: 1,
+      AVLinearPCMBitDepthKey: 16,
+      AVLinearPCMIsFloatKey: false,
+      AVLinearPCMIsBigEndianKey: false,
+      AVLinearPCMIsNonInterleaved: false,
+    ]
+    let readerOutput = AVAssetReaderAudioMixOutput(audioTracks: [track], audioSettings: pcm)
+    readerOutput.alwaysCopiesSampleData = false
+    guard reader.canAdd(readerOutput) else { throw EncodeError.reader("cannot add output") }
+    reader.add(readerOutput)
+
+    // 3) Writer: AAC-LC, mono, m4a.
+    let outURL = URL(fileURLWithPath: output)
+    try? FileManager.default.removeItem(at: outURL)
+    try FileManager.default.createDirectory(
+      at: outURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+    let writer = try AVAssetWriter(outputURL: outURL, fileType: .m4a)
+    var layout = AudioChannelLayout()
+    layout.mChannelLayoutTag = kAudioChannelLayoutTag_Mono
+    let aac: [String: Any] = [
+      AVFormatIDKey: kAudioFormatMPEG4AAC,
+      AVSampleRateKey: sampleRate,
+      AVNumberOfChannelsKey: 1,
+      AVEncoderBitRateKey: bitRate,
+      AVChannelLayoutKey: Data(bytes: &layout, count: MemoryLayout<AudioChannelLayout>.size),
+    ]
+    let input = AVAssetWriterInput(mediaType: .audio, outputSettings: aac)
+    input.expectsMediaDataInRealTime = false
+    guard writer.canAdd(input) else { throw EncodeError.writer("cannot add input") }
+    writer.add(input)
+
+    guard reader.startReading() else {
+      throw EncodeError.reader(reader.error.map { String(describing: $0) } ?? "startReading failed")
+    }
+    guard writer.startWriting() else {
+      reader.cancelReading()
+      throw EncodeError.writer(writer.error.map { String(describing: $0) } ?? "startWriting failed")
+    }
+    writer.startSession(atSourceTime: range.start)
+
+    // 4) Pump samples.
+    let queue = DispatchQueue(label: "longnote.audio-encoder")
+    let once = Once()
+    try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+      input.requestMediaDataWhenReady(on: queue) {
+        while input.isReadyForMoreMediaData {
+          if let buffer = readerOutput.copyNextSampleBuffer() {
+            if !input.append(buffer) {
+              reader.cancelReading()
+              input.markAsFinished()
+              if once.claim() {
+                cont.resume(throwing: EncodeError.writer(
+                  writer.error.map { String(describing: $0) } ?? "append failed"))
+              }
+              return
+            }
+          } else {
+            input.markAsFinished()
+            if once.claim() {
+              if reader.status == .failed {
+                cont.resume(throwing: EncodeError.reader(
+                  reader.error.map { String(describing: $0) } ?? "read failed"))
+              } else {
+                cont.resume()
+              }
+            }
+            return
+          }
+        }
+      }
+    }
+    await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
+      writer.finishWriting { c.resume() }
+    }
+    if writer.status != .completed {
+      throw EncodeError.writer(writer.error.map { String(describing: $0) } ?? "finish failed")
+    }
+    let attrs = try FileManager.default.attributesOfItem(atPath: output)
+    let bytes = (attrs[.size] as? NSNumber)?.int64Value ?? 0
+    let ms = Int64((CMTimeGetSeconds(range.duration) * 1000).rounded())
+    return ["durationMs": ms, "bytes": bytes]
+  }
+}
+
+// MARK: - Files (iCloud backup flag)
+//
+// Channel "longnote/files":
+//   setExcludedFromBackup {path, excluded} -> Bool
+public class FilesPlugin: NSObject, FlutterPlugin {
+  public static func register(with registrar: FlutterPluginRegistrar) {
+    let channel = FlutterMethodChannel(
+      name: "longnote/files",
+      binaryMessenger: registrar.messenger())
+    registrar.addMethodCallDelegate(FilesPlugin(), channel: channel)
+  }
+
+  public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    guard call.method == "setExcludedFromBackup" else {
+      result(FlutterMethodNotImplemented)
+      return
+    }
+    guard let args = call.arguments as? [String: Any],
+          let path = args["path"] as? String,
+          let excluded = args["excluded"] as? Bool else {
+      result(FlutterError(code: "bad_args", message: "path and excluded are required", details: nil))
+      return
+    }
+    var url = URL(fileURLWithPath: path)
+    var values = URLResourceValues()
+    values.isExcludedFromBackup = excluded
+    do {
+      try url.setResourceValues(values)
+      result(true)
+    } catch {
+      result(FlutterError(code: "failed", message: String(describing: error), details: nil))
     }
   }
 }

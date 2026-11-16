@@ -1,3 +1,4 @@
+import '../cloud/longnote_api.dart';
 import '../db/app_database.dart';
 import 'apple_on_device_summarizer.dart';
 import 'cloud_summarizer.dart';
@@ -48,10 +49,11 @@ class SummaryService {
   Future<SummaryEngine> engine() async => SummaryEngine.parse(await kv.get(kvKey));
   Future<void> setEngine(SummaryEngine e) => kv.set(kvKey, e.name);
 
-  factory SummaryService.standard(KvStore kv) => SummaryService(
+  factory SummaryService.standard(KvStore kv, {LongnoteApi? api}) =>
+      SummaryService(
         kv: kv,
         apple: AppleOnDeviceSummarizer(),
-        cloud: CloudSummarizer(),
+        cloud: CloudSummarizer(api: api),
         local: LocalExtractiveSummarizer(),
       );
 

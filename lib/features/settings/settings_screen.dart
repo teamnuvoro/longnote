@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../app_services.dart';
+import '../../core/cloud/backend_config.dart';
 import '../../core/analytics/analytics.dart';
 import '../../core/billing/billing_service.dart';
 import '../../core/billing/trial_reminder.dart';
-import '../../core/config.dart';
 import '../../core/summary/apple_on_device_summarizer.dart';
 import '../../core/summary/summary_service.dart';
 import '../../core/transcription/transcriber.dart';
@@ -203,7 +203,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         enabled = _appleAvailable == true;
         sub = enabled ? 'Nothing leaves your phone.' : (_appleReason ?? 'Not available on this phone.');
       case SummaryEngine.cloud:
-        enabled = AppConfig.cloudSummaryConfigured;
+        enabled = BackendConfig.current.isConfigured;
         sub = enabled
             ? 'Better summaries. Sends the transcript text (never audio) to our server and an AI provider. See Privacy.'
             : 'Not available in this build yet.';

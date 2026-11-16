@@ -3,7 +3,12 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:longnote/core/cloud/api_error.dart';
+import 'package:longnote/core/cloud/backend_config.dart';
+import 'package:longnote/core/cloud/longnote_api.dart';
+import 'package:longnote/core/cloud/supabase_auth.dart';
 import 'package:longnote/core/summary/cloud_summarizer.dart';
+import 'package:longnote/core/summary/summary_style.dart';
 import 'package:longnote/core/summary/local_extractive_summarizer.dart';
 import 'package:longnote/core/summary/summary_service.dart';
 
@@ -92,13 +97,31 @@ void main() {
   });
 
   group('CloudSummarizer', () {
-    test('posts transcript text and parses {"summary": {...}}', () async {
+    const cfg = BackendConfig(url: 'https://proj.supabase.co', anonKey: 'anon');
+    http.Response signup() => http.Response(
+        jsonEncode({
+          'access_token': 'user-jwt',
+          'refresh_token': 'r1',
+          'expires_in': 3600,
+          'user': {'id': 'u1'}
+        }),
+        200);
+
+    LongnoteApi apiWith(MockClient client) => LongnoteApi(
+        config: cfg,
+        auth: SupabaseAuth(config: cfg, kv: env.kv, client: client),
+        client: client);
+
+    test('posts transcript text with the USER JWT, style and language; parses in_short',
+        () async {
       late http.Request seen;
       final client = MockClient((req) async {
+        if (req.url.path == '/auth/v1/signup') return signup();
         seen = req;
         return http.Response(
             jsonEncode({
               'summary': {
+                'in_short': 'They agreed on B.',
                 'key_points': ['A'],
                 'decisions': ['B'],
                 'action_items': [
@@ -106,33 +129,57 @@ void main() {
                 ],
                 'numbers_and_dates': [],
                 'open_questions': [],
-              }
+              },
+              'model': 'm',
+              'style': 'lecture',
             }),
             200);
       });
       final c = CloudSummarizer(
-          url: 'https://example.invalid/fn', publicKey: 'anon', client: client);
-      final s = await c.summarizeChunk('hello', part: 1, parts: 1);
+          api: apiWith(client),
+          options: const SummaryOptions(
+              style: SummaryStyle.lecture,
+              customInstructions: 'Short bullets.',
+              outputLanguage: 'Hindi'));
+      final s = await c.summarizeChunk('hello', part: 1, parts: 2);
+      expect(s.inShort, 'They agreed on B.');
       expect(s.decisions, ['B']);
       expect(s.actionItems.single.owner, 'Dev');
+      expect(seen.url.toString(), 'https://proj.supabase.co/functions/v1/summarize');
       final body = jsonDecode(seen.body) as Map;
       expect(body['transcript'], 'hello');
-      expect(seen.headers['Authorization'], 'Bearer anon');
+      expect(body['part'], 1);
+      expect(body['parts'], 2);
+      expect(body['style'], 'lecture');
+      expect(body['custom_instructions'], 'Short bullets.');
+      expect(body['output_language'], 'Hindi');
+      // The user's token, NOT the anon key (the server answers 401 to that).
+      expect(seen.headers['Authorization'], 'Bearer user-jwt');
+      expect(seen.headers['apikey'], 'anon');
       // Never an AI provider key in the request.
       expect(seen.headers.keys.map((k) => k.toLowerCase()),
           isNot(contains('x-api-key')));
     });
 
-    test('HTTP error throws (so the service falls back)', () async {
-      final c = CloudSummarizer(
-          url: 'https://example.invalid/fn',
-          client: MockClient((_) async => http.Response('nope', 500)));
-      expect(() => c.summarizeChunk('x', part: 1, parts: 1),
-          throwsA(isA<CloudSummaryException>()));
+    test('server error code is surfaced (so the caller can retry or fall back)',
+        () async {
+      final client = MockClient((req) async {
+        if (req.url.path == '/auth/v1/signup') return signup();
+        return http.Response(
+            jsonEncode({
+              'error': {'code': 'upstream_failed', 'message': 'x'}
+            }),
+            502);
+      });
+      final c = CloudSummarizer(api: apiWith(client));
+      await expectLater(
+          c.summarizeChunk('x', part: 1, parts: 1),
+          throwsA(isA<ApiException>()
+              .having((e) => e.code, 'code', 'upstream_failed')));
     });
 
     test('not configured -> unavailable', () async {
-      expect(await CloudSummarizer(url: '').isAvailable(), isFalse);
+      expect(await CloudSummarizer().isAvailable(), isFalse);
     });
   });
 }

@@ -32,18 +32,10 @@ class AppConfig {
   static const Duration retryBaseDelay = Duration(seconds: 10);
   static const Duration retryMaxDelay = Duration(minutes: 10);
 
-  // ---- Cloud summary (optional, off unless configured) ---------------------
-  /// Supabase Edge Function URL, e.g.
-  /// `https://PROJECT.supabase.co/functions/v1/summarize`
-  static const String cloudSummaryUrl =
-      String.fromEnvironment('CLOUD_SUMMARY_URL', defaultValue: '');
-
-  /// Supabase *publishable/anon* key (designed to be public). This is NOT an
-  /// AI provider key; the Anthropic key lives only in the server secret.
-  static const String cloudSummaryPublicKey =
-      String.fromEnvironment('CLOUD_SUMMARY_PUBLIC_KEY', defaultValue: '');
-
-  static bool get cloudSummaryConfigured => cloudSummaryUrl.isNotEmpty;
+  // ---- Backend --------------------------------------------------------------
+  // Supabase URL + anon key: lib/core/cloud/backend_config.dart (overridable
+  // with --dart-define SUPABASE_URL / SUPABASE_ANON_KEY). No AI key ever
+  // ships in the app.
 
   // ---- Billing --------------------------------------------------------------
   static const int trialDays = 3;

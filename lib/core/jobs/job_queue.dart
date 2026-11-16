@@ -16,6 +16,44 @@ typedef JobProcessor = Future<void> Function(
 
 enum JobState { pending, running, done, failed }
 
+/// Thrown by a processor when the work is not finished but nothing failed:
+/// polling a server job, waiting for the network, waiting for a usage limit
+/// to reset. The job runs again after [wait]; the try counter is NOT used up.
+class JobDeferral implements Exception {
+  JobDeferral({
+    required this.wait,
+    required this.status,
+    this.progress,
+    this.error,
+    this.errorCode,
+    this.progressValue,
+  });
+
+  final Duration wait;
+
+  /// Status shown meanwhile (e.g. transcribing, waitingForNetwork, failed for
+  /// limit_reached).
+  final ProcessingStatus status;
+  final String? progress;
+  final double? progressValue;
+  final String? error;
+  final String? errorCode;
+
+  @override
+  String toString() => 'JobDeferral(${status.name}, $wait)';
+}
+
+/// A failure with plain words for the user. [retryable] false = give up at
+/// once (no automatic retries), e.g. a bad request.
+class JobFailure implements Exception {
+  JobFailure(this.message, {this.code, this.retryable = true});
+  final String message;
+  final String? code;
+  final bool retryable;
+  @override
+  String toString() => message;
+}
+
 /// Persistent, sequential processing queue with exponential backoff.
 ///
 /// - Automatic retries: [maxAutoAttempts] tries, delay = base * 2^(n-1),
@@ -74,6 +112,8 @@ class ProcessingJobQueue {
     _schedule();
   }
 
+  /// Queues (or re-queues) a note from the start of its pipeline. Work
+  /// already done (uploaded pieces, saved transcript parts) is kept.
   Future<void> enqueue(String recordingId) async {
     final now = _clock.now().millisecondsSinceEpoch;
     await _db.insert(
@@ -87,7 +127,7 @@ class ProcessingJobQueue {
           'updated_at': now,
         },
         conflictAlgorithm: ConflictAlgorithm.replace);
-    await repo.setProcessing(recordingId, ProcessingStatus.queued);
+    await repo.setProcessing(recordingId, ProcessingStatus.queued, tries: 0);
     _schedule();
   }
 
@@ -96,6 +136,30 @@ class ProcessingJobQueue {
     await analytics.log(AnalyticsEvent.processingRetried,
         recordingId: recordingId, props: {'manual': true});
     await enqueue(recordingId);
+  }
+
+  /// Network came back: run every job that was waiting for it now.
+  Future<void> wakeNetworkWaiters() async {
+    final now = _clock.now().millisecondsSinceEpoch;
+    await _db.rawUpdate('''
+      UPDATE jobs SET next_attempt_at = ?
+      WHERE state = ? AND recording_id IN (
+        SELECT id FROM recordings WHERE processing_status = ?)''',
+        [now, JobState.pending.name, ProcessingStatus.waitingForNetwork.name]);
+    _schedule();
+  }
+
+  /// App start / back to foreground: check every pending job now (server
+  /// jobs that were being polled, uploads that were cut off). Jobs deferred
+  /// for a usage limit (status failed) keep their reset time.
+  Future<void> pokeAll() async {
+    final now = _clock.now().millisecondsSinceEpoch;
+    await _db.rawUpdate('''
+      UPDATE jobs SET next_attempt_at = ?
+      WHERE state = ? AND next_attempt_at > ? AND recording_id IN (
+        SELECT id FROM recordings WHERE processing_status != ?)''',
+        [now, JobState.pending.name, now, ProcessingStatus.failed.name]);
+    _schedule();
   }
 
   /// Hold processing (e.g. while a recording is running, to keep the CPU and
@@ -153,17 +217,30 @@ class ProcessingJobQueue {
         repo.setProcessing(id, _stageFor(msg), progress: msg);
       });
       await _setJob(id, JobState.done, attempts: attempts + 1);
-      await repo.setProcessing(id, ProcessingStatus.done);
+      await repo.setProcessing(id, ProcessingStatus.done, tries: 0);
+    } on JobDeferral catch (d) {
+      await _setJob(id, JobState.pending,
+          attempts: attempts,
+          error: d.error,
+          nextAt: _clock.now().add(d.wait));
+      await repo.setProcessing(id, d.status,
+          error: d.error,
+          errorCode: d.errorCode,
+          progress: d.progress,
+          progressValue: d.progressValue);
     } catch (e) {
       final failed = attempts + 1;
-      final msg = _short(e);
-      final isFinal = failed >= maxAutoAttempts;
+      final msg = e is JobFailure ? e.message : _short(e);
+      final code = e is JobFailure ? e.code : null;
+      final isFinal =
+          failed >= maxAutoAttempts || (e is JobFailure && !e.retryable);
       await analytics.log(AnalyticsEvent.processingFailed,
           recordingId: id,
-          props: {'attempt': failed, 'final': isFinal, 'error': msg});
+          props: {'attempt': failed, 'final': isFinal, 'error': code ?? msg});
       if (isFinal) {
         await _setJob(id, JobState.failed, attempts: failed, error: msg);
-        await repo.setProcessing(id, ProcessingStatus.failed, error: msg);
+        await repo.setProcessing(id, ProcessingStatus.failed,
+            error: msg, errorCode: code, tries: failed);
       } else {
         final wait = backoffFor(failed);
         await _setJob(id, JobState.pending,
@@ -171,7 +248,10 @@ class ProcessingJobQueue {
             error: msg,
             nextAt: _clock.now().add(wait));
         await repo.setProcessing(id, ProcessingStatus.queued,
-            error: msg, progress: 'Will try again in ${wait.inSeconds} s');
+            error: msg,
+            errorCode: code,
+            tries: failed,
+            progress: 'Will try again in ${wait.inSeconds} s');
       }
     }
   }
