@@ -157,9 +157,12 @@ void main() {
         () async {
       await toSettings();
       final before = await settings.speakerLabels();
-      await qa.tap(byLabel('Speaker labels'));
+      final toggle = find.descendant(
+          of: find.widgetWithText(LnListRow, 'Speaker labels'),
+          matching: find.byType(LnToggle));
+      await qa.tap(toggle);
       expect(await settings.speakerLabels(), !before);
-      await qa.tap(byLabel('Speaker labels'));
+      await qa.tap(toggle);
       expect(await settings.speakerLabels(), before);
       for (final row in ['Privacy policy', 'Terms of use', 'Contact us']) {
         final n = opened.length;
@@ -174,6 +177,7 @@ void main() {
     const ft = 'Fast taps';
     await qa.check('H1', 'Every tab tapped fast, 3 rounds: no error, ends on Notes',
         () async {
+      await qa.home();
       for (var round = 0; round < 3; round++) {
         for (final tab in ['Ask', 'Import', 'Settings', 'Notes']) {
           await qa.tap(byLabel(tab), after: const Duration(milliseconds: 90));
@@ -190,17 +194,20 @@ void main() {
       await qa.expectOnTop<NotesScreen>();
     }, section: ft);
 
+    // Two taps 60 ms apart on the same spot (the second lands on whatever is
+    // there by then, like a fast finger).
     Future<void> doubleTap(Finder f) async {
       await qa.waitFor(f);
-      final target = f.hitTestable().first;
-      await t.tap(target);
+      final at = t.getCenter(f.hitTestable().first);
+      await t.tapAt(at);
       await t.pump(const Duration(milliseconds: 60));
-      await t.tap(target, warnIfMissed: false);
+      await t.tapAt(at);
       await qa.wait(const Duration(milliseconds: 1200));
     }
 
     await qa.check('H2', 'Double-tap search, trial chip and a note: each opens once',
         () async {
+      await qa.home();
       await doubleTap(find.byType(LnSearchField));
       expect(qa.count<SearchScreen>(), 1, reason: 'search opened twice');
       await qa.tap(byLabel('Cancel'));
@@ -221,6 +228,7 @@ void main() {
 
     await qa.check('H3', 'Double-tap Record: one recording screen; Discard keeps no note',
         () async {
+      await qa.home();
       final before = (await qa.services.repo.all()).length;
       FilePcmSource.nextPath = null; // silence
       await doubleTap(find.text('Record'));
@@ -243,6 +251,7 @@ void main() {
     Recording? imported;
     await qa.check('I1', 'Import -> Files (host file) -> details -> Import and '
         'transcribe -> listed', () async {
+      await qa.home();
       await qa.tap(byLabel('Import'));
       await qa.expectOnTop<ImportScreen>();
       await qa.tap(find.text('Files'));

@@ -1,7 +1,7 @@
 # Longnote simulator QA (docs/QA-SIMULATOR.md)
 name: iOS simulator QA
 
-# Manual only: macOS minutes cost money, and each run sends ~60 s of audio to
+# Started by hand (see below): macOS minutes cost money, and each run sends ~60 s of audio to
 # the real backend (Soniox + OpenAI, a few cents). No secrets: the Supabase URL
 # and anon key are the committed defaults in lib/core/cloud/backend_config.dart.
 # workflow_dispatch needs this file on the default branch (master); until

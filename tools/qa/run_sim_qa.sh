@@ -49,6 +49,13 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Generate ios/Pods before the first build: flutter only notices a plugin
+# without an arm64-simulator slice (ffmpeg_kit_flutter_new_min, via
+# whisper_ggml) when Pods exists, and then builds the simulator app for x86_64.
+# Without this the first build links arm64 and fails.
+flutter build ios --simulator --debug --config-only --no-pub \
+  -t integration_test/qa_1_main_test.dart > "$OUT/logs/config-only.log" 2>&1 || true
+
 # Fresh install for run 1.
 xcrun simctl uninstall "$UDID" "$BUNDLE" 2>/dev/null || true
 
@@ -87,6 +94,11 @@ for r in "${RUNS[@]}"; do
     tools/qa/net_block.sh on "$OUT"
   fi
   run "$1" "$2"
+  if grep -q "Could not build the application" "$OUT/logs/$1.log" 2>/dev/null; then
+    echo "--- $1: build failed, trying once more"
+    mv "$OUT/logs/$1.log" "$OUT/logs/$1.build-failed.log"
+    run "$1" "$2"
+  fi
   if [ "$1" = 4-offline ]; then tools/qa/net_block.sh off "$OUT"; fi
 done
 

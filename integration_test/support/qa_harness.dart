@@ -472,6 +472,22 @@ class Qa {
 
   int count<T>() => find.byType(T).evaluate().length;
 
+  /// Back to the Notes tab from wherever the last check left the app (a
+  /// failed check may leave a screen or sheet open).
+  Future<void> home() async {
+    for (var i = 0; i < 6; i++) {
+      if (find.byType(LnTabBar).hitTestable().evaluate().isNotEmpty) break;
+      try {
+        await back();
+      } catch (_) {
+        await tester.binding.handlePopRoute();
+        await wait(const Duration(milliseconds: 600));
+      }
+    }
+    final notes = byLabel('Notes').hitTestable();
+    if (notes.evaluate().isNotEmpty) await tap(notes.first);
+  }
+
   /// A screen's back control.
   Future<void> back() async {
     final nav = find.byKey(const ValueKey('nav-back')).hitTestable();
