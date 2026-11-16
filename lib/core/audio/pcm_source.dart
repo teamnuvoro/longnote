@@ -94,6 +94,21 @@ class RecordPcmSource implements PcmSource {
   @override
   Future<void> stop() async {
     await _rec.stop();
+    // Give the microphone back: without this the session stays in
+    // playAndRecord, iOS keeps the orange mic dot on, and note playback runs
+    // in a recording session.
+    try {
+      final session = await AudioSession.instance;
+      await session.configure(const AudioSessionConfiguration.music());
+      await session.setActive(false,
+          avAudioSessionSetActiveOptions:
+              AVAudioSessionSetActiveOptions.notifyOthersOnDeactivation);
+    } catch (_) {
+      // Best effort: a failure here must never lose the recording.
+    }
+    await _sub?.cancel();
+    _sub = null;
+    _sessionReady = false;
   }
 
   @override

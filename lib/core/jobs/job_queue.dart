@@ -1,3 +1,4 @@
+import '../diagnostics/crash_reporter.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -11,8 +12,11 @@ import '../util/clock.dart';
 
 /// Does the actual work for one recording. Must be idempotent/resumable and
 /// must NEVER delete or modify audio files.
-typedef JobProcessor = Future<void> Function(
-    String recordingId, void Function(String progress) onProgress);
+typedef JobProcessor =
+    Future<void> Function(
+      String recordingId,
+      void Function(String progress) onProgress,
+    );
 
 enum JobState { pending, running, done, failed }
 
@@ -72,8 +76,8 @@ class ProcessingJobQueue {
     this.baseDelay = AppConfig.retryBaseDelay,
     this.maxDelay = AppConfig.retryMaxDelay,
     this.autoSchedule = true,
-  })  : _db = db,
-        _clock = clock;
+  }) : _db = db,
+       _clock = clock;
 
   final Database _db;
   final RecordingRepository repo;
@@ -102,12 +106,22 @@ class ProcessingJobQueue {
   /// pending (their work is resumable per segment).
   Future<void> resetInterrupted() async {
     final now = _clock.now().millisecondsSinceEpoch;
-    final rows = await _db.query('jobs',
-        where: 'state = ?', whereArgs: [JobState.running.name]);
+    final rows = await _db.query(
+      'jobs',
+      where: 'state = ?',
+      whereArgs: [JobState.running.name],
+    );
     for (final r in rows) {
-      await _db.update('jobs', {'state': JobState.pending.name, 'updated_at': now},
-          where: 'recording_id = ?', whereArgs: [r['recording_id']]);
-      await repo.setProcessing(r['recording_id'] as String, ProcessingStatus.queued);
+      await _db.update(
+        'jobs',
+        {'state': JobState.pending.name, 'updated_at': now},
+        where: 'recording_id = ?',
+        whereArgs: [r['recording_id']],
+      );
+      await repo.setProcessing(
+        r['recording_id'] as String,
+        ProcessingStatus.queued,
+      );
     }
     _schedule();
   }
@@ -116,36 +130,38 @@ class ProcessingJobQueue {
   /// already done (uploaded pieces, saved transcript parts) is kept.
   Future<void> enqueue(String recordingId) async {
     final now = _clock.now().millisecondsSinceEpoch;
-    await _db.insert(
-        'jobs',
-        {
-          'recording_id': recordingId,
-          'state': JobState.pending.name,
-          'attempts': 0,
-          'next_attempt_at': now,
-          'last_error': null,
-          'updated_at': now,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace);
+    await _db.insert('jobs', {
+      'recording_id': recordingId,
+      'state': JobState.pending.name,
+      'attempts': 0,
+      'next_attempt_at': now,
+      'last_error': null,
+      'updated_at': now,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
     await repo.setProcessing(recordingId, ProcessingStatus.queued, tries: 0);
     _schedule();
   }
 
   /// User tapped "Retry processing".
   Future<void> retry(String recordingId) async {
-    await analytics.log(AnalyticsEvent.processingRetried,
-        recordingId: recordingId, props: {'manual': true});
+    await analytics.log(
+      AnalyticsEvent.processingRetried,
+      recordingId: recordingId,
+      props: {'manual': true},
+    );
     await enqueue(recordingId);
   }
 
   /// Network came back: run every job that was waiting for it now.
   Future<void> wakeNetworkWaiters() async {
     final now = _clock.now().millisecondsSinceEpoch;
-    await _db.rawUpdate('''
+    await _db.rawUpdate(
+      '''
       UPDATE jobs SET next_attempt_at = ?
       WHERE state = ? AND recording_id IN (
         SELECT id FROM recordings WHERE processing_status = ?)''',
-        [now, JobState.pending.name, ProcessingStatus.waitingForNetwork.name]);
+      [now, JobState.pending.name, ProcessingStatus.waitingForNetwork.name],
+    );
     _schedule();
   }
 
@@ -154,11 +170,13 @@ class ProcessingJobQueue {
   /// for a usage limit (status failed) keep their reset time.
   Future<void> pokeAll() async {
     final now = _clock.now().millisecondsSinceEpoch;
-    await _db.rawUpdate('''
+    await _db.rawUpdate(
+      '''
       UPDATE jobs SET next_attempt_at = ?
       WHERE state = ? AND next_attempt_at > ? AND recording_id IN (
         SELECT id FROM recordings WHERE processing_status != ?)''',
-        [now, JobState.pending.name, now, ProcessingStatus.failed.name]);
+      [now, JobState.pending.name, now, ProcessingStatus.failed.name],
+    );
     _schedule();
   }
 
@@ -175,8 +193,11 @@ class ProcessingJobQueue {
   }
 
   Future<Map<String, Object?>?> job(String recordingId) async {
-    final r = await _db
-        .query('jobs', where: 'recording_id = ?', whereArgs: [recordingId]);
+    final r = await _db.query(
+      'jobs',
+      where: 'recording_id = ?',
+      whereArgs: [recordingId],
+    );
     return r.isEmpty ? null : r.first;
   }
 
@@ -189,11 +210,13 @@ class ProcessingJobQueue {
       while (!_paused) {
         final now = _clock.now().millisecondsSinceEpoch;
         // Ties (notes queued in the same millisecond) go in queue order.
-        final due = await _db.query('jobs',
-            where: 'state = ? AND next_attempt_at <= ?',
-            whereArgs: [JobState.pending.name, now],
-            orderBy: 'next_attempt_at ASC, rowid ASC',
-            limit: 1);
+        final due = await _db.query(
+          'jobs',
+          where: 'state = ? AND next_attempt_at <= ?',
+          whereArgs: [JobState.pending.name, now],
+          orderBy: 'next_attempt_at ASC, rowid ASC',
+          limit: 1,
+        );
         if (due.isEmpty) break;
         await _runOne(due.first);
         ran++;
@@ -209,10 +232,14 @@ class ProcessingJobQueue {
     final id = job['recording_id'] as String;
     final attempts = job['attempts'] as int;
     if (attempts > 0) {
-      await analytics.log(AnalyticsEvent.processingRetried,
-          recordingId: id, props: {'manual': false, 'attempt': attempts + 1});
+      await analytics.log(
+        AnalyticsEvent.processingRetried,
+        recordingId: id,
+        props: {'manual': false, 'attempt': attempts + 1},
+      );
     }
     await _setJob(id, JobState.running, attempts: attempts);
+    CrashReporter.instance?.breadcrumb('job start a=$attempts');
     try {
       await processor(id, (msg) {
         repo.setProcessing(id, _stageFor(msg), progress: msg);
@@ -220,39 +247,60 @@ class ProcessingJobQueue {
       await _setJob(id, JobState.done, attempts: attempts + 1);
       await repo.setProcessing(id, ProcessingStatus.done, tries: 0);
     } on JobDeferral catch (d) {
-      await _setJob(id, JobState.pending,
-          attempts: attempts,
-          error: d.error,
-          nextAt: _clock.now().add(d.wait));
-      await repo.setProcessing(id, d.status,
-          error: d.error,
-          errorCode: d.errorCode,
-          progress: d.progress,
-          progressValue: d.progressValue);
+      CrashReporter.instance?.breadcrumb('job deferred ${d.status.name}');
+      await _setJob(
+        id,
+        JobState.pending,
+        attempts: attempts,
+        error: d.error,
+        nextAt: _clock.now().add(d.wait),
+      );
+      await repo.setProcessing(
+        id,
+        d.status,
+        error: d.error,
+        errorCode: d.errorCode,
+        progress: d.progress,
+        progressValue: d.progressValue,
+      );
     } catch (e) {
+      CrashReporter.instance?.breadcrumb('job error ${e.runtimeType}');
       final failed = attempts + 1;
       final msg = e is JobFailure ? e.message : _short(e);
       final code = e is JobFailure ? e.code : null;
       final isFinal =
           failed >= maxAutoAttempts || (e is JobFailure && !e.retryable);
-      await analytics.log(AnalyticsEvent.processingFailed,
-          recordingId: id,
-          props: {'attempt': failed, 'final': isFinal, 'error': code ?? msg});
+      await analytics.log(
+        AnalyticsEvent.processingFailed,
+        recordingId: id,
+        props: {'attempt': failed, 'final': isFinal, 'error': code ?? msg},
+      );
       if (isFinal) {
         await _setJob(id, JobState.failed, attempts: failed, error: msg);
-        await repo.setProcessing(id, ProcessingStatus.failed,
-            error: msg, errorCode: code, tries: failed);
+        await repo.setProcessing(
+          id,
+          ProcessingStatus.failed,
+          error: msg,
+          errorCode: code,
+          tries: failed,
+        );
       } else {
         final wait = backoffFor(failed);
-        await _setJob(id, JobState.pending,
-            attempts: failed,
-            error: msg,
-            nextAt: _clock.now().add(wait));
-        await repo.setProcessing(id, ProcessingStatus.queued,
-            error: msg,
-            errorCode: code,
-            tries: failed,
-            progress: 'Will try again in ${wait.inSeconds} s');
+        await _setJob(
+          id,
+          JobState.pending,
+          attempts: failed,
+          error: msg,
+          nextAt: _clock.now().add(wait),
+        );
+        await repo.setProcessing(
+          id,
+          ProcessingStatus.queued,
+          error: msg,
+          errorCode: code,
+          tries: failed,
+          progress: 'Will try again in ${wait.inSeconds} s',
+        );
       }
     }
   }
@@ -261,34 +309,43 @@ class ProcessingJobQueue {
       ? ProcessingStatus.summarizing
       : ProcessingStatus.transcribing;
 
-  Future<void> _setJob(String id, JobState s,
-      {required int attempts, String? error, DateTime? nextAt}) {
+  Future<void> _setJob(
+    String id,
+    JobState s, {
+    required int attempts,
+    String? error,
+    DateTime? nextAt,
+  }) {
     final now = _clock.now();
     return _db.update(
-        'jobs',
-        {
-          'state': s.name,
-          'attempts': attempts,
-          'last_error': error,
-          'next_attempt_at': (nextAt ?? now).millisecondsSinceEpoch,
-          'updated_at': now.millisecondsSinceEpoch,
-        },
-        where: 'recording_id = ?',
-        whereArgs: [id]);
+      'jobs',
+      {
+        'state': s.name,
+        'attempts': attempts,
+        'last_error': error,
+        'next_attempt_at': (nextAt ?? now).millisecondsSinceEpoch,
+        'updated_at': now.millisecondsSinceEpoch,
+      },
+      where: 'recording_id = ?',
+      whereArgs: [id],
+    );
   }
 
   void _schedule() {
     if (!autoSchedule || _paused) return;
     _timer?.cancel();
     () async {
-      final rows = await _db.query('jobs',
-          where: 'state = ?',
-          whereArgs: [JobState.pending.name],
-          orderBy: 'next_attempt_at ASC',
-          limit: 1);
+      final rows = await _db.query(
+        'jobs',
+        where: 'state = ?',
+        whereArgs: [JobState.pending.name],
+        orderBy: 'next_attempt_at ASC',
+        limit: 1,
+      );
       if (rows.isEmpty || _paused) return;
       final at = DateTime.fromMillisecondsSinceEpoch(
-          rows.first['next_attempt_at'] as int);
+        rows.first['next_attempt_at'] as int,
+      );
       var wait = at.difference(_clock.now());
       if (wait.isNegative) wait = Duration.zero;
       _timer?.cancel();

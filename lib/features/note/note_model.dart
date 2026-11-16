@@ -8,6 +8,7 @@ import '../../core/notes/moments.dart';
 import '../../core/notes/speakers.dart';
 import '../../core/recording/recording_repository.dart';
 import '../../core/summary/summary_models.dart';
+import '../../core/util/coalescing_runner.dart';
 
 /// Everything the note screen (D1-D8) shows, loaded off the build path.
 class NoteData {
@@ -96,28 +97,11 @@ class NoteModel extends ChangeNotifier {
   /// True once we know the note does not exist (deleted).
   bool gone = false;
   bool _disposed = false;
-  bool _queued = false;
-  bool _running = false;
   String? _transcriptKey;
   List<TranscriptLine> _lines = const [];
 
-  void _schedule() {
-    if (_queued) return;
-    _queued = true;
-    scheduleMicrotask(() async {
-      _queued = false;
-      if (_running) {
-        _schedule();
-        return;
-      }
-      _running = true;
-      try {
-        await _load();
-      } finally {
-        _running = false;
-      }
-    });
-  }
+  late final CoalescingRunner _runner = CoalescingRunner(_load);
+  void _schedule() => _runner.request();
 
   Future<void> reload() => _load();
 
@@ -172,6 +156,7 @@ class NoteModel extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _runner.close();
     repo.removeListener(_schedule);
     super.dispose();
   }

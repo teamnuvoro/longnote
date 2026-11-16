@@ -21,3 +21,6 @@ verify_jwt = false
 # Called by pg_cron; authenticated by the x-cleanup-secret header.
 [functions.cleanup]
 verify_jwt = false
+
+[functions.report]
+verify_jwt = true

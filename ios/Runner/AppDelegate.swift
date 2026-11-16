@@ -1,5 +1,6 @@
 import AVFoundation
 import Flutter
+import MetricKit
 import UIKit
 import UserNotifications
 #if canImport(FoundationModels)
@@ -14,6 +15,10 @@ import FoundationModels
   ) -> Bool {
     // flutter_local_notifications: show the trial reminder even if the app is open.
     UNUserNotificationCenter.current().delegate = self as UNUserNotificationCenterDelegate
+    // Crash / hang reports from iOS (delivered on a later launch); the Dart
+    // CrashReporter uploads the files.
+    MXMetricManager.shared.add(DiagnosticsSubscriber.shared)
+    DiagnosticsSubscriber.shared.save(MXMetricManager.shared.pastDiagnosticPayloads)
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
@@ -340,5 +345,33 @@ public class AppleSummarizerPlugin: NSObject, FlutterPlugin {
     }
     #endif
     result(FlutterError(code: "unavailable", message: "Needs iOS 26 or later.", details: nil))
+  }
+}
+
+
+// MARK: - Crash / hang diagnostics (MetricKit)
+//
+// Writes each diagnostic payload (crashes, hangs, CPU and disk-write
+// exceptions, with call stacks) as JSON into
+// <Application Support>/diagnostics/mx-*.json. lib/core/diagnostics/
+// crash_reporter.dart uploads and deletes them.
+final class DiagnosticsSubscriber: NSObject, MXMetricManagerSubscriber {
+  static let shared = DiagnosticsSubscriber()
+
+  func didReceive(_ payloads: [MXDiagnosticPayload]) { save(payloads) }
+
+  func save(_ payloads: [MXDiagnosticPayload]) {
+    guard !payloads.isEmpty,
+          let base = FileManager.default.urls(
+            for: .applicationSupportDirectory, in: .userDomainMask).first else { return }
+    let dir = base.appendingPathComponent("diagnostics", isDirectory: true)
+    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    for p in payloads {
+      // Same payload delivered twice (past + live) keeps one file.
+      let key = Int64(p.timeStampBegin.timeIntervalSince1970 * 1000)
+      let name = "mx-\(key)-\(Int64(p.timeStampEnd.timeIntervalSince1970 * 1000)).json"
+      try? p.jsonRepresentation().write(
+        to: dir.appendingPathComponent(name), options: .atomic)
+    }
   }
 }

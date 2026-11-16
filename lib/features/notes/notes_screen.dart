@@ -12,6 +12,7 @@ import '../../core/models/recording.dart';
 import '../../core/recording/recording_controller.dart';
 import '../../core/recording/recording_repository.dart';
 import '../../core/util/clock.dart';
+import '../../core/util/coalescing_runner.dart';
 import '../../ui/widgets.dart';
 import '../note/kit.dart';
 
@@ -25,39 +26,32 @@ class NotesModel extends ChangeNotifier {
   List<Recording>? notes;
   Map<String, String> previews = const {};
   String? _previewKey;
-  bool _queued = false, _running = false, _disposed = false;
+  bool _disposed = false;
 
-  void _schedule() {
-    if (_queued) return;
-    _queued = true;
-    scheduleMicrotask(() async {
-      _queued = false;
-      if (_running) return _schedule();
-      _running = true;
-      try {
-        final all = await repo.all();
-        // Summaries only change when a note finishes: re-read previews then.
-        final key = [
-          for (final n in all)
-            if (n.processingStatus == ProcessingStatus.done)
-              '${n.id}@${n.updatedAt?.millisecondsSinceEpoch}'
-        ].join(',');
-        if (key != _previewKey) {
-          previews = await repo.summaryPreviews();
-          _previewKey = key;
-        }
-        if (_disposed) return;
-        notes = all;
-        notifyListeners();
-      } finally {
-        _running = false;
-      }
-    });
+  late final CoalescingRunner _runner = CoalescingRunner(_load);
+  void _schedule() => _runner.request();
+
+  Future<void> _load() async {
+    final all = await repo.all();
+    // Summaries only change when a note finishes: re-read previews then.
+    final key = [
+      for (final n in all)
+        if (n.processingStatus == ProcessingStatus.done)
+          '${n.id}@${n.updatedAt?.millisecondsSinceEpoch}'
+    ].join(',');
+    if (key != _previewKey) {
+      previews = await repo.summaryPreviews();
+      _previewKey = key;
+    }
+    if (_disposed) return;
+    notes = all;
+    notifyListeners();
   }
 
   @override
   void dispose() {
     _disposed = true;
+    _runner.close();
     repo.removeListener(_schedule);
     super.dispose();
   }
