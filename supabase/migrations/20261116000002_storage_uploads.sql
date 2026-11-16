@@ -3,6 +3,7 @@
 -- inside their own folder. Objects are deleted by the server as soon as the
 -- transcription ends, and in any case after 24 h (cleanup function).
 --
+-- Re-runnable (drop policy if exists). Size cap 100 MB since 00007 (was 500 MB).
 -- Size cap 500 MB per file. The project-wide upload limit (Pro plan) was
 -- raised to the same value via the Management API (storage config
 -- fileSizeLimit). The binding length limit is Soniox's 300 min per file,
@@ -16,6 +17,7 @@ on conflict (id) do update
       file_size_limit = excluded.file_size_limit,
       allowed_mime_types = excluded.allowed_mime_types;
 
+drop policy if exists uploads_insert_own on storage.objects;
 create policy uploads_insert_own on storage.objects
   for insert to authenticated
   with check (
@@ -25,10 +27,12 @@ create policy uploads_insert_own on storage.objects
   );
 
 -- select + update are needed for upsert (x-upsert: true) and TUS resume.
+drop policy if exists uploads_select_own on storage.objects;
 create policy uploads_select_own on storage.objects
   for select to authenticated
   using (bucket_id = 'uploads' and (storage.foldername(name))[1] = (select auth.uid())::text);
 
+drop policy if exists uploads_update_own on storage.objects;
 create policy uploads_update_own on storage.objects
   for update to authenticated
   using (bucket_id = 'uploads' and (storage.foldername(name))[1] = (select auth.uid())::text)
@@ -38,6 +42,7 @@ create policy uploads_update_own on storage.objects
     and name ~ '^[0-9a-f-]{36}/[A-Za-z0-9_-]{1,64}\.m4a$'
   );
 
+drop policy if exists uploads_delete_own on storage.objects;
 create policy uploads_delete_own on storage.objects
   for delete to authenticated
   using (bucket_id = 'uploads' and (storage.foldername(name))[1] = (select auth.uid())::text);

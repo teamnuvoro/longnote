@@ -1,16 +1,18 @@
 -- Longnote v1 backend schema (16 Nov 2026).
--- Tables: jobs, usage_daily, cost_daily. Helper functions used only by the
+-- Tables: jobs, usage_daily, cost_daily. Re-runnable (if not exists / drop if
+-- exists guards, added 16 Nov after review L8). Helper functions used only by the
 -- edge functions (service role). Contract: docs/BACKEND-API.md.
 --
 -- Privacy: audio lives in storage bucket `uploads` for at most 24 h (deleted
 -- as soon as transcription ends); jobs.result (the transcript) is cleared on
--- ack / 15 min after it is fetched / 7 days after creation; jobs rows are
+-- ack / 15 min after it is fetched / 7 days after creation (current timers:
+-- 20261116000007: 24 h after fetch, 7 days after done); jobs rows are
 -- deleted after 30 days. See 20261116000003_cleanup_cron.sql.
 
 -- ---------------------------------------------------------------------------
 -- jobs: one row per transcription request
 -- ---------------------------------------------------------------------------
-create table public.jobs (
+create table if not exists public.jobs (
   id                        uuid primary key default gen_random_uuid(),
   user_id                   uuid not null references auth.users (id) on delete cascade,
   client_note_id            text not null check (client_note_id ~ '^[A-Za-z0-9_-]{1,64}$'),
@@ -46,9 +48,9 @@ create table public.jobs (
   unique (user_id, client_note_id)
 );
 
-create index jobs_user_charged_idx on public.jobs (user_id, charged_at);
-create index jobs_status_idx on public.jobs (status, updated_at);
-create index jobs_created_idx on public.jobs (created_at);
+create index if not exists jobs_user_charged_idx on public.jobs (user_id, charged_at);
+create index if not exists jobs_status_idx on public.jobs (status, updated_at);
+create index if not exists jobs_created_idx on public.jobs (created_at);
 
 create or replace function public.ln_touch_updated_at() returns trigger
 language plpgsql as $$
@@ -57,13 +59,14 @@ begin
   return new;
 end $$;
 
+drop trigger if exists jobs_touch on public.jobs;
 create trigger jobs_touch before update on public.jobs
   for each row execute function public.ln_touch_updated_at();
 
 -- ---------------------------------------------------------------------------
 -- usage_daily (per user, UTC day) and cost_daily (global, UTC day)
 -- ---------------------------------------------------------------------------
-create table public.usage_daily (
+create table if not exists public.usage_daily (
   user_id        uuid not null references auth.users (id) on delete cascade,
   day            date not null,
   audio_seconds  integer not null default 0,
@@ -72,7 +75,7 @@ create table public.usage_daily (
   primary key (user_id, day)
 );
 
-create table public.cost_daily (
+create table if not exists public.cost_daily (
   day     date primary key,
   est_usd numeric(12, 4) not null default 0
 );
@@ -85,9 +88,11 @@ alter table public.jobs enable row level security;
 alter table public.usage_daily enable row level security;
 alter table public.cost_daily enable row level security;
 
+drop policy if exists jobs_select_own on public.jobs;
 create policy jobs_select_own on public.jobs
   for select to authenticated using (user_id = (select auth.uid()));
 
+drop policy if exists usage_select_own on public.usage_daily;
 create policy usage_select_own on public.usage_daily
   for select to authenticated using (user_id = (select auth.uid()));
 

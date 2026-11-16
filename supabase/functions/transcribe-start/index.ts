@@ -3,10 +3,9 @@
 // Idempotent on (user, client_note_id). Contract: docs/BACKEND-API.md.
 
 import {
-  admin, ApiError, envNum, handle, json, limitError, limits, readJson, requireUser, reserveIp,
-  SONIOX_USD_PER_HOUR,
+  admin, ApiError, envNum, handle, ipHash, json, limitError, limits, readJson, requireUser, SONIOX_USD_PER_HOUR,
 } from "../_shared/common.ts";
-import { BUCKET, deleteAudio, MAX_START_TRIES, sonioxCreate } from "../_shared/soniox.ts";
+import { BUCKET, deleteAudio, findByReference, MAX_START_TRIES, sonioxCreate, sonioxDelete } from "../_shared/soniox.ts";
 
 const NOTE_ID = /^[A-Za-z0-9_-]{1,64}$/;
 const LANG = /^[a-z]{2,3}(-[A-Za-z]{2,4})?$/;
@@ -143,30 +142,47 @@ Deno.serve(handle(async (req) => {
     return current(now?.status ?? "uploaded", jobId);
   }
 
-  let started: { id: string } | { error: string; status: number } | null = null;
+  let started: { id: string } | { error: string; status: number; unknown?: boolean } | null = null;
   let tries = 0;
-  let ipHashed: string | null = null;
-  let ipCharged = 0;
   try {
     const { data: row, error: rowErr } = await db.from("jobs").update(fresh).eq("id", jobId)
-      .select("tries,charged_at").single();
+      .select("tries,charged_at,error").single();
     if (rowErr || !row) throw new ApiError("server_error", "db write failed");
     tries = row.tries;
 
-    // Limits (atomic check + charge): per IP, then per user / global.
+    // Limits (one atomic check + charge in SQL): user day/hour, IP (IPv6
+    // per /64), audio pool, total. The IP charge is stored on the job and
+    // corrected with it at settle/refund (review B6).
     if (row.charged_at === null) {
-      ipHashed = await reserveIp(req, "audio", chargeSeconds, lim.ipAudioSecondsPerDay);
-      ipCharged = chargeSeconds;
       const usd = Number(((chargeSeconds / 3600) * SONIOX_USD_PER_HOUR).toFixed(4));
-      const { data: verdict, error } = await db.rpc("ln_reserve_audio", {
+      const { data: verdict, error } = await db.rpc("ln_reserve_audio_v2", {
         p_job: jobId, p_seconds: chargeSeconds, p_usd: usd,
         p_day_limit: lim.audioSecondsPerDay, p_hour_limit: lim.audioSecondsPerHour,
-        p_global_cap: lim.globalUsdPerDay,
+        p_ip_hash: await ipHash(req), p_ip_seconds: lim.ipAudioSecondsPerDay,
+        p_pool_usd: lim.globalAudioUsdPerDay, p_total_usd: lim.globalUsdPerDay,
       });
       if (error) throw new ApiError("server_error", "limit check failed");
       if (verdict !== "ok") {
         await db.from("jobs").update({ error_code: "limit_reached", error: String(verdict) }).eq("id", jobId);
         throw limitError(String(verdict));
+      }
+    }
+
+    // The previous start got no answer from Soniox (review B3): if Soniox
+    // did create that transcription, use it instead of creating a second.
+    if (typeof row.error === "string" && row.error.startsWith("start_unknown")) {
+      const prior = await findByReference(jobId);
+      const live = prior?.find((t) => t.status !== "error");
+      for (const t of prior ?? []) if (t !== live) await sonioxDelete(t.id);
+      if (live) {
+        console.log("soniox_adopted");
+        const { error } = await db.from("jobs").update({
+          status: "transcribing", soniox_transcription_id: live.id, start_claimed_at: null,
+          error: null, error_code: null,
+        }).eq("id", jobId);
+        if (error) throw new ApiError("server_error", "db write failed");
+        started = { id: live.id };
+        return current("transcribing", jobId);
       }
     }
 
@@ -182,15 +198,14 @@ Deno.serve(handle(async (req) => {
     if ("id" in started) {
       const { error } = await db.from("jobs").update({
         status: "transcribing", soniox_transcription_id: started.id, tries, start_claimed_at: null,
+        error: null, error_code: null,
       }).eq("id", jobId);
       if (error) throw new ApiError("server_error", "db write failed");
       return current("transcribing", jobId);
     }
   } catch (e) {
-    // Not started: free the claim (and the IP charge) so a retry can start it.
-    if (ipHashed && ipCharged && !(started && "id" in started)) {
-      await db.rpc("ln_ip_release", { p_ip_hash: ipHashed, p_kind: "audio", p_amount: ipCharged });
-    }
+    // Not started: free the claim so a retry can start it. The charge stays
+    // on the job (charged_at) and is reused by that retry, not charged twice.
     if (!(started && "id" in started)) {
       await db.from("jobs").update({ start_claimed_at: null }).eq("id", jobId);
     }
@@ -198,13 +213,17 @@ Deno.serve(handle(async (req) => {
   }
 
   if (!started || "id" in started) throw new ApiError("server_error", "unexpected start state");
-  // Soniox refused. Give the minutes back; fail for good after MAX_START_TRIES.
   console.error("soniox_create_failed", started.status);
-  await db.rpc("ln_refund_audio", { p_job: jobId });
-  if (ipHashed && ipCharged) {
-    await db.rpc("ln_ip_release", { p_ip_hash: ipHashed, p_kind: "audio", p_amount: ipCharged });
+  if (!started.unknown) {
+    // Soniox refused: give the minutes back (user, IP, pool).
+    await db.rpc("ln_refund_audio", { p_job: jobId });
   }
   if (tries >= MAX_START_TRIES) {
+    if (started.unknown) {
+      // Delete anything Soniox may have created for this job, then refund.
+      for (const t of (await findByReference(jobId)) ?? []) await sonioxDelete(t.id);
+      await db.rpc("ln_refund_audio", { p_job: jobId });
+    }
     const deleted = await deleteAudio(expectedPath);
     await db.from("jobs").update({
       status: "failed", tries, error_code: "upstream_failed", error: started.error, audio_deleted: deleted,

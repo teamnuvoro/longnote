@@ -1,6 +1,7 @@
 // transcribe-status: the app polls a job. When the transcript is ready it is
 // returned and the job becomes `fetched`; the server copy is cleared on
-// {"ack": true} or 15 min after the first fetch (pg_cron), whichever is first.
+// {"ack": true} or 24 h after the first fetch (pg_cron), whichever is first.
+// Once the server copy is gone the job reads `fetched` (no result).
 // If the Soniox webhook never arrives, this pulls the result itself.
 
 import { admin, ApiError, envNum, handle, json, readJson, requireUser } from "../_shared/common.ts";
@@ -72,6 +73,11 @@ Deno.serve(handle(async (req) => {
     status = job.status;
   }
 
+  // A finished job whose result was already cleared (7 days without a
+  // fetch): say so plainly instead of `done` with no result (review L2).
+  if (status === "done" && !job.result) {
+    return json(200, { ...base, status: "fetched" });
+  }
   if (status === "done" || (status === "fetched" && job.result)) {
     if (status === "done") {
       await db.from("jobs").update({ status: "fetched", fetched_at: new Date().toISOString() })

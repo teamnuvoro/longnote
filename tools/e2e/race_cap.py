@@ -7,10 +7,11 @@
    note -> one job id for all, ONE Soniox transcription (by
    client_reference_id and by "created since the test started").
 2. Cost cap: a temporary, self-expiring test override (ln_test_overrides,
-   expires in 10 min, deleted at the end) lowers the global daily cap to
-   "today's spend + room for one call". 5 parallel summarize (then 5 ask)
-   -> exactly one 200, four limit_reached/global_day, and cost_daily never
-   goes over the cap.
+   expires in 10 min, deleted at the end) lowers the global LLM pool
+   (cost_daily.llm_usd, key global_llm_usd_cap) to "today's LLM spend +
+   room for one call". 5 parallel summarize (then 5 ask) -> exactly one 200,
+   four limit_reached/global_day, and the pool never goes over the cap.
+   Each request is unique (the summarize cache would answer a repeat).
 Reads .env.local; never prints secrets. The service-role key is used only
 for the override and the checks (job row, cost_daily).
 """
@@ -42,22 +43,31 @@ def soniox_transcriptions():
     return r.json().get("transcriptions", [])
 
 
-def cost_today():
+def cost_today(col="llm_usd"):
     day = dt.datetime.now(dt.timezone.utc).date().isoformat()
-    r = requests.get(f"{REST}/cost_daily?day=eq.{day}&select=est_usd", headers=H_SR, timeout=30)
+    r = requests.get(f"{REST}/cost_daily?day=eq.{day}&select={col}", headers=H_SR, timeout=30)
     rows = r.json()
-    return float(rows[0]["est_usd"]) if rows else 0.0
+    return float(rows[0][col]) if rows else 0.0
 
 
-def set_cap_override(value):
-    exp = (dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=10)).isoformat()
+def set_override(key, value, minutes=10):
+    exp = (dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=minutes)).isoformat()
     r = requests.post(f"{REST}/ln_test_overrides", headers={**H_SR, "Prefer": "resolution=merge-duplicates"},
-                      json={"key": "global_usd_cap", "value": value, "expires_at": exp}, timeout=30)
+                      json={"key": key, "value": value, "expires_at": exp}, timeout=30)
     r.raise_for_status()
 
 
+def clear_override(key):
+    requests.delete(f"{REST}/ln_test_overrides?key=eq.{requests.utils.quote(key, safe='')}", headers=H_SR,
+                    timeout=30)
+
+
+def set_cap_override(value):
+    set_override("global_llm_usd_cap", value)
+
+
 def clear_cap_override():
-    requests.delete(f"{REST}/ln_test_overrides?key=eq.global_usd_cap", headers=H_SR, timeout=30)
+    clear_override("global_llm_usd_cap")
 
 
 def start_race(token, uid, audio):
@@ -79,9 +89,13 @@ def start_race(token, uid, audio):
     ts = soniox_transcriptions()
     mine = [t for t in ts if t.get("client_reference_id") == job]
     new = [t for t in ts if t.get("created_at", "") >= since.isoformat().replace("+00:00", "Z")]
-    check(len(mine) == 1, f"exactly one Soniox transcription for the job (got {len(mine)})")
+    r = requests.get(f"{REST}/jobs?id=eq.{job}&select=status,tries,charged_seconds,soniox_deleted",
+                     headers=H_SR, timeout=30).json()[0]
+    # A short clip can finish (webhook) and be deleted at Soniox within the
+    # 3 s wait; then 0 listed is right if the job row says it was deleted.
+    check(len(mine) == 1 or (len(mine) == 0 and r["soniox_deleted"]),
+          f"exactly one Soniox transcription for the job (listed {len(mine)}, deleted={r['soniox_deleted']})")
     check(len(new) <= 1, f"at most one Soniox transcription created during the race (got {len(new)})")
-    r = requests.get(f"{REST}/jobs?id=eq.{job}&select=status,tries,charged_seconds", headers=H_SR, timeout=30).json()[0]
     check(r["tries"] == 1, f"job row: tries=1, status {r['status']}, charged {r['charged_seconds']} s")
     # Finish it so Soniox + storage are cleaned up.
     for _ in range(60):
@@ -100,7 +114,8 @@ def cap_race(token, fn, body, room):
     cap = round(base + room, 4)
     set_cap_override(cap)
     try:
-        res = parallel(5, lambda: call(token, fn, body))
+        n = iter(range(5))
+        res = parallel(5, lambda: call(token, fn, body(next(n))))
         during = cost_today()
     finally:
         clear_cap_override()
@@ -121,13 +136,17 @@ def main():
 
     print("cost cap: 5 parallel summarize with room for one")
     transcript = "Speaker 1: We will ship on Monday.\nSpeaker 2: Priya sends the budget on Friday."
-    # One summarize reserves ~$0.055 (12k output tokens budget): room for 1, not 2.
-    out["summarize_cap"] = cap_race(token, "summarize", {"transcript": transcript, "style": "meeting"}, 0.08)
+    # One summarize reserves ~$0.055; unique per call (the cache would answer a repeat).
+    stamp = time.time()
+    out["summarize_cap"] = cap_race(
+        token, "summarize", lambda i: {"transcript": f"{transcript}\nSpeaker 1: Run {stamp} call {i}.", "style": "meeting"},
+        0.08)
     print("cost cap: 5 parallel ask with room for one")
     turns = [{"speaker": "Speaker 1", "start_ms": 0, "text": "We will ship on Monday."},
              {"speaker": "Speaker 2", "start_ms": 4000, "text": "Priya sends the budget on Friday."}]
     # One ask reserves ~$0.019 (4k output tokens budget).
-    out["ask_cap"] = cap_race(token, "ask", {"transcript_turns": turns, "question": "When do we ship?"}, 0.03)
+    out["ask_cap"] = cap_race(token, "ask", lambda i: {"transcript_turns": turns, "question": f"When do we ship? ({i})"},
+                              0.03)
     print(out)
     print("FAILED:" if fails else "ALL PASSED", *fails, sep="\n  ")
     sys.exit(1 if fails else 0)

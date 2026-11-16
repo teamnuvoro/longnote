@@ -3,7 +3,7 @@
 // Docs: https://docs.soniox.com/stt/async/async-transcription
 //       https://docs.soniox.com/stt/async/webhooks
 
-import { admin, ApiError, env, SONIOX_USD_PER_HOUR } from "./common.ts";
+import { admin, ApiError, env, envNum, SONIOX_USD_PER_HOUR } from "./common.ts";
 
 const BASE = "https://api.soniox.com";
 export const SONIOX_MODEL = Deno.env.get("SONIOX_MODEL") || "stt-async-v6";
@@ -12,16 +12,31 @@ export const BUCKET = "uploads";
 /** Start attempts allowed before a job is failed and its audio deleted. */
 export const MAX_START_TRIES = 3;
 
-async function soniox(method: string, path: string, body?: unknown): Promise<{ status: number; data: any }> {
-  const res = await fetch(BASE + path, {
-    method,
-    headers: {
-      Authorization: `Bearer ${env("SONIOX_API_KEY")}`,
-      ...(body ? { "Content-Type": "application/json" } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const text = await res.text();
+/** Per-request timeout (review B3). The transcript download gets longer. */
+const TIMEOUT_MS = envNum("SONIOX_TIMEOUT_MS", 30_000);
+const TRANSCRIPT_TIMEOUT_MS = envNum("SONIOX_TRANSCRIPT_TIMEOUT_MS", 60_000);
+
+/** status 0 = no answer (network error or timeout): the outcome is unknown. */
+async function soniox(
+  method: string, path: string, body?: unknown, timeoutMs = TIMEOUT_MS,
+): Promise<{ status: number; data: any }> {
+  let res: Response;
+  let text: string;
+  try {
+    res = await fetch(BASE + path, {
+      method,
+      headers: {
+        Authorization: `Bearer ${env("SONIOX_API_KEY")}`,
+        ...(body ? { "Content-Type": "application/json" } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    text = await res.text();
+  } catch (e) {
+    console.error("soniox_network", method, path.split("/").slice(0, 3).join("/"), e instanceof Error ? e.name : "unknown");
+    return { status: 0, data: null };
+  }
   let data: any = null;
   try {
     data = text ? JSON.parse(text) : null;
@@ -38,7 +53,14 @@ export interface StartArgs {
   webhook: boolean;
 }
 
-export async function sonioxCreate(a: StartArgs): Promise<{ id: string } | { error: string; status: number }> {
+/**
+ * `unknown: true` = no answer from Soniox: the transcription may or may not
+ * exist. The caller keeps the charge and, on the next start, looks for it
+ * by client_reference_id (findByReference) before creating another.
+ */
+export async function sonioxCreate(
+  a: StartArgs,
+): Promise<{ id: string } | { error: string; status: number; unknown?: boolean }> {
   const body: Record<string, unknown> = {
     model: SONIOX_MODEL,
     audio_url: a.audioUrl,
@@ -54,6 +76,7 @@ export async function sonioxCreate(a: StartArgs): Promise<{ id: string } | { err
   }
   const r = await soniox("POST", "/v1/transcriptions", body);
   if (r.status === 201 || r.status === 200) return { id: String(r.data.id) };
+  if (r.status === 0) return { status: 0, error: "start_unknown: no answer from Soniox", unknown: true };
   return { status: r.status, error: `${r.data?.error_type ?? "http_" + r.status}: ${String(r.data?.message ?? "").slice(0, 300)}` };
 }
 
@@ -64,7 +87,42 @@ export async function sonioxGet(id: string) {
 /** Deletes the transcription at Soniox (404 = already gone = success). */
 export async function sonioxDelete(id: string): Promise<boolean> {
   const r = await soniox("DELETE", `/v1/transcriptions/${id}`);
-  return r.status < 300 || r.status === 404;
+  return (r.status >= 200 && r.status < 300) || r.status === 404;
+}
+
+export interface SonioxListed {
+  id: string;
+  status: string;
+  created_at: string;
+  client_reference_id: string | null;
+}
+
+/**
+ * Lists our Soniox transcriptions, newest first, up to `maxPages` pages of
+ * 100. Returns null if Soniox did not answer.
+ */
+export async function sonioxList(maxPages = 3): Promise<SonioxListed[] | null> {
+  const out: SonioxListed[] = [];
+  let cursor = "";
+  for (let p = 0; p < maxPages; p++) {
+    const r = await soniox("GET", `/v1/transcriptions?limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`);
+    if (r.status !== 200 || !Array.isArray(r.data?.transcriptions)) return p === 0 ? null : out;
+    for (const t of r.data.transcriptions) {
+      out.push({
+        id: String(t.id), status: String(t.status ?? ""), created_at: String(t.created_at ?? ""),
+        client_reference_id: t.client_reference_id ?? null,
+      });
+    }
+    cursor = r.data.next_page_cursor ?? "";
+    if (!cursor) break;
+  }
+  return out;
+}
+
+/** The transcriptions Soniox has for one job (a start whose reply was lost). */
+export async function findByReference(jobId: string): Promise<SonioxListed[] | null> {
+  const all = await sonioxList(3);
+  return all ? all.filter((t) => t.client_reference_id === jobId) : null;
 }
 
 export async function deleteAudio(path: string): Promise<boolean> {
@@ -163,7 +221,7 @@ export async function finalizeJob(jobId: string, sonioxStatus?: string): Promise
   }
 
   if (status === "completed") {
-    const t = await soniox("GET", `/v1/transcriptions/${tid}/transcript`);
+    const t = await soniox("GET", `/v1/transcriptions/${tid}/transcript`, undefined, TRANSCRIPT_TIMEOUT_MS);
     if (t.status !== 200 || !Array.isArray(t.data?.tokens)) {
       await db.from("jobs").update({ finalizing_at: null }).eq("id", jobId);
       throw new ApiError("upstream_failed", "Could not fetch the transcript.");

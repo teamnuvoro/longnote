@@ -3,7 +3,7 @@
 // app sent; anything the model made up is dropped. Nothing is stored.
 // Contract: docs/BACKEND-API.md.
 
-import { ApiError, envNum, handle, json, limits, readJson, requireUser, reserveIp } from "../_shared/common.ts";
+import { ApiError, envNum, handle, json, readJson, requireUser } from "../_shared/common.ts";
 import { type ChatMessage, estimateUsd, OPENAI_MODEL, reserveCall, structuredChat } from "../_shared/openai.ts";
 
 /** Transcript text sent to the model (about 60k tokens; ~4.5 h of speech). */
@@ -139,13 +139,9 @@ Deno.serve(handle(async (req) => {
   ];
   const MAX_OUT = 4_000;
 
-  // Limits: per IP, then per user + global cost reserved atomically before
-  // the OpenAI call (settled to the real cost inside structuredChat).
-  const lim = limits();
-  await reserveIp(req, "ask", 1, lim.ipAskPerDay);
-  const reservation = await reserveCall(
-    user.id, "ask", lim.askPerDay, lim.globalUsdPerDay, estimateUsd(messages, MAX_OUT),
-  );
+  // Limits: user / IP / LLM pool / total, reserved atomically before the
+  // OpenAI call and settled to the real cost inside structuredChat.
+  const reservation = await reserveCall(req, user.id, "ask", estimateUsd(messages, MAX_OUT));
   const { value } = await structuredChat<{ found: boolean; answer: string; sources: { speaker: string; start_ms: number }[] }>(
     messages, "answer", ASK_SCHEMA, MAX_OUT, reservation,
   );

@@ -72,21 +72,35 @@ export function envNum(name: string, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
-/** Limits; every one can be overridden by a function secret of the same name. */
+/**
+ * Limits; every one can be overridden by a function secret of the same name.
+ * Money caps are in USD and reserve-then-settle (docs/BACKEND-API.md 5):
+ * audio and LLM have separate global pools, so a burst of asks cannot stop
+ * transcription for everyone (review B1). Call counts stay as a second guard.
+ */
 export const limits = () => ({
   audioSecondsPerDay: envNum("LIMIT_AUDIO_SECONDS_PER_DAY", 8 * 3600),
   audioSecondsPerHour: envNum("LIMIT_AUDIO_SECONDS_PER_HOUR", 4 * 3600),
+  // Total estimated spend per UTC day (audio + LLM), on top of the pools.
   globalUsdPerDay: envNum("LIMIT_GLOBAL_USD_PER_DAY", 20),
+  globalAudioUsdPerDay: envNum("LIMIT_GLOBAL_AUDIO_USD_PER_DAY", 12),
+  globalLlmUsdPerDay: envNum("LIMIT_GLOBAL_LLM_USD_PER_DAY", 8),
+  // Per user per UTC day, LLM (summarize + ask) in USD. Audio per user is
+  // capped in seconds above, which is dollars at a fixed price per hour.
+  userLlmUsdPerDay: envNum("LIMIT_USER_LLM_USD_PER_DAY", 1),
   askPerDay: envNum("LIMIT_ASK_PER_DAY", 60),
   summaryPerDay: envNum("LIMIT_SUMMARY_PER_DAY", 40),
   // Soniox async hard limit is 300 min per file.
   maxAudioSeconds: envNum("LIMIT_MAX_AUDIO_SECONDS", 300 * 60),
-  // Per client IP per UTC day (anti-abuse: new anonymous users are free to
-  // make). Generous because Indian mobile carriers put many phones behind one
-  // IP (CGNAT). App Attest is the real fix at launch (DECISIONS.md).
-  ipAudioSecondsPerDay: envNum("LIMIT_IP_AUDIO_SECONDS_PER_DAY", 40 * 3600),
+  // Per client IP (IPv6: per /64) per UTC day (anti-abuse: new anonymous
+  // users are free to make). Generous-ish because Indian mobile carriers put
+  // many phones behind one IPv4 (CGNAT). App Attest is the real fix (open).
+  ipAudioSecondsPerDay: envNum("LIMIT_IP_AUDIO_SECONDS_PER_DAY", 24 * 3600),
+  ipLlmUsdPerDay: envNum("LIMIT_IP_LLM_USD_PER_DAY", 2),
   ipSummaryPerDay: envNum("LIMIT_IP_SUMMARY_PER_DAY", 300),
   ipAskPerDay: envNum("LIMIT_IP_ASK_PER_DAY", 600),
+  reportsPerUserDay: envNum("LIMIT_REPORTS_PER_USER_DAY", 50),
+  reportsPerIpDay: envNum("LIMIT_REPORTS_PER_IP_DAY", 200),
 });
 
 /** Soniox async price, USD per audio hour (estimate for the global cap). */
@@ -185,35 +199,48 @@ export function clientIp(req: Request): string | null {
   return v || null;
 }
 
-/** HMAC-SHA256(server secret, ip) as hex. The raw IP is never stored. */
+/**
+ * The unit an IP cap applies to: an IPv4 address as is; for IPv6 the /64
+ * prefix (one phone or home usually gets a whole /64, so the exact address
+ * is trivially rotated - review B6). IPv4-mapped IPv6 counts as IPv4.
+ */
+export function ipBucket(ip: string): string {
+  let s = ip.trim();
+  if (s.startsWith("[")) s = s.slice(1, s.indexOf("]") > 0 ? s.indexOf("]") : undefined);
+  const zone = s.indexOf("%");
+  if (zone >= 0) s = s.slice(0, zone);
+  if (!s.includes(":")) return s;
+  const v4 = s.match(/(\d{1,3}(?:\.\d{1,3}){3})$/);
+  if (v4 && /^(::ffff:|::ffff:0:|::)$/i.test(s.slice(0, s.length - v4[1].length))) return v4[1];
+  let head = s;
+  if (v4) head = s.slice(0, s.length - v4[1].length) + "0:0";
+  const halves = head.split("::");
+  if (halves.length > 2) return s.toLowerCase();
+  const left = halves[0] ? halves[0].split(":") : [];
+  const right = halves.length === 2 && halves[1] ? halves[1].split(":") : [];
+  const fill = halves.length === 2 ? 8 - left.length - right.length : 0;
+  if (fill < 0) return s.toLowerCase();
+  const groups = [...left, ...Array(fill).fill("0"), ...right];
+  if (groups.length !== 8 || groups.some((g) => !/^[0-9a-f]{1,4}$/i.test(g))) return s.toLowerCase();
+  return groups.slice(0, 4).map((g) => parseInt(g, 16).toString(16)).join(":") + "::/64";
+}
+
+/** HMAC-SHA256(server secret, ip bucket) as hex. The raw IP is never stored. */
 export async function ipHash(req: Request): Promise<string | null> {
   const ip = clientIp(req);
-  if (!ip) return null;
+  if (!ip) {
+    console.error("no_client_ip");
+    return null;
+  }
   const secret = Deno.env.get("IP_HASH_SECRET") || env("CLEANUP_SECRET");
   const key = await crypto.subtle.importKey(
     "raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"],
   );
-  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(ip));
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(ipBucket(ip)));
   return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-/**
- * Charge `amount` against this IP's daily cap for `kind`; throws
- * limit_reached (scope ip_day) when it would go over. No IP header -> no
- * check (logged). Returns the hash so a caller can release on refusal.
- */
-export async function reserveIp(
-  req: Request, kind: "audio" | "summary" | "ask", amount: number, limit: number,
-): Promise<string | null> {
-  const h = await ipHash(req);
-  if (!h) {
-    console.error("no_client_ip");
-    return null;
-  }
-  const { data, error } = await admin().rpc("ln_ip_reserve", {
-    p_ip_hash: h, p_kind: kind, p_amount: amount, p_limit: limit,
-  });
-  if (error) throw new ApiError("server_error", "limit check failed");
-  if (data !== true) throw limitError("ip_day");
-  return h;
+export async function sha256Hex(s: string): Promise<string> {
+  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+  return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
