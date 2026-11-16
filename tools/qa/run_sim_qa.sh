@@ -108,12 +108,12 @@ if [ -n "$C" ]; then
   cp -R "$C/Library/Application Support/diagnostics" "$OUT/app-diagnostics" 2>/dev/null || true
 fi
 python3 - "$START_TS" "$OUT/crash" <<'PY'
-import glob, os, shutil, sys
+import glob, os, re, shutil, sys
 since, dest = float(sys.argv[1]), sys.argv[2]
 for d in [os.path.expanduser("~/Library/Logs/DiagnosticReports"), "/Library/Logs/DiagnosticReports"]:
     for f in glob.glob(os.path.join(d, "**", "*"), recursive=True):
         n = os.path.basename(f)
-        if os.path.isfile(f) and os.path.getmtime(f) >= since and ("Runner" in n or "longnote" in n.lower()):
+        if os.path.isfile(f) and os.path.getmtime(f) >= since and (re.match(r"Runner[-_.]", n) or "longnote" in n.lower()):
             shutil.copy2(f, dest)
             print("crash report:", n)
 PY

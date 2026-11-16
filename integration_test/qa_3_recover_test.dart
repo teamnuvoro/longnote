@@ -166,6 +166,7 @@ void main() {
       expect(await settings.speakerLabels(), before);
       for (final row in ['Privacy policy', 'Terms of use', 'Contact us']) {
         final n = opened.length;
+        await qa.scrollTo(find.text(row), within: find.byType(SettingsHomeScreen));
         await qa.tap(find.text(row));
         expect(opened.length, n + 1, reason: '$row opened nothing');
         qa.note('$row -> ${opened.last.scheme}:${opened.last.host}${opened.last.path}');

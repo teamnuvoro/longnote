@@ -447,6 +447,20 @@ class Qa {
     await wait(after);
   }
 
+  /// Scrolls [within]'s list until [f] is built and on screen (long lists
+  /// build their rows lazily).
+  Future<void> scrollTo(Finder f, {required Finder within}) async {
+    if (f.evaluate().isEmpty) {
+      await tester.scrollUntilVisible(f, 250,
+          scrollable: find
+              .descendant(of: within, matching: find.byType(Scrollable))
+              .first,
+          maxScrolls: 30);
+    }
+    await tester.ensureVisible(f.first);
+    await wait(const Duration(milliseconds: 400));
+  }
+
   Future<void> type(Finder field, String text) async {
     await waitFor(field);
     await tester.enterText(field.first, text);
