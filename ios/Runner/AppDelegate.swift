@@ -1,6 +1,7 @@
 import AVFoundation
 import Flutter
 import MetricKit
+import StoreKit
 import UIKit
 import UserNotifications
 #if canImport(FoundationModels)
@@ -32,6 +33,193 @@ import FoundationModels
     }
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "FilesPlugin") {
       FilesPlugin.register(with: registrar)
+    }
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "StorePlugin") {
+      StorePlugin.register(with: registrar)
+    }
+  }
+}
+
+// MARK: - App Store subscriptions (StoreKit 2)
+//
+// Channel "longnote/store" (all results are plain maps/lists):
+//   products {ids: [String]} -> [{id, displayPrice, price: Double, currency,
+//             periodUnit: day|week|month|year, periodValue: Int,
+//             trialDays: Int? (free-trial intro offer), eligibleForIntro: Bool}]
+//   purchase {id} -> {result: success|cancelled|pending|unverified|not_found|unknown,
+//                     status: <status map, on success>}
+//   status   -> {active: Bool, productId?, purchasedAtMs?, expiresAtMs?, isTrial?,
+//                originalId?}
+//   restore  -> AppStore.sync(), then the status map
+//   renewal {productId} -> Bool? (will the subscription auto-renew)
+// Native -> Dart: "changed" (no args) whenever Transaction.updates delivers
+// (renewal, Ask to Buy approval, refund, purchase on another device).
+//
+// Only transactions StoreKit has verified (signed by the App Store for this
+// app and device) are used; unverified ones are ignored.
+public class StorePlugin: NSObject, FlutterPlugin {
+  private let channel: FlutterMethodChannel
+  private var updates: Task<Void, Never>?
+
+  init(channel: FlutterMethodChannel) {
+    self.channel = channel
+  }
+
+  public static func register(with registrar: FlutterPluginRegistrar) {
+    let channel = FlutterMethodChannel(
+      name: "longnote/store",
+      binaryMessenger: registrar.messenger())
+    let instance = StorePlugin(channel: channel)
+    registrar.addMethodCallDelegate(instance, channel: channel)
+    instance.listenForUpdates()
+  }
+
+  deinit { updates?.cancel() }
+
+  /// Apple asks apps to listen from launch, so purchases finished outside
+  /// the app (renewals, Ask to Buy) are finished and noticed.
+  private func listenForUpdates() {
+    updates = Task.detached { [weak self] in
+      for await verification in Transaction.updates {
+        if case .verified(let transaction) = verification {
+          await transaction.finish()
+        }
+        await MainActor.run {
+          self?.channel.invokeMethod("changed", arguments: nil)
+        }
+      }
+    }
+  }
+
+  public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    let args = call.arguments as? [String: Any] ?? [:]
+    Task { @MainActor in
+      do {
+        switch call.method {
+        case "products":
+          result(try await StorePlugin.products(args["ids"] as? [String] ?? []))
+        case "purchase":
+          guard let id = args["id"] as? String else {
+            result(FlutterError(code: "bad_args", message: "id is required", details: nil))
+            return
+          }
+          result(try await StorePlugin.purchase(id))
+        case "status":
+          result(await StorePlugin.status())
+        case "restore":
+          try await AppStore.sync()
+          result(await StorePlugin.status())
+        case "renewal":
+          result(await StorePlugin.willAutoRenew(args["productId"] as? String ?? ""))
+        default:
+          result(FlutterMethodNotImplemented)
+        }
+      } catch {
+        result(FlutterError(code: "store_error", message: String(describing: error), details: nil))
+      }
+    }
+  }
+
+  static func products(_ ids: [String]) async throws -> [[String: Any]] {
+    let products = try await Product.products(for: ids)
+    var out: [[String: Any]] = []
+    for product in products {
+      guard let sub = product.subscription else { continue }
+      var m: [String: Any] = [
+        "id": product.id,
+        "displayPrice": product.displayPrice,
+        "price": NSDecimalNumber(decimal: product.price).doubleValue,
+        "currency": product.priceFormatStyle.currencyCode,
+        "periodUnit": unitName(sub.subscriptionPeriod.unit),
+        "periodValue": sub.subscriptionPeriod.value,
+        "eligibleForIntro": await sub.isEligibleForIntroOffer,
+      ]
+      if let intro = sub.introductoryOffer, intro.paymentMode == .freeTrial {
+        m["trialDays"] = days(intro.period)
+      }
+      out.append(m)
+    }
+    return out
+  }
+
+  static func purchase(_ id: String) async throws -> [String: Any] {
+    guard let product = try await Product.products(for: [id]).first else {
+      return ["result": "not_found"]
+    }
+    switch try await product.purchase() {
+    case .success(let verification):
+      switch verification {
+      case .verified(let transaction):
+        await transaction.finish()
+        return ["result": "success", "status": await status()]
+      case .unverified(_, let error):
+        return ["result": "unverified", "error": String(describing: error)]
+      }
+    case .userCancelled:
+      return ["result": "cancelled"]
+    case .pending:
+      return ["result": "pending"]
+    @unknown default:
+      return ["result": "unknown"]
+    }
+  }
+
+  /// The subscription the user is entitled to right now (verified, not
+  /// revoked), the one that runs longest if there are several. Local: works
+  /// offline from StoreKit's on-device cache.
+  static func status() async -> [String: Any] {
+    var best: Transaction?
+    for await verification in Transaction.currentEntitlements {
+      guard case .verified(let t) = verification,
+            t.productType == .autoRenewable,
+            t.revocationDate == nil else { continue }
+      if best == nil || (t.expirationDate ?? .distantPast) > (best!.expirationDate ?? .distantPast) {
+        best = t
+      }
+    }
+    guard let t = best else { return ["active": false] }
+    var m: [String: Any] = [
+      "active": true,
+      "productId": t.productID,
+      "purchasedAtMs": Int64(t.purchaseDate.timeIntervalSince1970 * 1000),
+      "isTrial": t.offerType == .introductory,
+      "originalId": String(t.originalID),
+    ]
+    if let e = t.expirationDate {
+      m["expiresAtMs"] = Int64(e.timeIntervalSince1970 * 1000)
+    }
+    return m
+  }
+
+  /// Needs the network; nil when unknown.
+  static func willAutoRenew(_ productId: String) async -> Bool? {
+    guard let product = try? await Product.products(for: [productId]).first,
+          let statuses = try? await product.subscription?.status else { return nil }
+    for s in statuses {
+      if case .verified(let info) = s.renewalInfo {
+        return info.willAutoRenew
+      }
+    }
+    return nil
+  }
+
+  static func unitName(_ unit: Product.SubscriptionPeriod.Unit) -> String {
+    switch unit {
+    case .day: return "day"
+    case .week: return "week"
+    case .month: return "month"
+    case .year: return "year"
+    @unknown default: return "unknown"
+    }
+  }
+
+  static func days(_ p: Product.SubscriptionPeriod) -> Int {
+    switch p.unit {
+    case .day: return p.value
+    case .week: return p.value * 7
+    case .month: return p.value * 30
+    case .year: return p.value * 365
+    @unknown default: return p.value
     }
   }
 }

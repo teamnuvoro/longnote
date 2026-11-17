@@ -16,7 +16,7 @@ import '../paywall/trial_copy.dart';
 
 /// G4 Plan & billing (Figma 10:961): the plan, real dates from the billing
 /// state (reminder, first charge, renewal), how to cancel, and a button to
-/// Apple's subscriptions page. Billing is still simulated in this build.
+/// Apple's subscriptions page.
 class PlanScreen extends StatelessWidget {
   const PlanScreen({super.key});
 
@@ -80,12 +80,14 @@ class PlanScreen extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 18),
-            Text(
-              'Test build: purchases are simulated. No money is charged.',
-              textAlign: TextAlign.center,
-              style: LnText.meta.copyWith(color: LnColors.ink3, fontSize: 12),
-            ),
+            if (s.billing is FakeBillingService) ...[
+              const SizedBox(height: 18),
+              Text(
+                'Test build: purchases are simulated. No money is charged.',
+                textAlign: TextAlign.center,
+                style: LnText.meta.copyWith(color: LnColors.ink3, fontSize: 12),
+              ),
+            ],
           ],
         ),
       ),
@@ -107,14 +109,20 @@ class _Summary extends StatelessWidget {
       final end = e.trialEndsAt!;
       over = '${planName(plan)} plan · free trial';
       big = '${plan.priceLabel} ${perPeriodWords(plan)}';
-      text = 'Your trial ends ${weekdayMonthDay(end)} at ${clockTime(end)}. '
-          'If you don’t cancel before then, Apple charges ${plan.priceLabel} '
-          'and the plan renews ${_every(plan, end)}.';
+      text = e.willRenew
+          ? 'Your trial ends ${weekdayMonthDay(end)} at ${clockTime(end)}. '
+              'If you don’t cancel before then, Apple charges ${plan.priceLabel} '
+              'and the plan renews ${_every(plan, end)}.'
+          : 'You cancelled. The trial stays on until ${weekdayMonthDay(end)} '
+              'at ${clockTime(end)}, and you won’t be charged.';
     } else if (e.isActive) {
       over = '${planName(plan)} plan';
       big = '${plan.priceLabel} ${perPeriodWords(plan)}';
       text = e.renewsAt == null
           ? 'Renews until you cancel.'
+          : !e.willRenew
+              ? 'You cancelled. Your plan stays on until '
+                  '${monthDayYear(e.renewsAt!)}. No more charges.'
           : 'Next charge ${monthDayYear(e.renewsAt!)}: ${plan.priceLabel}. '
               'It renews ${_every(plan, e.renewsAt!)} until you cancel.';
     } else {

@@ -10,6 +10,7 @@ import 'core/analytics/analytics.dart';
 import 'core/audio/pcm_source.dart';
 import 'core/billing/billing_service.dart';
 import 'core/billing/paywall_gate.dart';
+import 'core/billing/storekit_billing_service.dart';
 import 'core/billing/trial_reminder.dart';
 import 'core/cloud/audio_encoder.dart';
 import 'core/cloud/backend_config.dart';
@@ -235,7 +236,13 @@ class AppServices {
     final kv = KvStore(db.db);
     final analytics = Analytics(db.db);
     final repo = RecordingRepository(db.db, RecordingStorage(recRoot.path));
-    final billing = FakeBillingService(kv: kv);
+    // Real App Store billing on iPhone. LN_BILLING=fake (simulator QA runs
+    // 1-5) or =store forces one.
+    const billingMode = String.fromEnvironment('LN_BILLING');
+    final BillingService billing = billingMode == 'store' ||
+            (billingMode != 'fake' && Platform.isIOS)
+        ? StoreKitBillingService(kv: kv)
+        : FakeBillingService(kv: kv);
     await billing.init();
     final scheduler = LocalNotificationScheduler();
     final settings = AppSettings(kv);

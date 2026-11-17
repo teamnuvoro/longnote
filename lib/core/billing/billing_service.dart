@@ -45,6 +45,11 @@ const annualPlan = Plan(
     price: 59.99,
     priceLabel: r'$59.99');
 
+/// Plans as the App Store reports them (localized price, e.g. "₹999"),
+/// filled by the real billing service. Screens look plans up through
+/// [planForId] so they show the user's own currency.
+final Map<String, Plan> storePlans = {};
+
 enum EntitlementStatus { none, trial, active, expired }
 
 @immutable
@@ -55,6 +60,7 @@ class Entitlement {
     this.trialEndsAt,
     this.renewsAt,
     this.trialUsed = false,
+    this.willRenew = true,
   });
 
   final EntitlementStatus status;
@@ -67,6 +73,10 @@ class Entitlement {
   /// Apple allows one introductory trial per subscription group.
   final bool trialUsed;
 
+  /// False when the user turned off auto-renew (cancelled): access stays
+  /// until [renewsAt], then ends; no further charge.
+  final bool willRenew;
+
   bool get isActive =>
       status == EntitlementStatus.trial || status == EntitlementStatus.active;
 
@@ -76,6 +86,7 @@ class Entitlement {
         'trialEndsAt': trialEndsAt?.toIso8601String(),
         'renewsAt': renewsAt?.toIso8601String(),
         'trialUsed': trialUsed,
+        'willRenew': willRenew,
       };
 
   factory Entitlement.fromJson(Map<String, Object?> j) => Entitlement(
@@ -90,6 +101,16 @@ class Entitlement {
             ? null
             : DateTime.parse(j['renewsAt'] as String),
         trialUsed: (j['trialUsed'] as bool?) ?? false,
+        willRenew: (j['willRenew'] as bool?) ?? true,
+      );
+
+  Entitlement copyWith({bool? willRenew}) => Entitlement(
+        status: status,
+        planId: planId,
+        trialEndsAt: trialEndsAt,
+        renewsAt: renewsAt,
+        trialUsed: trialUsed,
+        willRenew: willRenew ?? this.willRenew,
       );
 }
 
@@ -100,9 +121,9 @@ class PurchaseResult {
   final String? error;
 }
 
-/// Billing behind an interface. v1 ships [FakeBillingService]; a StoreKit
-/// implementation (`in_app_purchase` or RevenueCat) replaces it without UI
-/// changes. See docs/DECISIONS.md.
+/// Billing behind an interface. The app uses [StoreKitBillingService]
+/// (storekit_billing_service.dart) on iOS; [FakeBillingService] stays for
+/// tests, the simulator QA runs and other platforms. See docs/DECISIONS.md.
 abstract class BillingService {
   ValueListenable<Entitlement> get entitlement;
   Future<void> init();

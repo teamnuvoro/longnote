@@ -263,12 +263,16 @@ class _PlanCard extends StatelessWidget {
     final String sub;
     if (e.status == EntitlementStatus.trial && e.trialEndsAt != null) {
       title = 'Longnote · ${planName(plan)}';
-      sub = 'Free trial until ${weekdayMonthDay(e.trialEndsAt!)}, then '
-          '${plan.priceLabel} ${perPeriodWords(plan)}.';
+      sub = e.willRenew
+          ? 'Free trial until ${weekdayMonthDay(e.trialEndsAt!)}, then '
+              '${plan.priceLabel} ${perPeriodWords(plan)}.'
+          : 'Cancelled · free until ${weekdayMonthDay(e.trialEndsAt!)}.';
     } else if (e.isActive) {
       title = 'Longnote · ${planName(plan)}';
       sub = e.renewsAt == null
           ? '${plan.priceLabel} ${perPeriodWords(plan)}.'
+          : !e.willRenew
+              ? 'Cancelled · ends ${monthDayYear(e.renewsAt!)}.'
           : 'Renews ${monthDayYear(e.renewsAt!)} · ${plan.priceLabel} ${perPeriodWords(plan)}.';
     } else {
       title = 'Longnote · Free';

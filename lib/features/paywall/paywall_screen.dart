@@ -17,7 +17,8 @@ import 'trial_copy.dart';
 /// A1 Paywall (Figma 5:167). Honest: yearly preselected, the trial timeline
 /// with real dates (today, the reminder 26 h before the end, the charge
 /// date), the exact price and date above the button, how to cancel.
-/// Billing is still [FakeBillingService]: a chip says purchases are simulated.
+/// Real App Store billing on iPhone; with [FakeBillingService] (tests, QA)
+/// a chip says purchases are simulated.
 ///
 /// After a trial starts, A2 (trial started) asks for the reminder permission;
 /// then the paywall closes. Pops with `true` when the user now has access,
@@ -37,8 +38,12 @@ class PaywallScreen extends StatefulWidget {
 }
 
 class _PaywallScreenState extends State<PaywallScreen> {
-  List<Plan> _plans = const [annualPlan, monthlyPlan];
-  Plan _selected = annualPlan;
+  // Store prices (user's currency) if already loaded at launch.
+  late List<Plan> _plans = [
+    planForId(annualPlan.id),
+    planForId(monthlyPlan.id),
+  ];
+  late Plan _selected = _plans.first;
   bool _busy = false;
   bool _closed = false;
 
@@ -132,7 +137,8 @@ class _PaywallScreenState extends State<PaywallScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(children: [
-                      const LnChip('Test build: purchases are simulated'),
+                      if (_s.billing is FakeBillingService)
+                        const LnChip('Test build: purchases are simulated'),
                       const Spacer(),
                       LnIconButton(
                         icon: LnIcons.x,

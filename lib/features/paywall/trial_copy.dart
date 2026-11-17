@@ -31,7 +31,10 @@ String forPeriodWords(Plan p) =>
 
 String planName(Plan p) => p.period == PlanPeriod.year ? 'Yearly' : 'Monthly';
 
-Plan planForId(String? id) => id == monthlyPlan.id ? monthlyPlan : annualPlan;
+Plan planForId(String? id) {
+  final base = id == monthlyPlan.id ? monthlyPlan : annualPlan;
+  return storePlans[base.id] ?? base;
+}
 
 /// Currency prefix of a store price label ("$" from "$59.99", "₹" from "₹4,999").
 String _currency(Plan p) =>
