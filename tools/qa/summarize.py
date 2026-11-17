@@ -14,6 +14,7 @@ RUNS = [
     ("3-recover", "Recovery, settings, fast taps, import", True),
     ("4-offline", "Server unreachable, then back", True),
     ("5-extra", "Phone calls, background, 1-hour recording", True),
+    ("6-store", "Microphone denied, real App Store", True),
 ]
 
 

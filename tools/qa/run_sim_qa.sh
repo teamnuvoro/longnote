@@ -7,6 +7,8 @@
 #   4-offline  backend blocked before launch: note waits; unblocked: uploads itself
 #   5-extra    simulated phone calls, 10 min in the background while recording,
 #              a 60 min recording (fed at 12x) end to end
+#   6-store    fresh install, microphone DENIED, real App Store billing (sandbox)
+# Runs 1-5 use simulated billing (LN_BILLING=fake); run 6 the real StoreKit.
 # Output: $QA_OUT (default build/qa_out): results/, shots/, logs/, crash/,
 # summary.json, RESULTS.md. Exit 1 if any check failed, hung or crashed.
 set -uo pipefail
@@ -20,6 +22,7 @@ RUNS=(
   "3-recover integration_test/qa_3_recover_test.dart"
   "4-offline integration_test/qa_4_offline_test.dart"
   "5-extra integration_test/qa_5_extra_test.dart"
+  "6-store integration_test/qa_6_store_test.dart"
 )
 ONLY="${QA_ONLY:-}"   # e.g. QA_ONLY="1-main" to run one launch
 
@@ -81,13 +84,16 @@ xcrun simctl uninstall "$UDID" "$BUNDLE" 2>/dev/null || true
 
 run() {
   local name=$1 target=$2
+  local billing=fake
+  [ "$name" = 6-store ] && billing=store
   rm -f "$OUT/heartbeat"
   echo "=== $name: $target ($(date -u +%T))"
   QA_OUT="$OUT" QA_RUN="$name" flutter drive -d "$UDID" \
     --driver test_driver/integration_test.dart --target "$target" \
     --keep-app-running --no-pub \
     --dart-define=QA_OUT="$OUT" --dart-define=QA_RUN="$name" \
-    --dart-define=QA_AUDIO="$OUT/audio" > "$OUT/logs/$name.log" 2>&1 &
+    --dart-define=QA_AUDIO="$OUT/audio" --dart-define=LN_BILLING="$billing" \
+    > "$OUT/logs/$name.log" 2>&1 &
   local pid=$!
   echo "$name $pid" > "$OUT/state/current-run"
   # Last resort if a run never ends (the watcher handles app hangs).
@@ -110,6 +116,11 @@ run() {
 for r in "${RUNS[@]}"; do
   set -- $r
   if [ -n "$ONLY" ] && [[ " $ONLY " != *" $1 "* ]]; then continue; fi
+  if [ "$1" = 6-store ]; then
+    echo "--- fresh install with the microphone denied before launch 6"
+    xcrun simctl uninstall "$UDID" "$BUNDLE" 2>/dev/null || true
+    xcrun simctl privacy "$UDID" revoke microphone "$BUNDLE" || true
+  fi
   if [ "$1" = 4-offline ]; then
     echo "--- blocking the backend before launch 4"
     tools/qa/net_block.sh on "$OUT"

@@ -141,9 +141,12 @@ class Qa {
     return '${n(Verdict.pass)} pass, ${n(Verdict.fail)} fail, ${n(Verdict.skip)} skip';
   }
 
-  /// Launches the real app (main.dart) with the file microphone.
-  Future<void> launch() async {
-    await launchApp(sourceFactory: () => FilePcmSource(FilePcmSource.nextPath));
+  /// Launches the real app (main.dart) with the file microphone, or with
+  /// the app's own microphone source when [realMic] (run 6: iOS denies it).
+  Future<void> launch({bool realMic = false}) async {
+    await launchApp(
+        sourceFactory:
+            realMic ? null : () => FilePcmSource(FilePcmSource.nextPath));
     // The app's crash reporter wrapped the test binding's handlers. Record
     // errors here instead, per check (and print them), so one error fails
     // its check and the run carries on to the next one.
