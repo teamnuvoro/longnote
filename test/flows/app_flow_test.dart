@@ -168,6 +168,7 @@ void main() {
 
     // Record pill -> C1 -> minimise -> bar -> C1 -> Stop -> D1 -> back.
     await tapAndSettle(t, find.text('Record'));
+    await tapAndSettle(t, find.byKey(const ValueKey('record-start')));
     expect(onTop<RecordingScreen>(t), isTrue);
     await env.speak(t, 2);
     await tapAndSettle(t, byLabel('Back to notes (keeps recording)'));
@@ -259,6 +260,7 @@ void main() {
     expect(find.text('Your first note is one tap away'), findsOneWidget);
 
     await tapAndSettle(t, find.text('Record'));
+    await tapAndSettle(t, find.byKey(const ValueKey('record-start')));
     expect(onTop<RecordingScreen>(t), isTrue);
     expect(env.services.recorder.isActive, isTrue);
     await env.speak(t, 3);
@@ -394,6 +396,7 @@ void main() {
   Future<String> recordNote(WidgetTester t, {int seconds = 2}) async {
     final before = (await t.runAsync(() => env.repo.all()))!.map((n) => n.id).toSet();
     await tapAndSettle(t, find.text('Record'));
+    await tapAndSettle(t, find.byKey(const ValueKey('record-start')));
     expect(onTop<RecordingScreen>(t), isTrue);
     await env.speak(t, seconds);
     await tapAndSettle(t, byLabel('Stop & save'));
@@ -528,6 +531,7 @@ void main() {
       await env.http.reached('PATCH');
     });
     await tapAndSettle(t, find.text('Record'));
+    await tapAndSettle(t, find.byKey(const ValueKey('record-start')));
     expect(onTop<RecordingScreen>(t), isTrue);
     env.http.release('PATCH');
     await t.runAsync(() => run);
@@ -622,6 +626,7 @@ void main() {
     // Never again: next recording goes straight to its note.
     await tapAndSettle(t, byLabel('Notes'));
     await tapAndSettle(t, find.text('Record'));
+    await tapAndSettle(t, find.byKey(const ValueKey('record-start')));
     await env.speak(t, 1);
     await tapAndSettle(t, byLabel('Stop & save'));
     await t.pump(const Duration(seconds: 1));
@@ -716,6 +721,7 @@ void main() {
       (t) async {
     await bootStarted(t);
     await tapAndSettle(t, find.text('Record'));
+    await tapAndSettle(t, find.byKey(const ValueKey('record-start')));
     await env.speak(t, 1);
     final id = env.services.recorder.current!.id;
     await t.runAsync(() => env.repo.setNoteOptions(id, language: 'fr'));

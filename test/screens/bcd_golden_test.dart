@@ -124,6 +124,13 @@ void main() {
     await push(tester, R.record);
   }
 
+  testWidgets('C0 ready to record', skip: _skip, (tester) async {
+    await tester.runAsync(() => make(recorder: true));
+    await open(tester);
+    await push(tester, R.record, query: {RecordingScreen.readyParam: '1'});
+    await shot(tester, 'c0_ready');
+  });
+
   testWidgets('C1 recording', skip: _skip, (tester) async {
     await recording(tester,
         state: CaptureState.recording, elapsed: const Duration(minutes: 42, seconds: 17));

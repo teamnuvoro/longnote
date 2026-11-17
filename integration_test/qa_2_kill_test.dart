@@ -1,6 +1,7 @@
 // Simulator QA run 2: start a recording, let ~10 s reach the disk, then end
 // the app like a force-quit from the app switcher (SIGKILL: nothing runs
 // after it). Run 3 checks that the recording was kept and processed.
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:longnote/features/notes/notes_screen.dart';
 import 'package:longnote/features/recording/recording_screen.dart';
@@ -21,6 +22,7 @@ void main() {
         () async {
       FilePcmSource.nextPath = Qa.audio('killed.wav');
       await qa.tap(find.text('Record'));
+      await qa.tap(find.byKey(const ValueKey('record-start')));
       await qa.expectOnTop<RecordingScreen>();
       await qa.waitUntil(() async => FilePcmSource.current?.finished ?? false,
           what: 'the clip to play', timeout: const Duration(seconds: 40));

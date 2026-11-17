@@ -50,6 +50,7 @@ void main() {
       FilePcmSource.nextPath = Qa.audio(wav);
       if (!qa.onTop<NotesScreen>()) await qa.home();
       await qa.tap(find.text('Record'));
+      await qa.tap(find.byKey(const ValueKey('record-start')));
       await qa.expectOnTop<RecordingScreen>();
       await qa.waitUntil(() async => c().state == CaptureState.recording,
           what: 'recording to start', timeout: const Duration(seconds: 10));

@@ -4,6 +4,7 @@
 // upload and finish by itself, with no tap.
 import 'dart:io';
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:longnote/core/models/recording.dart';
 import 'package:longnote/features/common/note_ready_ask.dart';
@@ -32,6 +33,7 @@ void main() {
         'attention"', () async {
       FilePcmSource.nextPath = Qa.audio('offline.wav');
       await qa.tap(find.text('Record'));
+      await qa.tap(find.byKey(const ValueKey('record-start')));
       await qa.expectOnTop<RecordingScreen>();
       await qa.waitUntil(() async => FilePcmSource.current?.finished ?? false,
           what: 'the clip to play', timeout: const Duration(seconds: 40));

@@ -107,7 +107,11 @@ GoRouter buildRouter({required String initialLocation}) => GoRouter(
           name: R.record,
           parentNavigatorKey: rootNavigatorKey,
           pageBuilder: (c, s) => _modal(
-              s, Theme(data: lnRecordingTheme(), child: const RecordingScreen())),
+              s,
+              Theme(
+                  data: lnRecordingTheme(),
+                  child: RecordingScreen(
+                      ready: s.uri.queryParameters[RecordingScreen.readyParam] == '1'))),
           routes: [
             GoRoute(
               path: 'discard',
