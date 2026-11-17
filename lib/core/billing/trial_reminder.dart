@@ -78,6 +78,7 @@ class TrialReminderService {
     final end = e.trialEndsAt;
     if (e.status == EntitlementStatus.trial &&
         e.willRenew &&
+        e.switchesToPlanId == null &&
         end != null &&
         await scheduledFor(end) != null) {
       return;

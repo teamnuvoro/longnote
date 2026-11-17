@@ -153,7 +153,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ListTile(
             leading: const Icon(Icons.restore),
             title: const Text('Restore purchases'),
-            onTap: () => _s.billing.restore(),
+            onTap: () async {
+              final r = await _s.billing.restore();
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text(switch (r) {
+                RestoreResult.restored => 'Your plan is active.',
+                RestoreResult.none =>
+                  'No purchase found to restore on this Apple ID.',
+                RestoreResult.failed =>
+                  'Couldn’t reach the App Store. Check your connection and try again.',
+              })));
+            },
           ),
           const ListTile(
             leading: Icon(Icons.cancel_outlined),

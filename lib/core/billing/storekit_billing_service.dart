@@ -63,7 +63,7 @@ class StoreKitBillingService implements BillingService {
     }
     final elig = await kv.get(eligibleKey);
     if (elig != null) _eligible = elig == '1';
-    if (_ent.value.trialUsed) _eligible = false;
+    if (_ent.value.isActive) _eligible = false;
     // Last known store prices, so screens never show USD to a ₹ subscriber
     // while the App Store is slow or offline.
     final plans = await kv.get(plansKey);
@@ -142,7 +142,9 @@ class StoreKitBillingService implements BillingService {
   }
 
   void _set(Entitlement e) {
-    if (e.trialUsed) _eligible = false;
+    // A running plan used the trial; otherwise Apple's products answer
+    // decides (a guess must be able to recover, e.g. another Apple ID).
+    if (e.isActive) _eligible = false;
     _ent.value = e;
     _persist(cacheKey, jsonEncode(e.toJson()));
   }
@@ -184,7 +186,7 @@ class StoreKitBillingService implements BillingService {
         final e = m['eligibleForIntro'];
         if (e is bool) eligible = (eligible ?? true) && e;
       }
-      if (eligible != null && !_ent.value.trialUsed) _setEligible(eligible);
+      if (eligible != null && !_ent.value.isActive) _setEligible(eligible);
       plans.sort((a, b) => a.period == b.period
           ? 0
           : a.period == PlanPeriod.year

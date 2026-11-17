@@ -53,6 +53,9 @@ Future<void> _launch(CrashReporter reporter,
   final onboarded = await services.kv.getBool(AppServices.kvOnboardingDone);
   // Phones that onboarded on v0.1 have already met the paywall rule; they go
   // straight to Notes.
+  if (onboarded && services.billing.entitlement.value.isActive) {
+    await services.kv.setBool(AppServices.kvFirstPaywallSeen, true);
+  }
   final paywallSeen = onboarded &&
       (await services.kv.getBool(AppServices.kvFirstPaywallSeen) ||
           await services.repo.count() > 0 ||

@@ -391,6 +391,7 @@ class AppServices {
       processor.transcribeOnPhoneInstead(id, jobs);
 
   void dispose() {
+    if (_reminderSyncOn) billing.entitlement.removeListener(_syncReminder);
     _netSub?.cancel();
     _lifecycleListener?.dispose();
     jobs.dispose();
