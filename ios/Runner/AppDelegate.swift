@@ -72,14 +72,16 @@ public class StorePlugin: NSObject, FlutterPlugin {
       binaryMessenger: registrar.messenger())
     let instance = StorePlugin(channel: channel)
     registrar.addMethodCallDelegate(instance, channel: channel)
-    instance.listenForUpdates()
   }
 
   deinit { updates?.cancel() }
 
   /// Apple asks apps to listen from launch, so purchases finished outside
-  /// the app (renewals, Ask to Buy) are finished and noticed.
+  /// the app (renewals, Ask to Buy) are finished and noticed. Started by the
+  /// first call from Dart, which the billing service makes at app start;
+  /// builds with simulated billing never touch StoreKit.
   private func listenForUpdates() {
+    guard updates == nil else { return }
     updates = Task.detached { [weak self] in
       for await verification in StoreKit.Transaction.updates {
         if case .verified(let transaction) = verification {
@@ -94,6 +96,7 @@ public class StorePlugin: NSObject, FlutterPlugin {
 
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     let args = call.arguments as? [String: Any] ?? [:]
+    listenForUpdates()
     Task { @MainActor in
       do {
         switch call.method {

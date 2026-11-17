@@ -62,6 +62,11 @@ class _RecordingScreenState extends State<RecordingScreen> {
   DateTime? _startedAt;
   static const _startTapGuard = Duration(milliseconds: 600);
 
+  /// When the ready screen opened. Start sits where the home screen's Record
+  /// button is, so the second tap of a double tap on Record must not start.
+  late final DateTime _openedAt = clock.now();
+  static const _openTapGuard = Duration(milliseconds: 400);
+
   void _pauseOrResume(RecordingController c, bool paused) {
     if (paused) {
       c.resume();
@@ -75,6 +80,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
   @override
   void initState() {
     super.initState();
+    _openedAt; // start the double-tap guard now
     _repo.addListener(_loadNote);
     _loadNote();
   }
@@ -102,6 +108,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
   /// Start (ready state). Stays on the ready screen with a toast on failure.
   Future<void> _start() async {
     if (_starting || !_ready) return;
+    if (clock.now().difference(_openedAt) < _openTapGuard) return;
     setState(() => _starting = true);
     try {
       await _s.startRecording();
