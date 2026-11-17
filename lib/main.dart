@@ -55,7 +55,9 @@ Future<void> _launch(CrashReporter reporter,
   // straight to Notes.
   final paywallSeen = onboarded &&
       (await services.kv.getBool(AppServices.kvFirstPaywallSeen) ||
-          await services.repo.count() > 0);
+          await services.repo.count() > 0 ||
+          // A subscriber reinstalling: no "Start free trial" for them.
+          services.billing.entitlement.value.isActive);
   final router = buildRouter(
       initialLocation:
           initialLocation(onboarded: onboarded, paywallSeen: paywallSeen));

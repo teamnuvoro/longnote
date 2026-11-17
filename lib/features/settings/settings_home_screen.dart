@@ -85,14 +85,16 @@ class _SettingsHomeScreenState extends State<SettingsHomeScreen> {
 
   Future<void> _restore() async {
     final s = _s;
-    await s.billing.restore();
+    final r = await s.billing.restore();
     if (!mounted) return;
     final e = s.billing.entitlement.value;
     showNote(
         context,
         e.isActive
             ? 'Your ${planName(planForId(e.planId)).toLowerCase()} plan is active.'
-            : 'No purchase found to restore on this Apple ID.');
+            : r == RestoreResult.failed
+                ? 'Couldn’t reach the App Store. Check your connection and try again.'
+                : 'No purchase found to restore on this Apple ID.');
   }
 
   void _versionTap() {

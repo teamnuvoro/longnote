@@ -69,6 +69,23 @@ class TrialReminderService {
     return at;
   }
 
+  /// Cancels a scheduled reminder that no longer matches the plan: the
+  /// user cancelled (no charge coming), was refunded, upgraded, or the trial
+  /// end moved. The reminder must never announce a charge that won't happen.
+  Future<void> syncWith(Entitlement e) async {
+    final v = await kv?.get(kvScheduledAt);
+    if (v == null) return;
+    final end = e.trialEndsAt;
+    if (e.status == EntitlementStatus.trial &&
+        e.willRenew &&
+        end != null &&
+        await scheduledFor(end) != null) {
+      return;
+    }
+    await scheduler.cancel(notificationId);
+    await kv?.set(kvScheduledAt, null);
+  }
+
   /// The reminder scheduled for the trial ending at [trialEndsAt], or null
   /// if none was (skipped, notifications denied, or another trial's).
   Future<DateTime?> scheduledFor(DateTime trialEndsAt) async {

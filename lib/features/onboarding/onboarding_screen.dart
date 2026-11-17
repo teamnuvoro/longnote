@@ -29,6 +29,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     final s = context.read<AppServices>();
     await s.kv.setBool(AppServices.kvOnboardingDone, true);
     if (!mounted) return;
+    if (s.billing.entitlement.value.isActive) {
+      // Already subscribed (reinstall / restored): no paywall.
+      await s.kv.setBool(AppServices.kvFirstPaywallSeen, true);
+      if (mounted) context.goNamed(R.notes);
+      return;
+    }
     // onboarding -> paywall (once) -> Notes
     context.goNamed(R.paywall, queryParameters: {'first': '1'});
   }

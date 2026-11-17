@@ -51,7 +51,8 @@ import FoundationModels
 //   status   -> {active: Bool, productId?, purchasedAtMs?, expiresAtMs?, isTrial?,
 //                originalId?}
 //   restore  -> AppStore.sync(), then the status map
-//   renewal {productId} -> Bool? (will the subscription auto-renew)
+//   renewal {productId} -> {willAutoRenew: Bool, autoRenewPreference: String?}
+//             or nil when unknown (needs the network)
 // Native -> Dart: "changed" (no args) whenever Transaction.updates delivers
 // (renewal, Ask to Buy approval, refund, purchase on another device).
 //
@@ -80,7 +81,7 @@ public class StorePlugin: NSObject, FlutterPlugin {
   /// the app (renewals, Ask to Buy) are finished and noticed.
   private func listenForUpdates() {
     updates = Task.detached { [weak self] in
-      for await verification in Transaction.updates {
+      for await verification in StoreKit.Transaction.updates {
         if case .verified(let transaction) = verification {
           await transaction.finish()
         }
@@ -168,8 +169,8 @@ public class StorePlugin: NSObject, FlutterPlugin {
   /// revoked), the one that runs longest if there are several. Local: works
   /// offline from StoreKit's on-device cache.
   static func status() async -> [String: Any] {
-    var best: Transaction?
-    for await verification in Transaction.currentEntitlements {
+    var best: StoreKit.Transaction?
+    for await verification in StoreKit.Transaction.currentEntitlements {
       guard case .verified(let t) = verification,
             t.productType == .autoRenewable,
             t.revocationDate == nil else { continue }
@@ -191,16 +192,26 @@ public class StorePlugin: NSObject, FlutterPlugin {
     return m
   }
 
-  /// Needs the network; nil when unknown.
-  static func willAutoRenew(_ productId: String) async -> Bool? {
+  /// Needs the network; nil when unknown. autoRenewPreference is the plan
+  /// Apple renews into (differs from productId after a plan change).
+  static func willAutoRenew(_ productId: String) async -> [String: Any]? {
     guard let product = try? await Product.products(for: [productId]).first,
           let statuses = try? await product.subscription?.status else { return nil }
+    var fallback: Product.SubscriptionInfo.RenewalInfo?
     for s in statuses {
-      if case .verified(let info) = s.renewalInfo {
-        return info.willAutoRenew
+      guard case .verified(let info) = s.renewalInfo else { continue }
+      if info.currentProductID == productId {
+        return renewalMap(info)
       }
+      if fallback == nil { fallback = info }
     }
-    return nil
+    return fallback.map(renewalMap)
+  }
+
+  static func renewalMap(_ info: Product.SubscriptionInfo.RenewalInfo) -> [String: Any] {
+    var m: [String: Any] = ["willAutoRenew": info.willAutoRenew]
+    if let next = info.autoRenewPreference { m["autoRenewPreference"] = next }
+    return m
   }
 
   static func unitName(_ unit: Product.SubscriptionPeriod.Unit) -> String {

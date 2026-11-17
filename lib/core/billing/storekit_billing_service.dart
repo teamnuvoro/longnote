@@ -32,6 +32,7 @@ class StoreKitBillingService implements BillingService {
 
   static const cacheKey = 'store_entitlement';
   static const eligibleKey = 'store_trial_eligible';
+  static const plansKey = 'store_plans';
   static const productIds = [
     'com.novaralabs.longnote.annual',
     'com.novaralabs.longnote.monthly',
@@ -63,12 +64,26 @@ class StoreKitBillingService implements BillingService {
     final elig = await kv.get(eligibleKey);
     if (elig != null) _eligible = elig == '1';
     if (_ent.value.trialUsed) _eligible = false;
+    // Last known store prices, so screens never show USD to a ₹ subscriber
+    // while the App Store is slow or offline.
+    final plans = await kv.get(plansKey);
+    if (plans != null) {
+      try {
+        for (final raw in jsonDecode(plans) as List) {
+          final p = planFromStore((raw as Map).cast<String, Object?>());
+          if (p != null) {
+            _plans[p.id] = p;
+            storePlans[p.id] = p;
+          }
+        }
+      } catch (_) {/* corrupt cache: products load below */}
+    }
 
     _ch.setMethodCallHandler((call) async {
       if (call.method == 'changed') await refresh();
     });
     try {
-      await refresh().timeout(statusTimeout);
+      await _readStatus().timeout(statusTimeout);
     } catch (e) {
       debugPrint('store status at launch: $e');
     }
@@ -76,8 +91,19 @@ class StoreKitBillingService implements BillingService {
     unawaited(loadPlans());
   }
 
-  /// Re-reads the entitlement from StoreKit.
+  /// Re-reads the entitlement from StoreKit (local, cheap). Called on
+  /// resume, before a gate decision past the paid-through date, and on
+  /// native "changed".
+  @override
   Future<void> refresh() async {
+    try {
+      await _readStatus().timeout(statusTimeout);
+    } catch (e) {
+      debugPrint('store refresh: $e');
+    }
+  }
+
+  Future<void> _readStatus() async {
     final m = await _ch.invokeMapMethod<String, Object?>('status');
     if (m != null) _apply(m);
   }
@@ -87,7 +113,8 @@ class StoreKitBillingService implements BillingService {
     final prev = _ent.value;
     // Keep the last known auto-renew answer until the network confirms it.
     if (prev.planId == e.planId && prev.renewsAt == e.renewsAt) {
-      e = e.copyWith(willRenew: prev.willRenew);
+      e = e.withRenewal(
+          willRenew: prev.willRenew, switchesToPlanId: prev.switchesToPlanId);
     }
     _set(e);
     if (e.isActive && e.planId != null) unawaited(_fetchRenewal(e.planId!));
@@ -95,12 +122,19 @@ class StoreKitBillingService implements BillingService {
 
   Future<void> _fetchRenewal(String productId) async {
     try {
-      final will = await _ch
-          .invokeMethod<bool>('renewal', {'productId': productId})
-          .timeout(productsTimeout);
+      final r = await _ch.invokeMapMethod<String, Object?>(
+          'renewal', {'productId': productId}).timeout(productsTimeout);
+      final will = r?['willAutoRenew'];
+      if (will is! bool) return;
+      final pref = r?['autoRenewPreference'];
+      final switches =
+          pref is String && pref != productId && productIds.contains(pref)
+              ? pref
+              : null;
       final e = _ent.value;
-      if (will != null && e.planId == productId && e.willRenew != will) {
-        _set(e.copyWith(willRenew: will));
+      if (e.planId == productId &&
+          (e.willRenew != will || e.switchesToPlanId != switches)) {
+        _set(e.withRenewal(willRenew: will, switchesToPlanId: switches));
       }
     } catch (e) {
       debugPrint('store renewal info: $e');
@@ -160,6 +194,20 @@ class StoreKitBillingService implements BillingService {
         _plans[p.id] = p;
         storePlans[p.id] = p;
       }
+      if (plans.isNotEmpty) {
+        _persist(
+            plansKey,
+            jsonEncode([
+              for (final raw in list ?? const [])
+                if (raw is Map && planFromStore(raw.cast<String, Object?>()) != null)
+                  {
+                    for (final k in const [
+                      'id', 'displayPrice', 'price', 'periodUnit', 'trialDays'
+                    ])
+                      k: raw[k]
+                  }
+            ]));
+      }
       return plans;
     } catch (e) {
       debugPrint('store products: $e');
@@ -176,7 +224,6 @@ class StoreKitBillingService implements BillingService {
           error: 'Can’t reach the App Store right now. Check your connection '
               'and try again. Nothing was charged.');
     }
-    final wasEligible = _eligible;
     try {
       final r = await _ch
           .invokeMapMethod<String, Object?>('purchase', {'id': plan.id});
@@ -196,9 +243,9 @@ class StoreKitBillingService implements BillingService {
                     'yet. Tap “Restore purchase” in a minute.');
           }
           _setEligible(false);
+          // Apple's answer decides, not our earlier eligibility guess.
           return PurchaseResult(
-              success: true,
-              startedTrial: wasEligible && e.status == EntitlementStatus.trial);
+              success: true, startedTrial: e.status == EntitlementStatus.trial);
         case 'cancelled':
           return const PurchaseResult(
               success: false, error: 'Purchase cancelled. Nothing was charged.');
@@ -225,16 +272,19 @@ class StoreKitBillingService implements BillingService {
   /// Asks the App Store for this Apple ID's purchases (may show Apple's
   /// sign-in sheet), then re-reads the entitlement.
   @override
-  Future<void> restore() async {
+  Future<RestoreResult> restore() async {
     try {
       final m = await _ch.invokeMapMethod<String, Object?>('restore');
       if (m != null) _apply(m);
+      // Eligibility follows the restored history.
+      unawaited(loadPlans());
+      return _ent.value.isActive ? RestoreResult.restored : RestoreResult.none;
     } on PlatformException catch (e) {
-      // Cancelled sign-in or no network: show what StoreKit has locally.
+      // Cancelled sign-in or no network: show what StoreKit has locally,
+      // and say the App Store was not reached (not "no purchase").
       debugPrint('store restore: ${e.code} ${e.message}');
-      try {
-        await refresh().timeout(statusTimeout);
-      } catch (_) {}
+      await refresh();
+      return _ent.value.isActive ? RestoreResult.restored : RestoreResult.failed;
     }
   }
 }

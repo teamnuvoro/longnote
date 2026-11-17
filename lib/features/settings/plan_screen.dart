@@ -30,14 +30,16 @@ class PlanScreen extends StatelessWidget {
 
   Future<void> _restore(BuildContext context) async {
     final s = context.read<AppServices>();
-    await s.billing.restore();
+    final r = await s.billing.restore();
     if (!context.mounted) return;
     final e = s.billing.entitlement.value;
     showNote(
         context,
         e.isActive
             ? 'Your ${planName(planForId(e.planId)).toLowerCase()} plan is active.'
-            : 'No purchase found to restore on this Apple ID.');
+            : r == RestoreResult.failed
+                ? 'Couldn’t reach the App Store. Check your connection and try again.'
+                : 'No purchase found to restore on this Apple ID.');
   }
 
   @override
@@ -123,6 +125,11 @@ class _Summary extends StatelessWidget {
           : !e.willRenew
               ? 'You cancelled. Your plan stays on until '
                   '${monthDayYear(e.renewsAt!)}. No more charges.'
+          : e.switchesToPlanId != null
+              ? 'On ${monthDayYear(e.renewsAt!)} it switches to '
+                  '${planName(planForId(e.switchesToPlanId)).toLowerCase()}: '
+                  '${planForId(e.switchesToPlanId).priceLabel} '
+                  '${perPeriodWords(planForId(e.switchesToPlanId))} until you cancel.'
           : 'Next charge ${monthDayYear(e.renewsAt!)}: ${plan.priceLabel}. '
               'It renews ${_every(plan, e.renewsAt!)} until you cancel.';
     } else {

@@ -152,4 +152,26 @@ void main() {
       expect(b2.entitlement.value.renewsAt, DateTime(2026, 12, 18, 10, 0));
     });
   });
+
+  test('a cancelled / refunded / ended trial removes its reminder', () async {
+    final sched = _RecordingScheduler();
+    final r = TrialReminderService(sched, kv: env.kv, clock: env.clock);
+    final end = env.clock.now().add(const Duration(days: 3));
+    await r.onTrialStarted(annualPlan, end);
+    final trial = Entitlement(
+        status: EntitlementStatus.trial,
+        planId: annualPlan.id,
+        trialEndsAt: end,
+        renewsAt: end,
+        trialUsed: true);
+    await r.syncWith(trial);
+    expect(sched.cancelled.length, 1, reason: 'only the reset in onTrialStarted');
+    // Cancelled in iPhone Settings: no charge is coming, no reminder.
+    await r.syncWith(trial.withRenewal(willRenew: false));
+    expect(sched.cancelled.length, 2);
+    expect(await r.scheduledFor(end), isNull);
+    // Nothing scheduled any more: no further cancels.
+    await r.syncWith(const Entitlement());
+    expect(sched.cancelled.length, 2);
+  });
 }

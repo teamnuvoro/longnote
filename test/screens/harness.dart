@@ -121,7 +121,9 @@ class TestBilling implements BillingService {
   Future<PurchaseResult> purchase(Plan plan) async =>
       PurchaseResult(success: false);
   @override
-  Future<void> restore() async {}
+  Future<RestoreResult> restore() async => RestoreResult.none;
+  @override
+  Future<void> refresh() async {}
   @override
   bool get trialEligible => false;
 }

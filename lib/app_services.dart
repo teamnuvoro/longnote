@@ -347,8 +347,17 @@ class AppServices {
     });
     _lifecycleListener ??= AppLifecycleListener(onStateChange: (st) {
       _lifecycle = st;
-      if (st == AppLifecycleState.resumed) jobs.pokeAll();
+      if (st == AppLifecycleState.resumed) {
+        jobs.pokeAll();
+        // Expiry and "cancelled in Settings" are not pushed by the App Store.
+        unawaited(billing.refresh());
+      }
     });
+    if (!_reminderSyncOn) {
+      _reminderSyncOn = true;
+      billing.entitlement.addListener(_syncReminder);
+      _syncReminder();
+    }
   }
 
   /// Settings > "Keep recordings out of iCloud backup".
@@ -421,7 +430,19 @@ class AppServices {
   }
 
   /// Gate check + start. Returns false when the paywall must be shown.
-  Future<bool> canStartRecording() => gate.canStart(billing.entitlement.value);
+  Future<bool> canStartRecording() async {
+    final paidUntil = billing.entitlement.value.renewsAt;
+    if (paidUntil != null && paidUntil.isBefore(DateTime.now())) {
+      // Past the paid-through date: ask the store whether it renewed.
+      await billing.refresh();
+    }
+    return gate.canStart(billing.entitlement.value);
+  }
+
+  bool _reminderSyncOn = false;
+  void _syncReminder() =>
+      unawaited(reminders.syncWith(billing.entitlement.value).catchError(
+          (Object e) => debugPrint('trial reminder sync: $e')));
 
   Future<Recording> startRecording() async {
     jobs.pause(); // keep CPU/battery for capture

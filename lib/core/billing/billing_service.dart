@@ -61,6 +61,7 @@ class Entitlement {
     this.renewsAt,
     this.trialUsed = false,
     this.willRenew = true,
+    this.switchesToPlanId,
   });
 
   final EntitlementStatus status;
@@ -77,6 +78,10 @@ class Entitlement {
   /// until [renewsAt], then ends; no further charge.
   final bool willRenew;
 
+  /// Set when the user chose another plan in the same group (e.g. yearly ->
+  /// monthly): Apple switches at [renewsAt] and charges that plan's price.
+  final String? switchesToPlanId;
+
   bool get isActive =>
       status == EntitlementStatus.trial || status == EntitlementStatus.active;
 
@@ -87,6 +92,7 @@ class Entitlement {
         'renewsAt': renewsAt?.toIso8601String(),
         'trialUsed': trialUsed,
         'willRenew': willRenew,
+        'switchesToPlanId': switchesToPlanId,
       };
 
   factory Entitlement.fromJson(Map<String, Object?> j) => Entitlement(
@@ -102,17 +108,25 @@ class Entitlement {
             : DateTime.parse(j['renewsAt'] as String),
         trialUsed: (j['trialUsed'] as bool?) ?? false,
         willRenew: (j['willRenew'] as bool?) ?? true,
+        switchesToPlanId: j['switchesToPlanId'] as String?,
       );
 
-  Entitlement copyWith({bool? willRenew}) => Entitlement(
+  /// [switchesToPlanId] is replaced as given (null clears it).
+  Entitlement withRenewal({required bool willRenew, String? switchesToPlanId}) =>
+      Entitlement(
         status: status,
         planId: planId,
         trialEndsAt: trialEndsAt,
         renewsAt: renewsAt,
         trialUsed: trialUsed,
-        willRenew: willRenew ?? this.willRenew,
+        willRenew: willRenew,
+        switchesToPlanId: switchesToPlanId,
       );
 }
+
+/// What a Restore tap found. [failed]: the App Store could not be reached
+/// or Apple's sign-in was dismissed - NOT "you have no purchase".
+enum RestoreResult { restored, none, failed }
 
 class PurchaseResult {
   const PurchaseResult({required this.success, this.startedTrial = false, this.error});
@@ -129,7 +143,11 @@ abstract class BillingService {
   Future<void> init();
   Future<List<Plan>> loadPlans();
   Future<PurchaseResult> purchase(Plan plan);
-  Future<void> restore();
+  Future<RestoreResult> restore();
+
+  /// Re-reads the entitlement (expiry and auto-renew changes are not
+  /// pushed by the App Store). Never throws.
+  Future<void> refresh();
 
   /// Whether this user can still get the free trial.
   bool get trialEligible;
@@ -211,7 +229,13 @@ class FakeBillingService implements BillingService {
   }
 
   @override
-  Future<void> restore() async => _roll();
+  Future<RestoreResult> restore() async {
+    _roll();
+    return _ent.value.isActive ? RestoreResult.restored : RestoreResult.none;
+  }
+
+  @override
+  Future<void> refresh() async => _roll();
 
   /// Dev only: reset to a fresh install's billing state.
   Future<void> resetForDev() async => _set(const Entitlement());

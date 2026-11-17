@@ -17,6 +17,8 @@ class _FakeStore {
   bool productsFail = false;
   String purchaseResult = 'success';
   bool? willRenew = true;
+  String? renewInto;
+  bool? grantTrial;
   bool restoreThrows = false;
   final calls = <String>[];
 
@@ -59,7 +61,7 @@ class _FakeStore {
           status = {
             'active': true,
             'productId': id,
-            'isTrial': eligible,
+            'isTrial': grantTrial ?? eligible,
             'expiresAtMs': DateTime(2026, 11, 21, 10).millisecondsSinceEpoch,
           };
           eligible = false;
@@ -72,7 +74,11 @@ class _FakeStore {
         }
         return status;
       case 'renewal':
-        return willRenew;
+        if (willRenew == null) return null;
+        return {
+          'willAutoRenew': willRenew,
+          if (renewInto != null) 'autoRenewPreference': renewInto,
+        };
     }
     return null;
   }
@@ -182,6 +188,71 @@ void main() {
     store.restoreThrows = true;
     await b.restore();
     expect(b.entitlement.value.isActive, isTrue);
+  });
+
+  test('restore that cannot reach the App Store says failed, not "none"',
+      () async {
+    final b = await boot();
+    store.restoreThrows = true;
+    expect(await b.restore(), RestoreResult.failed);
+    store.restoreThrows = false;
+    expect(await b.restore(), RestoreResult.none);
+  });
+
+  test('refund / revocation: "changed" to inactive locks the app', () async {
+    store.status = {
+      'active': true,
+      'productId': 'com.novaralabs.longnote.monthly',
+      'isTrial': false,
+      'expiresAtMs': DateTime(2026, 12, 17).millisecondsSinceEpoch,
+    };
+    final b = await boot();
+    expect(b.entitlement.value.isActive, isTrue);
+    store.status = {'active': false};
+    await b.refresh();
+    expect(b.entitlement.value.isActive, isFalse);
+    expect(b.trialEligible, isFalse);
+  });
+
+  test('Apple grants a trial although we guessed "not eligible": the trial '
+      'flow (A2 + reminder) still runs', () async {
+    store.eligible = false; // products say: no trial
+    final b = await boot();
+    expect(b.trialEligible, isFalse);
+    store.grantTrial = true; // ...but Apple's purchase starts one
+    final r = await b.purchase((await b.loadPlans()).first);
+    expect(r.startedTrial, isTrue);
+    expect(b.entitlement.value.status, EntitlementStatus.trial);
+  });
+
+  test('plan change: auto-renew preference to another plan is shown',
+      () async {
+    store.status = {
+      'active': true,
+      'productId': 'com.novaralabs.longnote.annual',
+      'isTrial': false,
+      'expiresAtMs': DateTime(2027, 11, 17).millisecondsSinceEpoch,
+    };
+    store.renewInto = 'com.novaralabs.longnote.monthly';
+    final b = await boot();
+    await pumpEventQueue();
+    expect(b.entitlement.value.switchesToPlanId,
+        'com.novaralabs.longnote.monthly');
+    // A later refresh keeps it until the network says otherwise.
+    await b.refresh();
+    expect(b.entitlement.value.switchesToPlanId,
+        'com.novaralabs.longnote.monthly');
+  });
+
+  test('store prices are cached for the next (offline) launch', () async {
+    await boot();
+    await pumpEventQueue();
+    storePlans.clear();
+    store.productsFail = true;
+    final b2 = StoreKitBillingService(kv: env.kv);
+    await b2.init();
+    expect(planForId('com.novaralabs.longnote.annual').priceLabel, '₹5,900');
+    expect(b2.trialEligible, isTrue);
   });
 
   test('auto-renew off shows as cancelled (willRenew false)', () async {

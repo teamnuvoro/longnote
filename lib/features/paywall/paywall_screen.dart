@@ -78,7 +78,6 @@ class _PaywallScreenState extends State<PaywallScreen> {
     final plan = _selected;
     final s = _s;
     setState(() => _busy = true);
-    final trial = s.billing.trialEligible;
     final res = await s.billing.purchase(plan);
     if (!mounted) return;
     setState(() => _busy = false);
@@ -86,7 +85,8 @@ class _PaywallScreenState extends State<PaywallScreen> {
       showNote(context, res.error ?? 'Purchase did not complete. Nothing was charged.');
       return;
     }
-    if (res.startedTrial && trial) {
+    // Apple's answer decides (not the eligibility guess shown before).
+    if (res.startedTrial) {
       final ends = s.billing.entitlement.value.trialEndsAt!;
       await s.analytics.log(AnalyticsEvent.trialStarted,
           props: {'plan': plan.id, 'trial_ends_at': ends.toIso8601String()});
@@ -99,12 +99,16 @@ class _PaywallScreenState extends State<PaywallScreen> {
 
   Future<void> _restore() async {
     final s = _s;
-    await s.billing.restore();
+    final r = await s.billing.restore();
     if (!mounted) return;
     if (s.billing.entitlement.value.isActive) {
       _close(true);
     } else {
-      showNote(context, 'No purchase found to restore on this Apple ID.');
+      showNote(
+          context,
+          r == RestoreResult.failed
+              ? 'Couldn’t reach the App Store. Check your connection and try again.'
+              : 'No purchase found to restore on this Apple ID.');
     }
   }
 
@@ -181,6 +185,10 @@ class _PaywallScreenState extends State<PaywallScreen> {
                                 'Audio saved on your phone as you record',
                                 last: true),
                             const SizedBox(height: 22),
+                            Text('Longnote Pro · auto-renewing subscription',
+                                key: const ValueKey('paywall-product-name'),
+                                style: LnText.caption),
+                            const SizedBox(height: 8),
                             _Timeline(plan: plan, trial: trial, now: now),
                             const SizedBox(height: 14),
                             Row(
