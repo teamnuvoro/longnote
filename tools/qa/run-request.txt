@@ -9,3 +9,4 @@ run 2026-11-16T20:46:13Z frame probe off in background
 run 2026-11-16T21:24:36Z heartbeat/stop race fix
 run 2026-11-16T21:35:56Z final: Fable F1-F3 approved (05c5303)
 2026-11-17T21:29:59Z full run: Start button + layout, real StoreKit, launch 6 (mic denied, App Store)
+2026-11-17T22:29:06Z rerun: double-tap guard, lazy StoreKit listener, Fable fixes
