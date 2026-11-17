@@ -106,12 +106,54 @@ void main() {
     expect(names!.keys, unorderedEquals(['1', '2']));
   });
 
+  testWidgets('Record opens a ready screen: nothing records until Start',
+      (tester) async {
+    await boot(tester, seed: false);
+    final c = h.services.recorder;
+    Future<int> count() async =>
+        (await tester.runAsync(() => h.repo.all()))!.length;
+    final start = find.byKey(const ValueKey('record-start'));
+
+    // Record -> ready screen, nothing recording.
+    await tap(tester, find.text('Record'));
+    expect(find.byType(RecordingScreen), findsOneWidget);
+    expect(find.text('New recording'), findsOneWidget);
+    expect(find.text('Tap Start when you’re ready.'), findsOneWidget);
+    expect(start, findsOneWidget);
+    expect(byLabel('Start recording'), findsOneWidget);
+    expect(byLabel('Pause'), findsNothing);
+    expect(byLabel('Stop & save'), findsNothing);
+    expect(byLabel('Discard'), findsNothing);
+    expect(c.state, CaptureState.idle);
+    expect(await count(), 0);
+
+    // Close: back on Notes, still nothing recorded.
+    await tap(tester, byLabel('Close (nothing is recorded)'));
+    expect(find.byType(RecordingScreen), findsNothing);
+    expect(c.isActive, isFalse);
+    expect(await count(), 0);
+
+    // Record -> Start: the same screen turns into the live view.
+    await tap(tester, find.text('Record'));
+    expect(c.state, CaptureState.idle);
+    await tap(tester, start);
+    expect(c.state, CaptureState.recording);
+    expect(find.byType(RecordingScreen), findsOneWidget);
+    expect(start, findsNothing);
+    expect(byLabel('Pause'), findsOneWidget);
+    expect(byLabel('Stop & save'), findsOneWidget);
+    expect(await count(), 1);
+    await tap(tester, byLabel('Stop & save'));
+    await drain(tester);
+  });
+
   testWidgets('Record -> pause -> resume -> stop -> note appears processing',
       (tester) async {
     await boot(tester, seed: false);
     expect(find.text('Your first note is one tap away'), findsOneWidget);
 
     await tap(tester, find.text('Record'));
+    await tap(tester, find.byKey(const ValueKey('record-start')));
     expect(find.byType(RecordingScreen), findsOneWidget);
     final c = h.services.recorder;
     expect(c.state, CaptureState.recording);
@@ -160,6 +202,7 @@ void main() {
   testWidgets('Discard asks again and deletes the recording', (tester) async {
     await boot(tester, seed: false);
     await tap(tester, find.text('Record'));
+    await tap(tester, find.byKey(const ValueKey('record-start')));
     await tap(tester, byLabel('Discard'));
     expect(find.text('Discard this recording?'), findsOneWidget);
     await tap(tester, find.text('Keep recording'));
@@ -176,6 +219,7 @@ void main() {
   testWidgets('Phone call shows the honest banner and Resume now', (tester) async {
     await boot(tester, seed: false);
     await tap(tester, find.text('Record'));
+    await tap(tester, find.byKey(const ValueKey('record-start')));
     final c = h.services.recorder;
     await c.pause();
     c.banner = 'Paused by a phone call or another app. Audio up to now is saved.';

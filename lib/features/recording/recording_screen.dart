@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -28,8 +29,17 @@ abstract final class RecordingLevels {
 /// C1 live · C2 paused · C3 phone call (Figma 6:191, 6:322, 6:448): the dark
 /// "focus" screen. Minimise (chevron) goes back to Notes while recording
 /// continues. Capture itself is the crash-safe [RecordingController].
+///
+/// With [ready] (the Record button on Notes) it opens before anything
+/// records: the user taps Start to begin, or closes it and nothing is kept.
 class RecordingScreen extends StatefulWidget {
-  const RecordingScreen({super.key});
+  const RecordingScreen({super.key, this.ready = false});
+
+  /// Route query parameter (`/record?ready=1`) for [ready].
+  static const readyParam = 'ready';
+
+  /// Open in the "ready" state: no recording yet, one Start button.
+  final bool ready;
 
   @override
   State<RecordingScreen> createState() => _RecordingScreenState();
@@ -42,6 +52,25 @@ class _RecordingScreenState extends State<RecordingScreen> {
   String? _title;
   String? _lastId;
   bool _busy = false;
+
+  /// Waiting for the user to tap Start (until a recording has started).
+  late bool _ready = widget.ready && !_s.recorder.isActive;
+  bool _starting = false;
+
+  /// When Start succeeded. Pause sits where Start was, so a fast double tap
+  /// on Start must not pause straight away.
+  DateTime? _startedAt;
+  static const _startTapGuard = Duration(milliseconds: 600);
+
+  void _pauseOrResume(RecordingController c, bool paused) {
+    if (paused) {
+      c.resume();
+      return;
+    }
+    final at = _startedAt;
+    if (at != null && clock.now().difference(at) < _startTapGuard) return;
+    c.pause();
+  }
 
   @override
   void initState() {
@@ -68,6 +97,35 @@ class _RecordingScreenState extends State<RecordingScreen> {
         _title = n.title;
       });
     }
+  }
+
+  /// Start (ready state). Stays on the ready screen with a toast on failure.
+  Future<void> _start() async {
+    if (_starting || !_ready) return;
+    setState(() => _starting = true);
+    try {
+      await _s.startRecording();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _starting = false;
+        // Normally nothing started; if capture did start, show it live.
+        _ready = !_s.recorder.isActive;
+      });
+      showToast(
+          context,
+          e.toString().contains('permission')
+              ? 'Microphone is off. Turn it on in iPhone Settings › Longnote.'
+              : 'Could not start recording. Please try again.');
+      return;
+    }
+    if (!mounted) return;
+    _startedAt = clock.now();
+    setState(() {
+      _starting = false;
+      _ready = false;
+    });
+    unawaited(_loadNote());
   }
 
   void _minimise() =>
@@ -138,6 +196,13 @@ class _RecordingScreenState extends State<RecordingScreen> {
     final c = context.watch<RecordingController>();
     final bottom = MediaQuery.paddingOf(context).bottom;
 
+    if (_ready && (c.state == CaptureState.idle || c.state == CaptureState.starting)) {
+      return _Ready(
+        starting: _starting || c.state == CaptureState.starting,
+        onStart: _start,
+        onClose: _minimise,
+      );
+    }
     if (_leaving && c.state == CaptureState.idle) {
       return const Scaffold(backgroundColor: LnColors.night);
     }
@@ -289,7 +354,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
             child: info,
           ),
           const Spacer(),
-          // Controls: Discard · Stop & save · Pause/Resume.
+          // Controls: Discard · Pause/Resume (big, middle) · Stop & save.
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -302,25 +367,25 @@ class _RecordingScreenState extends State<RecordingScreen> {
               ),
               const SizedBox(width: 44),
               _RoundButton(
-                label: 'Stop & save',
+                label: paused ? (call ? 'Resume now' : 'Resume') : 'Pause',
                 size: 84,
-                background: LnColors.card,
+                background: paused ? LnColors.signal : LnColors.nightFill,
                 strongLabel: true,
-                onTap: stopping ? null : () => _stop(c),
-                child: Container(
-                  width: 28,
-                  height: 28,
-                  decoration: BoxDecoration(
-                      color: LnColors.signal, borderRadius: BorderRadius.circular(6)),
-                ),
+                onTap: stopping ? null : () => _pauseOrResume(c, paused),
+                child: LnIcon(paused ? LnIcons.play : LnIcons.pause,
+                    size: 32, color: LnColors.nightText),
               ),
               const SizedBox(width: 44),
               _RoundButton(
-                label: paused ? (call ? 'Resume now' : 'Resume') : 'Pause',
-                background: paused ? LnColors.signal : LnColors.nightFill,
-                onTap: stopping ? null : (paused ? c.resume : c.pause),
-                child: LnIcon(paused ? LnIcons.play : LnIcons.pause,
-                    size: 22.8, color: LnColors.nightText),
+                label: 'Stop & save',
+                background: LnColors.card,
+                onTap: stopping ? null : () => _stop(c),
+                child: Container(
+                  width: 20,
+                  height: 20,
+                  decoration: BoxDecoration(
+                      color: LnColors.signal, borderRadius: BorderRadius.circular(4)),
+                ),
               ),
             ],
           ),
@@ -336,11 +401,13 @@ class _RecordingScreenState extends State<RecordingScreen> {
 
 class _RoundButton extends StatelessWidget {
   const _RoundButton({
+    super.key,
     required this.label,
     required this.background,
     required this.child,
     this.onTap,
     this.size = 60,
+    this.width = 84,
     this.strongLabel = false,
   });
   final String label;
@@ -348,6 +415,7 @@ class _RoundButton extends StatelessWidget {
   final Widget child;
   final VoidCallback? onTap;
   final double size;
+  final double width;
   final bool strongLabel;
 
   @override
@@ -356,7 +424,7 @@ class _RoundButton extends StatelessWidget {
         semanticLabel: label,
         pressedOpacity: 0.7,
         child: SizedBox(
-          width: 84,
+          width: width,
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             AnimatedContainer(
               duration: const Duration(milliseconds: 200),
@@ -372,7 +440,8 @@ class _RoundButton extends StatelessWidget {
                 softWrap: false,
                 overflow: TextOverflow.visible,
                 style: strongLabel
-                    ? LnText.smallButton.copyWith(fontSize: 12, color: LnColors.nightText)
+                    ? LnText.smallButton.copyWith(
+                        fontSize: 12, color: LnColors.nightText)
                     : LnText.chip.copyWith(color: LnColors.nightText3)),
           ]),
         ),
@@ -517,6 +586,76 @@ class _WavePainter extends CustomPainter {
   @override
   bool shouldRepaint(_WavePainter old) =>
       old.paused != paused || old.levels != levels;
+}
+
+/// Before anything records (Record on Notes): close, or one big Start.
+class _Ready extends StatelessWidget {
+  const _Ready({required this.starting, required this.onStart, required this.onClose});
+  final bool starting;
+  final VoidCallback onStart;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.paddingOf(context).bottom;
+    return Scaffold(
+      backgroundColor: LnColors.night,
+      body: SafeArea(
+        bottom: false,
+        child: Column(children: [
+          const SizedBox(height: 4),
+          SizedBox(
+            height: 44,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: LnSpace.page),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: LnIconButton(
+                  icon: LnIcons.chevronDown,
+                  background: LnColors.nightFill,
+                  color: LnColors.nightText,
+                  semanticLabel: 'Close (nothing is recorded)',
+                  onPressed: starting ? null : onClose,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 38),
+          Text('New recording', style: LnText.recordingTitle),
+          const Spacer(),
+          Semantics(
+            label: 'Recorded time',
+            child: Text(timerText(Duration.zero),
+                style: LnText.timer.copyWith(
+                    color: LnColors.nightText3,
+                    fontFeatures: const [FontFeature.tabularFigures()])),
+          ),
+          const SizedBox(height: 16),
+          Text(starting ? 'Starting…' : 'Tap Start when you’re ready.',
+              textAlign: TextAlign.center,
+              style: LnText.meta.copyWith(color: LnColors.nightText3)),
+          const Spacer(),
+          _RoundButton(
+            key: const ValueKey('record-start'),
+            label: 'Start recording',
+            size: 84,
+            width: 160,
+            background: LnColors.signal,
+            strongLabel: true,
+            onTap: starting ? null : onStart,
+            child: starting
+                ? const SizedBox(
+                    width: 28,
+                    height: 28,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2.5, color: LnColors.nightText))
+                : const LnIcon(LnIcons.mic, size: 38, color: LnColors.nightText),
+          ),
+          SizedBox(height: 30 + bottom),
+        ]),
+      ),
+    );
+  }
 }
 
 /// Shown when capture ended on its own (mic error, storage full).

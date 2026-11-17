@@ -4,6 +4,7 @@
 // details -> Import and transcribe -> summary).
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:longnote/core/recording/recording_controller.dart';
 import 'package:longnote/core/models/recording.dart';
 import 'package:longnote/core/summary/summary_models.dart';
 import 'package:longnote/features/common/external.dart';
@@ -227,14 +228,21 @@ void main() {
       await qa.expectOnTop<NotesScreen>();
     }, section: ft);
 
-    await qa.check('H3', 'Double-tap Record: one recording screen; Discard keeps no note',
-        () async {
+    await qa.check('H3', 'Double-tap Record, then Start: one recording screen, one '
+        'recording; Discard keeps no note', () async {
       await qa.home();
       final before = (await qa.services.repo.all()).length;
       FilePcmSource.nextPath = null; // silence
       await doubleTap(find.text('Record'));
       expect(qa.count<RecordingScreen>(), 1, reason: 'recording opened twice');
-      expect(qa.services.recorder.isActive, isTrue);
+      expect(qa.services.recorder.isActive, isFalse,
+          reason: 'recording started before Start');
+      await doubleTap(find.byKey(const ValueKey('record-start')));
+      expect(qa.count<RecordingScreen>(), 1);
+      expect(qa.services.recorder.state, CaptureState.recording,
+          reason: 'the second tap must not pause or start again');
+      expect((await qa.services.repo.all()).length, before + 1,
+          reason: 'double tap on Start made more than one recording');
       await qa.wait(const Duration(seconds: 2));
       await qa.tap(byLabel('Discard'));
       await qa.expectOnTop<DiscardSheet>();

@@ -78,6 +78,7 @@ void main() {
     await qa.check('B1', 'Record -> recording screen; timer and mic level move', () async {
       FilePcmSource.nextPath = Qa.audio('main_2voices.wav');
       await qa.tap(find.text('Record'));
+      await qa.tap(find.byKey(const ValueKey('record-start')));
       await qa.expectOnTop<RecordingScreen>();
       final c = qa.services.recorder;
       expect(c.isActive, isTrue, reason: 'recorder not active');

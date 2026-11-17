@@ -15,6 +15,7 @@ import '../../core/util/clock.dart';
 import '../../core/util/coalescing_runner.dart';
 import '../../ui/widgets.dart';
 import '../note/kit.dart';
+import '../recording/recording_screen.dart';
 
 /// Notes list data, reloaded off the build path when the repository changes.
 class NotesModel extends ChangeNotifier {
@@ -97,6 +98,8 @@ class _NotesScreenState extends State<NotesScreen> {
     super.dispose();
   }
 
+  /// Record: paywall first if needed, then the recording screen in its
+  /// "ready" state. Nothing records until the user taps Start there.
   Future<void> _onRecord() async {
     if (_s.recorder.isActive) {
       context.pushOnce(R.record);
@@ -110,18 +113,9 @@ class _NotesScreenState extends State<NotesScreen> {
         final ok = await context.pushOnce<bool>(R.paywall);
         if (ok != true) return;
       }
-      try {
-        await _s.startRecording();
-      } catch (e) {
-        if (!mounted) return;
-        showToast(
-            context,
-            e.toString().contains('permission')
-                ? 'Microphone is off. Turn it on in iPhone Settings › Longnote.'
-                : 'Could not start recording. Please try again.');
-        return;
+      if (mounted) {
+        context.pushOnce(R.record, queryParameters: {RecordingScreen.readyParam: '1'});
       }
-      if (mounted) context.pushOnce(R.record);
     } finally {
       _starting = false;
     }

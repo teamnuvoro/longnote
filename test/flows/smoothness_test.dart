@@ -90,6 +90,7 @@ void main() {
     await seedMany(t, 40, perDay: 5);
     await env.pumpApp(t);
     await tapAndSettle(t, find.text('Record'));
+    await tapAndSettle(t, find.byKey(const ValueKey('record-start')));
     await env.speak(t, 1);
     await tapAndSettle(t, byLabel('Back to notes (keeps recording)'));
     expect(find.byType(NotesScreen), findsOneWidget);
