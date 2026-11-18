@@ -88,7 +88,8 @@ class MetaSink implements AnalyticsSink {
     try {
       if (!_started) {
         await _meta.initializeSdk();
-        // SDK v19 attaches screen titles / URLs to every event: off.
+        // Pinned SDK 18.0.3 has no metadata collection (no-op); kept so a
+        // future SDK 19+ (which attaches screen titles / URLs) stays off.
         await _meta.setAutoLogMetaDataEnabled(false);
         await _meta.setAdvertiserIdCollectionEnabled(_attAuthorized);
         _started = true;

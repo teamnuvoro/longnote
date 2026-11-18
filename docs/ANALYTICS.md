@@ -73,7 +73,8 @@ Meta (Info.plist + `MetaSink`):
 - `FacebookAdvertiserIDCollectionEnabled` = false by default;
   `setAdvertiserIdCollectionEnabled(true)` only after ATT "Allow".
 - `FBSDKAutoLogMetaDataEnabled` = false and `setAutoLogMetaDataEnabled(false)`
-  at start (SDK v19 otherwise attaches screen titles and opening URLs).
+  at start. The app pins Meta SDK 18.0.3 (third_party/facebook_app_events),
+  which has no metadata collection; SDK 19+ would attach screen titles and URLs.
 - `SKAdNetworkItems`: `v9wttpbfk9.skadnetwork`, `n38lu8286q.skadnetwork`
   (checked against Meta's SKAdNetwork page on 18 Nov 2026).
 - No `CFBundleURLTypes` / `LSApplicationQueriesSchemes`: only needed for
