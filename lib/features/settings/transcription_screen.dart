@@ -18,7 +18,6 @@ class TranscriptionScreen extends StatefulWidget {
 
 class _TranscriptionScreenState extends State<TranscriptionScreen> {
   TranscriptionMode? _mode;
-  bool? _backup;
 
   @override
   void initState() {
@@ -26,11 +25,9 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final st = context.read<AppServices>().settings;
       final m = await st.transcriptionMode();
-      final excluded = await st.excludeFromBackup();
       if (mounted) {
         setState(() {
           _mode = m;
-          _backup = !excluded;
         });
       }
     });
@@ -39,11 +36,6 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
   Future<void> _setMode(TranscriptionMode m) async {
     setState(() => _mode = m);
     await context.read<AppServices>().settings.setTranscriptionMode(m);
-  }
-
-  Future<void> _setBackup(bool on) async {
-    setState(() => _backup = on);
-    await context.read<AppServices>().setExcludeFromBackup(!on);
   }
 
   @override
@@ -99,16 +91,8 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
                         ]),
             ),
           ),
-          const SizedBox(height: 14),
-          LnCardGroup.settings(children: [
-            LnListRow.toggle(
-              icon: LnIcons.backup,
-              label: 'Back up recordings to iCloud',
-              subtitle: 'Off saves iCloud space; audio stays on this phone',
-              value: _backup ?? true,
-              onChanged: _backup == null ? null : _setBackup,
-            ),
-          ]),
+          // iCloud backup switch: a later feature (owner, 16 Nov). v1 keeps
+          // iOS's default (recordings are in the user's own device backup).
         ],
       ),
     );

@@ -374,9 +374,9 @@ void main() {
       await t.pumpAndSettle();
       expect(await env.services.settings.transcriptionMode(), TranscriptionMode.onDevice);
       expect(find.text('Where your audio goes (On this phone)'), findsOneWidget);
-      await t.tap(find.text('Back up recordings to iCloud'));
-      await t.pumpAndSettle();
-      expect(await env.services.settings.excludeFromBackup(), isTrue);
+      // v1: no iCloud switch (iOS default backup; owner, 16 Nov).
+      expect(find.text('Back up recordings to iCloud'), findsNothing);
+      expect(await env.services.settings.excludeFromBackup(), isFalse);
       await back(t);
       expect(find.text('On this phone'), findsOneWidget); // G1 value
 
