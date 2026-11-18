@@ -2,20 +2,20 @@
 /// policy, terms, support email, App Store id. Paywall (A1), Settings (G1),
 /// Plan (G4) and the share text read from here; nothing else hard-codes them.
 abstract final class AppLinks {
-  // TODO(owner): confirm the support inbox exists and is read.
+  // Live inbox (owner, 16 Nov 2026).
   static const supportEmail = 'support@novaralabs.in';
 
-  // TODO(owner): publish these pages (App Store review needs a live privacy
-  // policy URL), then replace the placeholders if the paths differ.
+  // Live on novaralabs.in since 18 Nov 2026; the same URLs are set in App
+  // Store Connect (privacy policy URL, support URL, description).
   static const privacyPolicy = 'https://novaralabs.in/longnote/privacy';
   static const terms = 'https://novaralabs.in/longnote/terms';
+  static const support = 'https://novaralabs.in/longnote/support';
+  static const website = 'https://novaralabs.in/longnote';
 
-  // TODO(owner): the numeric Apple ID from App Store Connect (App
-  // Information -> Apple ID), e.g. '6501234567'. Until set, "Rate" and
-  // "Share with a friend" use the website below.
-  static const appStoreId = '';
+  // App Store Connect -> App Information -> Apple ID.
+  static const appStoreId = '6835017154';
   static String get appStoreUrl => appStoreId.isEmpty
-      ? 'https://novaralabs.in/longnote'
+      ? website
       : 'https://apps.apple.com/app/id$appStoreId';
 
   /// Apple's own subscriptions page (cancel / change plan).

@@ -4,3 +4,7 @@ linter:
   rules:
     # Private fields with a public named parameter read better here.
     prefer_initializing_formals: false
+
+analyzer:
+  exclude:
+    - third_party/**

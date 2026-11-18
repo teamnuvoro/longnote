@@ -43,7 +43,10 @@ dependencies:
   in_app_review: ^2.0.12
   package_info_plus: ^10.2.2
   amplitude_flutter: ^4.8.2
-  facebook_app_events: ^0.34.0
+  # Local copy of 0.34.0 pinned to Meta iOS SDK 18.0.3 (see
+  # third_party/facebook_app_events/ios/.../FacebookAppEventsPlugin.swift).
+  facebook_app_events:
+    path: third_party/facebook_app_events
   app_tracking_transparency: ^2.0.7
 
 dev_dependencies:

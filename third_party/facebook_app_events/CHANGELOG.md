@@ -1,0 +1,427 @@
+## 0.34.0
+
+- **Fix (iOS): `logPushNotificationOpen` crashed the app when `fb_push_payload` was a JSON string.** That is how Firebase Cloud Messaging delivers the entry, and it is the form the Android SDK expects, but the iOS SDK subscripts it as a dictionary without checking the type. The iOS handler now parses a string entry, stringifies a numeric `campaign`, and drops an entry it cannot bring into shape. The Android handler does the reverse and serializes a map-shaped entry to JSON, which the Android SDK used to ignore. Android also no longer fails with `INVALID_ARGUMENT` on payload values a `Bundle` cannot hold, such as lists; the SDK only reads `fb_push_payload`, so those values are left out.
+- **Fix (Android): a Facebook SDK that failed to start no longer surfaces as `lateinit property appEventsLogger has not been initialized`** (fixes [#516](https://github.com/oddbit/flutter_facebook_app_events/issues/516)). The SDK swallows its own failed start, typically a missing app id or client token, and the plugin was left half attached. Calls that need the SDK now fail with `sdk_not_initialized`, the code iOS already uses. `initializeSdk()` runs the SDK's initialization again and, if it still fails, throws `sdk_initialization_failed` with the SDK's own reason instead of reporting success. The plugin never initializes the SDK by itself, so an app that removed the SDK's init provider to wait for consent is not overridden.
+- **Add `FacebookAppEventsException` and `FacebookAppEventsErrorCode`.** Errors reported by the native handlers are now thrown as `FacebookAppEventsException`, whose `errorCode` is an enum: `invalidArgument`, `sdkNotInitialized`, `sdkInitializationFailed`, `missingContext`, `missingApplication` or `unknown`. The exception extends `PlatformException` and `code` still holds the same string as before, so existing `on PlatformException` handlers and string comparisons keep working. Two things do change: the exception's runtime type and its `toString()` text, so crash reporters that group by exception type will file these errors under the new name. New values can be added to the enum in later releases; keep a wildcard branch when you `switch` over it.
+- **Behavior change: currency codes are validated the same way on both platforms.** `logPurchase` and `logProductItem` now accept ISO 4217 codes in any letter case on Android and iOS, and an unknown code throws `invalidArgument` on both. Until now Android rejected lower-case and unknown codes while iOS passed any string to the SDK. On iOS this means a call with a non-ISO currency, which used to be logged, now throws.
+- **Document the Xcode 26.4 minimum.** Since 0.32.0 the Facebook iOS SDK v19 ships Swift interfaces that older compilers cannot read, and the build fails inside the SDK with "Consecutive statements on a line must be separated by ';'". Confirmed on CI: Xcode 26.3 fails, Xcode 26.4.1 builds. The README lists the requirement, and CI now builds on Xcode 26.4 as well as the newest version.
+- **The README is now a quick start.** Requirements, setup, the minimal consent and event-metadata configuration, the error codes and a troubleshooting table stay. The background, the platform differences in depth and the troubleshooting moved to the [guides on oddbit.id](https://oddb.it/fbae-guides), including three new ones: [holding the Facebook SDK back until consent](https://oddb.it/fbae-guide-consent), [what Facebook SDK v19 attaches to your events](https://oddb.it/fbae-guide-event-metadata) and [Facebook SDK `.swiftinterface` build errors](https://oddb.it/fbae-guide-xcode).
+- **The native handlers are now tested against the real Facebook SDK.** `example/integration_test` runs the plugin inside the example app on an Android emulator and an iOS simulator in CI, including an Android build without a client token to cover an SDK that fails to start. Until now the Kotlin and Swift code was only compiled, never executed, before a release.
+- The example app's Android project moves to AGP 9.3.1 and Gradle 9.5.0, which Flutter 3.50 requires, following the Flutter 3.50 app template (`android.builtInKotlin=false`, no `kotlin-android` in the app). The plugin's own Android build and its minimum Flutter version (3.41) are unchanged, and CI still builds it with AGP 8 on the Flutter floor.
+- CI: Dart checks (`dart format`, `flutter analyze`, tests) run on the Flutter 3.41 floor as well as stable; a test guards the versions that a release must keep in step (pubspec, podspec, changelog, the Graph API pin and the Facebook SDK major); the publish job refuses a tag that differs from `pubspec.yaml`; the NDK install is retried; the Flutter SDK is no longer cached and pull request caches are deleted when the pull request closes.
+- `CLAUDE.md` is replaced by `AGENTS.md`, which Claude Code and other coding agents read. IDE project files (`.idea/`, `*.iml`) are no longer tracked or published. The package description no longer mentions Facebook Analytics, which Meta retired in 2021.
+
+## 0.33.0
+
+- **Breaking: raise the minimum Flutter SDK to `>=3.41.0`** (was `>=3.38.0`). The iOS Swift package now depends on the local `FlutterFramework` package that the Flutter tool generates for Swift Package Manager builds, as Flutter's plugin-author migration guide requires (fixes [#514](https://github.com/oddbit/flutter_facebook_app_events/issues/514)). Flutter 3.41 is the first release that generates that package, and future Flutter versions will require the dependency. The Dart API and native behavior are unchanged. Apps on Flutter 3.38–3.40 keep resolving 0.32.x.
+- CI now builds the example app with Swift Package Manager enabled, on both the Flutter 3.41 floor and current stable. Until now only the CocoaPods path was built, so the Swift package manifest was never compiled in CI. The Android floor cell moves to Flutter 3.41.0.
+- README: Swift Package Manager is now described as the Flutter default (since 3.44), with CocoaPods used when it is turned off. The README previously called CocoaPods the default.
+
+## 0.32.0
+
+- **Breaking: upgrade to Facebook SDK v19** (fixes [#507](https://github.com/oddbit/flutter_facebook_app_events/issues/507)). Android now depends on `com.facebook.android:facebook-android-sdk:[19.0,20.0)`; iOS on `FBSDKCoreKit` `~> 19.0` (CocoaPods) / `"19.0.0"..<"20.0.0"` (SPM). None of the native APIs the plugin calls changed, so the Dart API is unchanged.
+- **Breaking (iOS): the minimum iOS version is now 15.0** (was 13.0), because Facebook iOS SDK v19 requires it. Apps targeting iOS 13 or 14 must raise their deployment target (and the `platform :ios` line in their `Podfile`, if set) to `15.0`. See "Configure iOS" in the README. CocoaPods apps upgrading from 0.31.x or older must also run `cd ios && pod update FBSDKCoreKit` once: their `Podfile.lock` still pins `FBSDKCoreKit` 18.x, and `pod install` (and the `pod repo update` that Flutter suggests) will not move it, failing with "changed the constraints of dependency `FBSDKCoreKit` inside your development pod `facebook_app_events`".
+- **Behavior change from the SDK: `AutoLogAppEventsEnabled = false` now always wins.** In SDK v18 an Events Manager setting could override the client-side flag; in v19 automatic app event logging runs only when both the client flag (`FacebookAutoLogAppEventsEnabled` / `com.facebook.sdk.AutoLogAppEventsEnabled` / `setAutoLogAppEventsEnabled`) and the Events Manager setting are on.
+- **New in the SDK: event metadata collection.** SDK v19 attaches the current screen title and the inbound URL to logged events by default, and on iOS also the last outbound URL the app opened (`outbound_url`). The inbound URL is any URL that opened the app, query string included (custom-scheme deep links and OAuth or magic-link callbacks too), not only App Links; both URLs are persisted on the device across launches. Apps can opt out with `FBSDKAutoLogMetaDataEnabled` (iOS Info.plist) / `com.facebook.sdk.AutoLogMetaDataEnabled` (Android manifest), or in Events Manager. On iOS, collection is installed as part of SDK initialization, so `FacebookAutoInitEnabled=false` still defers it. **On Android it does not:** inbound URLs are captured and written to disk from process start even with `com.facebook.sdk.AutoInitEnabled=false`, so consent-gated apps that want nothing collected before consent need the manifest opt-out. Documented in the README.
+- The Graph API version pin stays at `v24.0` on both platforms: the Android SDK v19.0.0 still defaults to the removed `v16.0`, so the override is still needed. Docs and code comments now reflect that the iOS SDK default has been `v26.0` since 18.1.1.
+- **Add `setAutoLogMetaDataEnabled(bool)`** (fixes [#511](https://github.com/oddbit/flutter_facebook_app_events/issues/511)): runtime control of the SDK v19 event metadata collection described above, mapping to `FacebookSdk.setAutoLogMetaDataEnabled` (Android) and `Settings.shared.isMetaDataCollectionEnabled` (iOS). The value is persisted and takes precedence over the manifest / Info.plist key, so a consent-gated app can ship with the static opt-out and turn collection on after consent; `false` also clears the URLs already stored on the device. On iOS it is gated behind `initializeSdk()` like the other `Settings` setters. The example app has buttons for both states.
+- The example app's iOS deployment target is raised to 15.0.
+- **Update Android toolchain** — Kotlin 2.4.21 (was 2.4.20) in the example app and Gradle wrapper 8.14.6 (was 8.14.5), in the plugin, the example app and the build-verify workflow. AGP (8.13.0) and `compileSdk`/`targetSdk` (36) are unchanged.
+
+## 0.31.1
+
+- **Fix (Android): use assignment syntax for `namespace` in the plugin's `build.gradle`** (fixes [#506](https://github.com/oddbit/flutter_facebook_app_events/issues/506), thanks [@ManishPatel2611](https://github.com/ManishPatel2611)). `namespace "…"` relied on Groovy's space-assignment syntax, which Gradle 9 deprecates and Gradle 10 removes, so every Android build of a dependent app printed a deprecation warning and would fail to build on Gradle 10. It is now `namespace = "…"`, which Gradle 8.x already supports, so nothing changes for existing toolchains. `consumerProguardFiles '…'` is left as is: it is a regular method call, not a generated property setter, so the deprecation does not apply to it.
+
+## 0.31.0
+
+- **Add a `FacebookAutoInitEnabled` Info.plist key (iOS) to defer SDK initialization** (fixes [#502](https://github.com/oddbit/flutter_facebook_app_events/issues/502), thanks [@hell03610](https://github.com/hell03610)). `register(with:)` called `ApplicationDelegate.shared.initializeSDK()` unconditionally, before any Dart code runs, so apps that gate measurement on user consent had no way to prevent it. The collection flags do not cover this case: with `FacebookAutoLogAppEventsEnabled` and `FacebookAdvertiserIDCollectionEnabled` both `false` no app events are logged, but initialization still fetches gatekeeper, server and domain configuration from Meta and writes to `UserDefaults`. An absent key means `true`, so existing apps are unaffected; only an explicit `false` defers initialization. `Settings.shared.graphAPIVersion` is still set at registration, so the pinned Graph API version applies either way.
+- **Add `initializeSdk()`** to initialize the SDK from Dart once consent exists. iOS maps it to `ApplicationDelegate.shared.initializeSDK()`; Android maps it to `FacebookSdk.fullyInitialize()` for apps with `com.facebook.sdk.AutoInitEnabled=false` in the manifest (deliberately not `setAutoInitEnabled(true)`, which the native SDK persists and which would override the manifest setting on later launches). The call is idempotent on both platforms.
+- **iOS: the plugin now rejects calls made before the SDK is initialized** with a `PlatformException` of code `sdk_not_initialized` (every method except `initializeSdk` and `setGraphApiVersion`), and ignores incoming App Link URLs until then. The native SDK crashes in debug builds and silently drops calls in release when it is unconfigured, and some lazily-read settings such as the app id would otherwise be cached as empty for the rest of the process. This only affects apps that set `FacebookAutoInitEnabled` to `false`. Note that the two platforms differ here: Android's `AutoInitEnabled=false` does not keep the SDK asleep (the app id and client token are still loaded at process start and plugin calls still work), it only skips `fullyInitialize()`. See the README's "Deferring SDK initialization" section and the new "Deferred initialization on iOS" known limitation.
+- The example app now turns automatic initialization off on both platforms and initializes the SDK from a consent button.
+
+## 0.30.6
+
+- **Update Android toolchain** — Kotlin 2.4.20 (was 2.4.10) in the example app. The Facebook Android SDK Maven range (`[18.0,19.0)`) already covers the latest 18.x release (18.3.0) and the iOS CocoaPods/SPM `~> 18.0` / `"18.0.0"..<"19.0.0"` pins already cover the latest 18.x release (18.1.1), so no Facebook SDK dependency changes were needed this round. Gradle wrapper 8.14.5 (was 8.13), since current Flutter stable requires Gradle 8.14.0 or newer; AGP 8.13.x supports it.
+
+## 0.30.5
+
+- **Update Android toolchain** — Kotlin 2.4.10 (was 2.4.0). AGP (8.13.0, already the latest 8.x release) and `compileSdk`/`targetSdk` (36, already the latest stable API level) are unchanged. Gradle stays pinned at 8.13, matched to AGP 8.13.x per the existing wrapper convention, even though a newer 8.14.x patch is available upstream. The Facebook Android SDK Maven range (`[18.0,19.0)`) already covers the latest 18.x release (18.3.0) and the iOS CocoaPods/SPM `~> 18.0` / `"18.0.0"..<"19.0.0"` pins already cover the latest 18.x release (18.1.0), so no Facebook SDK dependency changes were needed this round.
+- Raise the example app's iOS deployment target from 12.0 to 13.0 to match the plugin's actual minimum (`s.ios.deployment_target` in the podspec and `Package.swift` have required iOS 13 since 0.26.0); the example's Xcode project setting had never been updated to match.
+
+## 0.30.4
+
+- **Remove the `com.facebook.sdk.CodelessDebugLogEnabled` meta-data from the plugin's Android manifest.** It has been there since the first release and had no effect: in Facebook Android SDK 18.x the flag is read into `FacebookSdk.getCodelessDebugLogEnabled()` and nothing in the SDK reads that getter. Codeless event setup is gated server-side by Meta's fetched app settings (`codelessEventsEnabled` / `getCodelessSetupEnabled()`), not by this flag. Because library manifests merge into the host app, the entry also forced any app that wanted the key set to `false` to add `tools:replace` to win the merge — that workaround is no longer needed and can be removed.
+- **Docs:** the README no longer advises enabling codeless debug logging for debugging (the flags are inert on both platforms; `setDebugLoggingEnabled` is the switch that does something), and `CONTRIBUTING.md` now records the pinned Graph API version as a release-time check with the three places the literal appears.
+
+## 0.30.3
+
+- **Fix (Android):** `getApplicationId` now reads the live `FacebookSdk.getApplicationId()` instead of the app id captured when the plugin attached to the engine, so app-id changes made programmatically after startup are reflected — matching iOS (`Settings.shared.appID`) and the documented behavior.
+- **Fix (Android):** `logPushNotificationOpen` now returns a clean `INVALID_ARGUMENT` error when the payload contains a value an Android `Bundle` cannot represent (e.g. a list), instead of an opaque platform exception. The error message names the offending key and suggests JSON-encoding structured values.
+- **Fix:** `setDataProcessingOptions` validates in the Dart layer that `country` and `state` fit in a signed 32-bit integer (the type the native APIs take) and throws a `RangeError` otherwise. Out-of-range values previously surfaced as an opaque `ClassCastException` on Android; iOS already rejected them natively.
+- Stop sending explicit `null`s over the method channel for omitted arguments of `setDataProcessingOptions` and `logPushNotificationOpen`, consistent with the rest of the API.
+
+## 0.30.2
+
+- **Update Android toolchain** — AGP 8.13.0, Gradle 8.13, Kotlin 2.4.0, `compileSdk`/`targetSdk` 36. No change to `minSdk` or the Facebook Android SDK Maven range (`[18.0,19.0)`), which already resolves to the latest 18.x release (18.3.0); the CocoaPods/SPM `~> 18.0` / `"18.0.0"..<"19.0.0"` iOS pins likewise already cover the latest 18.x release (18.1.0), so no iOS dependency changes were needed this round.
+
+## 0.30.1
+
+- **Fix (Android):** stop triggering Flutter 3.44+'s "plugins that apply Kotlin Gradle Plugin (KGP)" warning and build on AGP 9, without raising the minimum Flutter SDK. KGP is now applied only on AGP < 9 (Flutter's Built-in Kotlin supplies it otherwise) (fixes [#492](https://github.com/oddbit/flutter_facebook_app_events/issues/492)).
+
+## 0.30.0
+
+- **Fix (iOS):** `setDataProcessingOptions` is now functional on iOS, mapping to `Settings.shared.setDataProcessingOptions(options, country:state:)`. The previous no-op was based on the incorrect belief that Meta removed the API in Facebook iOS SDK 18.x — it exists in all 18.x releases. The "no-op on iOS" known limitation is gone.
+- **Fix (iOS):** `getApplicationId` now returns `Settings.shared.appID` (which also resolves the `Info.plist` `FacebookAppID`) instead of reading `Info.plist` directly, so programmatic app-id configuration is reflected, matching Android.
+- **Fix (iOS):** `setUserData` now uses merge semantics like Android: only the fields you pass are updated. Previously the iOS handler passed `nil` for absent fields, which *cleared* previously-set fields on iOS while Android kept them. Use `clearUserData`/`clearUserDataForType` to remove fields.
+- **Fix:** event parameters are validated in the Dart layer. The native SDKs accept only `String`/numeric parameter values and **silently drop** the entire event otherwise — booleans (previously dropped on Android, recorded on iOS) are now converted to `"1"`/`"0"` on both platforms, and unsupported types (lists, maps) throw an `ArgumentError` instead of vanishing. JSON-encode structured values instead.
+- **Fix (iOS):** the `activateApp(applicationId:)` override now applies per call: calling `activateApp()` without an id resets `loggingOverrideAppID`, matching Android's per-call fallback to the default app id.
+- **Fix (Android):** `logPurchase`/`logProductItem` now return an `INVALID_ARGUMENT` error for invalid ISO 4217 currency codes instead of an opaque platform exception.
+- Add `externalId` to `setUserData` and `FacebookUserDataField` (Meta advanced matching `extern_id`), supported by both native SDKs.
+- Add `setLimitEventAndDataUsage(bool)`, mapping to `FacebookSdk.setLimitEventAndDataUsage` (Android) / `Settings.shared.isEventDataUsageLimited` (iOS).
+- Add `setAdvertiserIdCollectionEnabled(bool)` and deprecate `setAdvertiserTracking`: the iOS tracking flag it set is deprecated since FBSDK v17 (ATT status is used instead), and on Android only advertiser ID collection exists.
+- Add `setPushNotificationsDeviceToken(String)` (native SDK naming) and deprecate `setPushNotificationToken`, which now delegates to it.
+- Document the plugin's API scope (intentionally unexposed native APIs) in the README.
+
+## 0.29.0
+
+- **iOS UISceneDelegate adoption.** Adopt `FlutterSceneLifeCycleDelegate` and register as a scene delegate so Facebook URL callbacks (deep links / deferred app links) still reach the SDK on apps using the UIScene lifecycle — the default for Flutter 3.38+. The legacy `application(_:open:options:)` path is retained for non-UIScene apps (fixes [#489](https://github.com/oddbit/flutter_facebook_app_events/issues/489)).
+- **Breaking:** Raise the minimum Flutter SDK to `>=3.38.0`, required by `FlutterSceneLifeCycleDelegate` / `addSceneDelegate`. The Dart API and Android behavior are unchanged.
+
+## 0.28.0
+
+- Add `logProductItem(...)` for product-catalog item logging, with type-safe `ProductAvailability` and `ProductCondition` enums (PR [#487](https://github.com/oddbit/flutter_facebook_app_events/pull/487)).
+- Add `setPushNotificationToken(String)` to register a push token for Meta push-campaign measurement.
+- Add `setFlushBehavior(FlushBehavior)` / `getFlushBehavior()` to switch between automatic and explicit-only event flushing.
+- Add `getUserData()`, `getUserID()`, and `clearUserDataForType(FacebookUserDataField)` — the last is functional on iOS and a no-op on Android (no native per-field clear; use `clearUserData()`).
+- Add convenience shorthands for the remaining Meta standard events (`logAchievedLevel`, `logAddedPaymentInfo`, `logCompletedTutorial`, `logSearched`, `logSpentCredits`, `logUnlockedAchievement`, `logContact`, `logCustomizeProduct`, `logDonate`, `logFindLocation`, `logSchedule`, `logSubmitApplication`).
+- **Behavior change (Android):** `setAdvertiserTracking` no longer toggles verbose SDK debug logging as a side effect; use the new `setDebugLoggingEnabled(bool)` instead.
+- Move the new enums and standard-event helpers into `lib/src/` (re-exported, no consumer import changes), drop unused Android imports, and add Dart tests plus example-app coverage.
+
+## 0.27.2
+
+- Tighten the AGP 9 Kotlin-plugin guard introduced in 0.27.1. The previous check skipped `apply plugin: "kotlin-android"` for *any* AGP 9 build, but users running AGP 9 with `android.builtInKotlin=false` (opting out of built-in Kotlin) still need the plugin applied. Now keyed on both the AGP major version and the `android.builtInKotlin` Gradle property (PR [#485](https://github.com/oddbit/flutter_facebook_app_events/pull/485)).
+- Drop the legacy `kotlinOptions { jvmTarget = "17" }` block in the built-in Kotlin branch. AGP 9 defaults `kotlin.compilerOptions.jvmTarget` to `android.compileOptions.targetCompatibility` (already JVM 17), making it redundant; the legacy DSL is only available when `kotlin-android` is applied, so it's now gated to that branch (PR [#485](https://github.com/oddbit/flutter_facebook_app_events/pull/485)).
+
+## 0.27.1
+
+- Guard `apply plugin: "kotlin-android"` against AGP 9, which ships with built-in Kotlin support (`android.builtInKotlin=true`) and conflicts with the explicit plugin application. Keeps AGP < 9 behavior unchanged (fixes [#482](https://github.com/oddbit/flutter_facebook_app_events/issues/482)).
+- Sync `ios/facebook_app_events.podspec` version with `pubspec.yaml`. The podspec had been stale at `0.25.0` across the v0.26.x and v0.27.0 releases, causing CocoaPods consumers to resolve the wrong plugin version. A release-process note was added to `CONTRIBUTING.md` requiring both files to be bumped together (PR [#484](https://github.com/oddbit/flutter_facebook_app_events/pull/484)).
+- Document that `setDataProcessingOptions` is a no-op on iOS since Meta removed the underlying API in Facebook iOS SDK 18.x. Use Meta's [Data Use Checkup](https://developers.facebook.com/docs/development/data-processing-options) tooling for iOS data-use configuration (PR [#484](https://github.com/oddbit/flutter_facebook_app_events/pull/484)).
+- Expand Dart unit test coverage to include previously-uncovered public methods (`clearUserData`, `clearUserID`, `flush`, `getApplicationId`, `getAnonymousId`, `setUserID`, `setAutoLogAppEventsEnabled`, `setDataProcessingOptions`, `setAdvertiserTracking`, `logPushNotificationOpen`, `logRated`, `logInitiatedCheckout`, `logStartTrial`, `logAddToWishlist`) (PR [#484](https://github.com/oddbit/flutter_facebook_app_events/pull/484)).
+- Raise example app SDK constraints to match the plugin floor (`sdk: '>=3.3.0 <4.0.0'`, `flutter: '>=3.19.0'`) and set `targetSdk = 35` explicitly in the Android module (PR [#484](https://github.com/oddbit/flutter_facebook_app_events/pull/484)).
+
+## 0.27.0
+
+- Added `parameters` argument to shorthand log methods (`logCompletedRegistration`, `logRated`, `logViewContent`, `logAddToCart`, `logAddedToWishlist`, `logInitiatedCheckout`, `logSubscribe`, `logStartTrial`) to support custom event parameters alongside standard ones.
+- Updated documentation for standard event methods with guidance on parameters required for ad revenue optimization (ROAS).
+- Added unit tests for the updated shorthand log methods.
+
+## 0.26.2
+
+- Updating documentation.
+
+## 0.26.1
+
+- Fix `swift-tools-version` placement — must be on the first line of `Package.swift` (PR [#479](https://github.com/oddbit/flutter_facebook_app_events/pull/479))
+
+## 0.26.0
+
+### ⚠️ Breaking Changes
+
+- **Raise iOS minimum deployment target** from 12 to 13 — iOS 12 is EOL
+- **Tighten Dart/Flutter SDK constraints** — Dart >=3.3.0, Flutter >=3.19.0 (was unconstrained; aligns with March 2024+ ecosystem)
+
+### Changes
+
+- **Bound iOS SPM Facebook SDK version range** to `"18.0.0"..<"19.0.0"` — prevents silent acceptance of breaking major versions; consistent with podspec (`~> 18.0`) and Android (`[18.0,19.0)`) (PR [#477](https://github.com/oddbit/flutter_facebook_app_events/pull/477))
+- **Update Android toolchain** — Kotlin 2.3.10, AGP 8.9.2, Gradle 8.11.1, compileSdk 35 (PR [#477](https://github.com/oddbit/flutter_facebook_app_events/pull/477))
+- **Add Android consumer ProGuard rules** — prevents R8 in host apps with code shrinking from stripping Facebook App Events classes at runtime (PR [#477](https://github.com/oddbit/flutter_facebook_app_events/pull/477))
+- **Add `analysis_options.yaml`** with `flutter_lints` for static analysis (PR [#477](https://github.com/oddbit/flutter_facebook_app_events/pull/477))
+
+## 0.25.0
+- Work around stale default Graph API versions in Facebook SDK v18.x by overriding the native SDK Graph API version to `v24.0` on iOS and Android (PR [#476](https://github.com/oddbit/flutter_facebook_app_events/pull/476), fixes [#474](https://github.com/oddbit/flutter_facebook_app_events/issues/474))
+- Add `setGraphApiVersion(String version)` to forward Graph API version overrides through the plugin API (PR [#476](https://github.com/oddbit/flutter_facebook_app_events/pull/476))
+
+## 0.24.0
+- Add `activateApp()` to manually log app activation when automatic app event logging is disabled (PR [#466](https://github.com/oddbit/flutter_facebook_app_events/pull/466))
+
+## 0.23.0
+- iOS: Add Swift Package Manager (SPM) support (fixes [#464](https://github.com/oddbit/flutter_facebook_app_events/issues/464))
+
+## 0.22.1
+- Fix Android crash when `setUserData()` is called with null fields (fixes [#462](https://github.com/oddbit/flutter_facebook_app_events/issues/462))
+
+## 0.22.0
+- iOS: Update Swift code for Facebook SDK 18.x compatibility (PR [#455](https://github.com/oddbit/flutter_facebook_app_events/pull/455), fixes [#451](https://github.com/oddbit/flutter_facebook_app_events/issues/451) and [#454](https://github.com/oddbit/flutter_facebook_app_events/issues/454))
+- iOS: Refactor parameter unpacking (PR [#461](https://github.com/oddbit/flutter_facebook_app_events/pull/461), fixes [#460](https://github.com/oddbit/flutter_facebook_app_events/issues/460))
+- Refactor/default parameter values (PR [#458](https://github.com/oddbit/flutter_facebook_app_events/pull/458))
+
+## 0.21.1
+- Refactor advertiser tracking logic (PR [#457](https://github.com/oddbit/flutter_facebook_app_events/pull/457))
+- Remove violating parameter in example app (PR [#459](https://github.com/oddbit/flutter_facebook_app_events/pull/459))
+
+## 0.21.0
+- Update plugin to support modern Flutter plugin API and Android Gradle Plugin (PR [#418](https://github.com/oddbit/flutter_facebook_app_events/pull/418))
+
+## 0.20.2
+- Add documentation for Facebook Event Manager "Please Upgrade SDK" warning (PR [#442](https://github.com/oddbit/flutter_facebook_app_events/pull/442))
+
+## 0.20.1
+Updating example app 
+
+## 0.20.0
+### ⚠️ Breaking Changes
+- **Remove iOS FBAudienceNetwork dependency** - If your app depends on FBAudienceNetwork framework, you'll need to include it separately in your app
+
+### Features
+- Update Android `FBSDKCoreKit` to version `18.0` to `19.0`
+- Merge option to set debug enabled feature
+
+## 0.19.7
+- Update iOS `FBSDKCoreKit` to `18.0`
+
+## 0.19.6
+- Removed "import io.flutter.plugin.common.PluginRegistry.Registrar"
+
+## 0.19.5
+- Bump up android gradle version to `8.11.1`
+- Update gradle syntax to use declarative style
+- Update Facebook app events unit tests from using deprecated setMockMethodCallHandler method
+- Enhance widget tests to verify example app rendering and button text content
+
+## 0.19.4
+- Updating `FBAudienceNetwork`to version `6.16`
+- Updating iOS properties
+
+## 0.19.3
+- Bump up `FBSDKCoreKit` android gradle version to `17.0` to `18.0`
+- Update ios example minimum deployment target to `12.0`
+- Update target compile sdk in android gradle example to `34`
+
+## 0.19.2
+- Updating `FBSDKCoreKit` to `17.0` that include Privacy Manifest
+- Updating `FBAudienceNetwork` to `6.15`
+- Update iOS deployment target to `12.0`
+
+## 0.19.1
+- Updating `FBSDKCoreKit` to `16.1` (PR [#309](https://github.com/oddbit/flutter_facebook_app_events/pull/309))
+- Bump up android gradle version (PR [#310](https://github.com/oddbit/flutter_facebook_app_events/pull/310))
+- Handle open push notification issue (PR [#334](https://github.com/oddbit/flutter_facebook_app_events/pull/334))
+- Add compileOption and kotlinOption (PR [#321](https://github.com/oddbit/flutter_facebook_app_events/pull/321))
+
+## 0.19.0
+- Updating `FBSDKCoreKit` to `16` (PR [#296](https://github.com/oddbit/flutter_facebook_app_events/pull/296))
+
+## 0.18.3
+- Fixing issues [#270](https://github.com/oddbit/flutter_facebook_app_events/issues/270) and [#272](https://github.com/oddbit/flutter_facebook_app_events/issues/272)
+- Updating `FBSDKCoreKit` to `15.1`
+- Updating `FBAudienceNetwork` to `6.12` 
+
+## 0.18.2
+- Changing iOS version dependency to follow all `15.x` versions.
+
+## 0.18.1
+- Fixing version syntax in gradle.
+
+## 0.18.0
+- Updating Facebook SDK  dependency to follow all `15.x` versions.
+
+## 0.17.1
+- Implementing [Aggregated Event Measurement for Facebook App Events](https://developers.facebook.com/docs/app-events/guides/aggregated-event-measurement/) in [PR #236](https://github.com/oddbit/flutter_facebook_app_events/pull/236)
+
+## 0.17.0
+- Updating Facebook SDK  dependency to follow all `14.x` versions.
+- Updating documentation to add client token in [project README](https://github.com/oddbit/flutter_facebook_app_events/blob/master/README.md#setting-things-up)
+
+## 0.16.0
+See [PR 224](https://github.com/oddbit/flutter_facebook_app_events/pull/224)
+
+- Updating Facebook SDK  dependency to follow all `13.x` versions.
+- Updating deprecated ios methods and propeties according https://github.com/facebook/facebook-ios-sdk/blob/main/CHANGELOG.md
+
+## 0.15.0
+- Adding back `setUserData()` which was removed by mistake. It's not completely deprecated.
+- Bumping iOS FBSDK version to `12.3`
+
+## 0.14.8
+- Making parameters to `logPurchase()` mandatory ([issue #182](https://github.com/oddbit/flutter_facebook_app_events/issues/159))
+- Updating gradle config for [`jcenter` deprecation](https://blog.gradle.org/jcenter-shutdown#:~:text=The%20jcenter()%20method%20will,may%20only%20publish%20new%20versions.).
+
+## 0.14.7
+Narrowing down the Facebook SDK version for iOS due to the trouble it seems to cause with different developer
+environments and setups. See discussion in issue [#159](https://github.com/oddbit/flutter_facebook_app_events/issues/159) 
+and [#171](https://github.com/oddbit/flutter_facebook_app_events/issues/171).
+
+## 0.14.6
+Fixing [issue 159](https://github.com/oddbit/flutter_facebook_app_events/issues/159) - iOS compilation error
+
+## 0.14.5
+Fixing [issue 165](https://github.com/oddbit/flutter_facebook_app_events/issues/165) - Pod install Error
+
+## 0.14.4
+Fixing [issue 161](https://github.com/oddbit/flutter_facebook_app_events/issues/161) - Adding configuration option for
+`isAdvertiserIDCollectionEnabled` in the `setAdvertiserTracking()` method.
+
+## 0.14.3
+Fixing [issue 156](https://github.com/oddbit/flutter_facebook_app_events/issues/156) - iOS Compilation error 
+
+## 0.14.2
+Fixing [issue 147](https://github.com/oddbit/flutter_facebook_app_events/issues/147) - `logAddToCart()` throws PlatformException
+
+## 0.14.1
+See [PR 149](https://github.com/oddbit/flutter_facebook_app_events/pull/149)
+
+- Updating Facebook SDK  dependency to follow all `12.x` versions.
+- Adding debug/dev cert for android to build and test example app
+- Removing deprecated methods
+  - `setUserData`
+  - `updateUserProperties`
+  - `logActivatedApp`
+  - `logDeactivatedApp`
+
+## 0.13.5
+- Updating Facebook SDK core kit dependency to follow all `11.x` versions.
+- Removing references to Facebook Analytics in README (https://www.facebook.com/business/help/966883707418907)
+
+## 0.13.4
+Importing `FBSDKCoreKit_Basics` as a real fix for [#127](https://github.com/oddbit/flutter_facebook_app_events/issues/127) and [#129](https://github.com/oddbit/flutter_facebook_app_events/issues/129). See PR [#131](https://github.com/oddbit/flutter_facebook_app_events/pull/131). The PR adds back support for `setUserData` in iOS during deprecation grace period.
+
+## 0.13.3
+**N.B. Workaround release!!**
+Removing function body for iOS handling of deprecated method `setUserData`. See issues [#127](https://github.com/oddbit/flutter_facebook_app_events/issues/127) and [#129](https://github.com/oddbit/flutter_facebook_app_events/issues/129). We 
+were unable to reproduce or successfully troubleshoot the reported problems within the team and decided that it would be 
+better to get around the compilation error with the sacrifice of the `setUserData` in the possibly short time before it
+is removed from the SDK anyway.
+
+## 0.13.2
+- Addressing issue [#125](https://github.com/oddbit/flutter_facebook_app_events/issues/125) - iOS compilation error. See [PR #126](https://github.com/oddbit/flutter_facebook_app_events/pull/126)
+
+## 0.13.1
+- Fixing issue [#123](https://github.com/oddbit/flutter_facebook_app_events/issues/123)
+  - Emptying the handling method for iOS `updateUserProperties` as it is removed from iOS SDK but only deprecated in Android.
+  - Removing `nil` parameter from iOS `initializeSDK` method
+  - Updating the missing `AppEvents.UserDataType` declarations 
+
+## 0.13.0
+- Bumping Facebook SDK core kit to `11.1`
+- Adding deprecation notes for
+  - `setUserData`
+  - `updateUserProperties`
+  - `logActivatedApp`
+  - `logDeactivatedApp`
+- Adding log events
+  - `logAdClick`
+  - `logAdImpression`
+  - `logStartTrial` (see discussion [#119](https://github.com/oddbit/flutter_facebook_app_events/discussions/119))
+  - `logSubscribe` (see discussion [#119](https://github.com/oddbit/flutter_facebook_app_events/discussions/119))
+
+## 0.12.0
+**Breaking changes:** Starting from this release, the plugin require Flutter 2.0 with support for 
+[null safety](https://flutter.dev/docs/null-safety)
+
+- Updating to Flutter 2.0 and null safety in [PR #90](https://github.com/oddbit/flutter_facebook_app_events/pull/90)
+- Updating Facebook SDK to v9.1.0 in [PR #102](https://github.com/oddbit/flutter_facebook_app_events/pull/102)
+
+## 0.11.2
+- Auto initializing Facebook SDK on iOS (fixed in [PR #99](https://github.com/oddbit/flutter_facebook_app_events/pull/99)) and reported in issues [#86](https://github.com/oddbit/flutter_facebook_app_events/issues/86) and [#89](https://github.com/oddbit/flutter_facebook_app_events/issues/89)
+## 0.11.1
+- Adding `logAddToCart` event log
+- Adding `logAddToWishlist` event log
+
+## 0.11.0
+
+- Fixing `logViewContent` as described in [issue #73](https://github.com/oddbit/flutter_facebook_app_events/issues/73)
+- Bumping Facebook SDK core kit to 9.0.0 in [PR #85](https://github.com/oddbit/flutter_facebook_app_events/pull/85)
+
+## 0.10.0
+
+- Adding support for setAdvertiserTrackingEnabled solved in [PR #82](https://github.com/oddbit/flutter_facebook_app_events/pull/82)
+
+## 0.9.0
+
+- Updating iOS deployment target to `9.0` as described in [issue #74](https://github.com/oddbit/flutter_facebook_app_events/issues/74)
+
+## 0.8.2
+
+- Upgrading FBSDKCoreKit to 8.2.0 as described in [issue #56](https://github.com/oddbit/flutter_facebook_app_events/issues/56) 
+and closed in [PR #65](https://github.com/oddbit/flutter_facebook_app_events/issues/56)
+
+## 0.8.1
+
+- Fixing missing Android imports
+
+## 0.8.0
+
+- Updating Facebook SDK version to 8.1.0
+- Adding `logInitiatedCheckout` event per request in [issue #55](https://github.com/oddbit/flutter_facebook_app_events/issues/55)
+- Adding anonymous id getter `getAnonymousId()`
+  - Android SDK: [`getAnonymousAppDeviceGUID`](https://developers.facebook.com/docs/reference/androidsdk/current/facebook/com/facebook/appevents/appeventslogger.html/)
+  - iOS SDK: [`anonymousID`](https://developers.facebook.com/docs/reference/iossdk/8.1.0/FBSDKCoreKit/classes/fbsdkappevents.html/)
+
+## 0.7.2
+
+Updating Android and iOS integration native code
+
+## 0.7.1
+
+Refining documentation and code formatting.
+
+## 0.7.0
+
+- Merging [PR #44](https://github.com/oddbit/flutter_facebook_app_events/pull/44) - Adding setDataProcessingOptions for CCPA compliance
+- Merging [PR #49](https://github.com/oddbit/flutter_facebook_app_events/pull/49) - Fixing return type and docs for `getApplicationId`
+- Merging [PR #50](https://github.com/oddbit/flutter_facebook_app_events/pull/50) - Implementing `logPurchase` and closing [#16](https://github.com/oddbit/flutter_facebook_app_events/issues/16)
+
+## 0.6.0
+
+- Merging [PR #29](https://github.com/oddbit/flutter_facebook_app_events/pull/29) - Add `setAutoLogAppEventsEnabled` for GDPR compliance.
+
+## 0.5.2
+
+- Fixing issue [#18](https://github.com/oddbit/flutter_facebook_app_events/issues/18) - `updateUserProperties` Future is not being resolved.
+
+## 0.5.1
+
+- Updating documentation from issue [#15](https://github.com/oddbit/flutter_facebook_app_events/issues/15)
+
+## 0.5.0
+
+- Fixing issues (
+  [#2](https://github.com/oddbit/flutter_facebook_app_events/issues/2),
+  [#4](https://github.com/oddbit/flutter_facebook_app_events/issues/4) and
+  [#8](https://github.com/oddbit/flutter_facebook_app_events/issues/8): breaking configuration change for Android. See the README with information on what to add in `AndroidManifest.xml`
+
+## 0.4.0
+
+- Breaking name change of `logActivateApp` to `logActivatedApp`
+- Adding shorthand log methods
+  - logDeactivatedApp
+  - logCompletedRegistration
+  - logRated
+  - logViewContent
+
+## 0.3.0
+
+- Add sample of shorthand log methods for app events.
+  - logActivateApp
+
+## 0.2.1
+
+- Bug fixing.
+
+## 0.2.0
+
+- Adding app events
+  - `logPushNotificationOpen`
+  - `flush`
+  - `getApplicationId`
+
+## 0.1.0
+
+- First initial release supporting some basic functionality
+  - `clearUserData`
+  - `clearUserID`
+  - `logEvent`
+  - `setUserData`
+  - `setUserID`
+  - `updateUserProperties`
