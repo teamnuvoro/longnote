@@ -153,7 +153,8 @@ Subscriptions are sold and billed by Apple through the App Store. Apple handles 
 You can:
 
 - **Delete a note.** Delete it in the app. It is removed from your phone. (Our servers do not keep notes.)
-- **Delete all your data.** Email support@novaralabs.in with the Support ID shown in **Settings > Privacy**. We will:
+- **Delete your account.** If you have signed in with an account, go to **Settings > Account > Delete account**. This deletes your account and everything our backend holds for it, asks Amplitude to delete your analytics events, and signs you out. We confirm by email if you gave us one.
+- **Delete all your data without an account.** Email support@novaralabs.in with the Support ID shown in **Settings > Privacy**. We will:
   - delete your anonymous ID, job records, usage counts and push token from our backend;
   - ask Amplitude to delete all analytics events linked to your IDs (Amplitude completes this within about 30 days);
   - confirm by email within 30 days.

@@ -24,7 +24,7 @@ Your audio is safe on your phone. Check that you are online, open the note, and 
 
 ## Delete your data
 
-Email support@novaralabs.in with your Support ID (**Longnote > Settings > Privacy**). We delete what our servers and our analytics provider hold for you and confirm within 30 days. To remove your notes from the phone, delete them in the app or delete the app.
+If you have an account, open **Longnote > Settings > Account > Delete account**. Otherwise, email support@novaralabs.in with your Support ID (**Longnote > Settings > Privacy**). We delete what our servers and our analytics provider hold for you and confirm within 30 days. To remove your notes from the phone, delete them in the app or delete the app.
 
 To stop sharing analytics and ad measurement events, turn off **Settings > Share usage analytics**. To stop tracking, use **iPhone Settings > Privacy & Security > Tracking**.
 
