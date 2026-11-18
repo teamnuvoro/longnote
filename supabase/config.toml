@@ -24,3 +24,11 @@ verify_jwt = false
 
 [functions.report]
 verify_jwt = true
+
+# Called by Apple (App Store Server Notifications V2); authenticated by
+# verifying Apple's signed payload (x5c chain to Apple Root CA - G3).
+[functions.appstore-notifications]
+verify_jwt = false
+
+[functions.tracking-profile]
+verify_jwt = true
