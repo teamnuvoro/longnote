@@ -50,6 +50,7 @@ class _SettingsHomeScreenState extends State<SettingsHomeScreen> {
       style: await s.defaultStyle(),
       speakers: await s.speakerLabels(),
       mode: await s.transcriptionMode(),
+      share: await s.shareAnalytics(),
     );
     if (mounted) setState(() => _v = v);
   }
@@ -85,7 +86,7 @@ class _SettingsHomeScreenState extends State<SettingsHomeScreen> {
 
   Future<void> _restore() async {
     final s = _s;
-    final r = await s.billing.restore();
+    final r = await s.restorePurchases('settings');
     if (!mounted) return;
     final e = s.billing.entitlement.value;
     showNote(
@@ -169,6 +170,19 @@ class _SettingsHomeScreenState extends State<SettingsHomeScreen> {
                   icon: LnIcons.shield,
                   label: 'What happens to your audio',
                   onTap: () => _open(R.privacy)),
+              // Off = nothing goes to Amplitude or Meta (docs/ANALYTICS.md).
+              LnListRow.toggle(
+                key: const ValueKey('share-analytics'),
+                icon: LnIcons.list,
+                label: 'Share usage analytics',
+                value: v?.share ?? true,
+                onChanged: v == null
+                    ? null
+                    : (x) async {
+                        setState(() => _v = v.copyWith(share: x));
+                        await s.setShareAnalytics(x);
+                      },
+              ),
             ]),
             const SizedBox(height: 18),
             const LnSectionLabel('Help'),
@@ -237,19 +251,22 @@ class _Values {
       required this.summary,
       required this.style,
       required this.speakers,
-      required this.mode});
+      required this.mode,
+      required this.share});
   final String audio;
   final String summary;
   final SummaryStyle style;
   final bool speakers;
   final TranscriptionMode mode;
+  final bool share;
 
-  _Values copyWith({bool? speakers}) => _Values(
+  _Values copyWith({bool? speakers, bool? share}) => _Values(
       audio: audio,
       summary: summary,
       style: style,
       speakers: speakers ?? this.speakers,
-      mode: mode);
+      mode: mode,
+      share: share ?? this.share);
 }
 
 /// Dark plan card at the top of G1.

@@ -17,6 +17,7 @@ class Plan {
     required this.price,
     required this.priceLabel,
     this.trialDays = AppConfig.trialDays,
+    this.currency = 'USD',
   });
 
   /// App Store product id (to be created in App Store Connect).
@@ -27,6 +28,9 @@ class Plan {
   /// Localized price string from the store (e.g. "$9.99").
   final String priceLabel;
   final int trialDays;
+
+  /// ISO 4217 code of [price] from the store (e.g. "INR"); analytics only.
+  final String currency;
 
   String get periodWord => period == PlanPeriod.month ? 'month' : 'year';
 

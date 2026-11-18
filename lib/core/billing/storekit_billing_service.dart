@@ -204,7 +204,8 @@ class StoreKitBillingService implements BillingService {
                 if (raw is Map && planFromStore(raw.cast<String, Object?>()) != null)
                   {
                     for (final k in const [
-                      'id', 'displayPrice', 'price', 'periodUnit', 'trialDays'
+                      'id', 'displayPrice', 'price', 'periodUnit', 'trialDays',
+                      'currency'
                     ])
                       k: raw[k]
                   }
@@ -310,12 +311,14 @@ Plan? planFromStore(Map<String, Object?> m) {
       return null;
   }
   final trial = m['trialDays'];
+  final currency = m['currency'];
   return Plan(
     id: id,
     period: period,
     price: price.toDouble(),
     priceLabel: label,
     trialDays: trial is int ? trial : 0,
+    currency: currency is String && currency.isNotEmpty ? currency : 'USD',
   );
 }
 

@@ -6,7 +6,11 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 
+import 'core/analytics/amplitude_sink.dart';
 import 'core/analytics/analytics.dart';
+import 'core/analytics/meta_sink.dart';
+import 'core/analytics/remote_analytics.dart';
+import 'core/analytics/tracking_consent.dart';
 import 'core/audio/pcm_source.dart';
 import 'core/billing/billing_service.dart';
 import 'core/billing/paywall_gate.dart';
@@ -58,6 +62,8 @@ class AppServices {
     required this.settings,
     required this.network,
     required this.recordingsRoot,
+    required this.tracking,
+    this.meta,
     this.auth,
     this.api,
   });
@@ -75,6 +81,13 @@ class AppServices {
   final AppSettings settings;
   final NetworkMonitor network;
   final String recordingsRoot;
+
+  /// Apple's "Allow tracking?" prompt (a no-op without Meta / in QA).
+  final TrackingConsent tracking;
+
+  /// Meta ad measurement; null when Meta is not in this build (local
+  /// builds, tests, simulator QA) or LN_TRACKING=off.
+  final MetaSink? meta;
 
   /// Null when the backend is not configured in this build.
   final SupabaseAuth? auth;
@@ -111,6 +124,73 @@ class AppServices {
   static const kvFirstPaywallSeen = 'first_paywall_seen';
   static const kvWhisper = 'whisper_model';
   static const kvFakeTranscriber = 'dev_fake_transcriber';
+
+  /// Set once the App Tracking Transparency question was handled, so the
+  /// prompt is never shown twice.
+  static const kvAttAsked = 'att_asked';
+
+  /// Right after onboarding (before the first paywall): asks Apple's "Allow
+  /// tracking?" once, only when Meta is in the build, analytics sharing is
+  /// on and iOS has no answer yet. Meta collects the IDFA only if allowed.
+  Future<void> askTrackingOnce() async {
+    final m = meta;
+    if (m == null) return;
+    if (await kv.getBool(kvAttAsked)) return;
+    if (!analytics.remoteEnabled) return;
+    await kv.setBool(kvAttAsked, true);
+    final before = await tracking.status();
+    if (before != AttStatus.notDetermined) {
+      await m.setAttAuthorized(before == AttStatus.authorized);
+      return;
+    }
+    final answer = await tracking.request();
+    if (answer == AttStatus.notDetermined) {
+      // iOS did not show the prompt (app not active): may ask another time.
+      await kv.setBool(kvAttAsked, false);
+      return;
+    }
+    await m.setAttAuthorized(answer == AttStatus.authorized);
+    await analytics.log(AnalyticsEvent.attResult, props: {'status': answer.name});
+  }
+
+  /// Settings > Privacy > "Share usage analytics".
+  Future<void> setShareAnalytics(bool share) async {
+    await settings.setShareAnalytics(share);
+    await analytics.setRemoteEnabled(share);
+  }
+
+  /// "Restore purchases" from any screen ([from] = where, for analytics).
+  Future<RestoreResult> restorePurchases(String from) async {
+    await analytics.log(AnalyticsEvent.restoreTapped, props: {'from': from});
+    final r = await billing.restore();
+    await analytics.log(AnalyticsEvent.restoreResult, props: {
+      'from': from,
+      'result': r.name,
+      'active': billing.entitlement.value.isActive,
+    });
+    return r;
+  }
+
+  /// After a successful purchase: trial_started or subscription_purchased
+  /// (with price + currency, for Amplitude revenue and Meta Subscribe).
+  Future<void> logPurchase(Plan plan, {required bool startedTrial}) async {
+    final props = <String, Object?>{
+      'plan': plan.id,
+      'period': plan.periodWord,
+      'price': plan.price,
+      'currency': plan.currency,
+    };
+    if (startedTrial) {
+      final ends = billing.entitlement.value.trialEndsAt;
+      await analytics.log(AnalyticsEvent.trialStarted, props: {
+        ...props,
+        'trial_days': plan.trialDays,
+        if (ends != null) 'trial_ends_at': ends.toIso8601String(),
+      });
+    } else {
+      await analytics.log(AnalyticsEvent.subscriptionPurchased, props: props);
+    }
+  }
 
   /// Set once the notification permission was asked (A2 trial reminder or
   /// the "note ready" ask), so it is never asked twice.
@@ -174,6 +254,8 @@ class AppServices {
     LongnoteApi? api,
     CloudPipeline Function(AppServices s, NoteReadyNotifier notifier)? cloud,
     Clock clock = const SystemClock(),
+    TrackingConsent tracking = const NoTrackingConsent(),
+    MetaSink? meta,
   }) {
     final kv = KvStore(db.db);
     final settings = AppSettings(kv);
@@ -192,6 +274,8 @@ class AppServices {
       settings: settings,
       network: network ?? ManualNetworkMonitor(),
       recordingsRoot: recordingsRoot,
+      tracking: tracking,
+      meta: meta,
       auth: auth,
       api: api,
     );
@@ -234,7 +318,26 @@ class AppServices {
 
     final db = await AppDatabase.open(factory: databaseFactory, path: dbPath);
     final kv = KvStore(db.db);
-    final analytics = Analytics(db.db);
+    final settings = AppSettings(kv);
+    final share = await settings.shareAnalytics();
+    // Remote analytics only in builds that carry the keys (CI release
+    // builds); local builds, tests and simulator QA send nothing.
+    // LN_TRACKING=off (simulator QA) also keeps Meta and the ATT prompt out.
+    const trackingOff = String.fromEnvironment('LN_TRACKING') == 'off';
+    final useMeta = MetaSink.isConfigured && !trackingOff && Platform.isIOS;
+    final tracking = useMeta
+        ? const AppleTrackingConsent()
+        : const NoTrackingConsent();
+    final meta = useMeta
+        ? MetaSink(FacebookMetaEvents(),
+            enabled: share,
+            attAuthorized: await tracking.status() == AttStatus.authorized)
+        : null;
+    final sinks = <AnalyticsSink>[
+      if (AmplitudeSink.isConfigured) await AmplitudeSink.create(enabled: share),
+      ?meta,
+    ];
+    final analytics = Analytics(db.db, sinks: sinks, remoteEnabled: share);
     final repo = RecordingRepository(db.db, RecordingStorage(recRoot.path));
     // Real App Store billing on iPhone. LN_BILLING=fake (simulator QA runs
     // 1-5) or =store forces one.
@@ -245,7 +348,6 @@ class AppServices {
         : FakeBillingService(kv: kv);
     await billing.init();
     final scheduler = LocalNotificationScheduler();
-    final settings = AppSettings(kv);
     final network = ConnectivityPlusMonitor();
     const backend = BackendConfig.current;
     final auth =
@@ -266,9 +368,19 @@ class AppServices {
       settings: settings,
       network: network,
       recordingsRoot: recRoot.path,
+      tracking: tracking,
+      meta: meta,
       auth: auth,
       api: api,
     );
+    // Events carry the Supabase anonymous id once there is one (no network
+    // call here: the first upload signs up and reports it).
+    if (auth != null) {
+      auth.onUserId = (id) => unawaited(analytics.setUserId(id));
+      final uid = await auth.knownUserId();
+      if (uid != null) await analytics.setUserId(uid);
+    }
+    unawaited(meta?.activate());
     s.whisperChoice.value = WhisperChoice.parse(await kv.get(kvWhisper));
     s.useFakeTranscriber = await kv.getBool(kvFakeTranscriber);
 
@@ -349,6 +461,7 @@ class AppServices {
       _lifecycle = st;
       if (st == AppLifecycleState.resumed) {
         jobs.pokeAll();
+        unawaited(meta?.activate());
         // Expiry and "cancelled in Settings" are not pushed by the App Store.
         unawaited(billing.refresh());
       }

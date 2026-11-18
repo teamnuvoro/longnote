@@ -14,6 +14,7 @@ class AppSettings {
   static const _speakerLabels = 'set_speaker_labels';
   static const _mode = 'set_transcription_mode';
   static const _excludeBackup = 'set_exclude_from_icloud_backup';
+  static const _shareAnalytics = 'set_share_analytics';
 
   /// 'auto' or a code (see lib/core/notes/languages.dart).
   Future<String> audioLanguage() async => await kv.get(_audioLanguage) ?? 'auto';
@@ -41,4 +42,9 @@ class AppSettings {
   /// restore should bring the recordings back).
   Future<bool> excludeFromBackup() => kv.getBool(_excludeBackup);
   Future<void> setExcludeFromBackup(bool v) => kv.setBool(_excludeBackup, v);
+
+  /// Settings > Privacy > "Share usage analytics" (on by default). Off =
+  /// nothing is sent to Amplitude or Meta (docs/ANALYTICS.md).
+  Future<bool> shareAnalytics() => kv.getBool(_shareAnalytics, fallback: true);
+  Future<void> setShareAnalytics(bool v) => kv.setBool(_shareAnalytics, v);
 }

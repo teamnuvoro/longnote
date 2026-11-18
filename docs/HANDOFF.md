@@ -23,7 +23,7 @@ Labels: **DONE** = code written and unit-tested. **PARTIAL** = some of it done.
 | 3 | Rename, playback + seek, copy/share transcript and summary, PDF, share audio | DONE (code) / UNTESTED on device | PDF builder tested (Unicode fonts). Share sheet not seen |
 | 4 | Honest billing UI, $9.99 / $59.99, 3-day trial, no weekly, renewal price + date, how-to-cancel before buy, trial reminder, first recording free / paywall on 2nd | DONE with FAKE billing | Gate rule + reminder date math tested. **No StoreKit yet** |
 | 5 | Onboarding: 3 screens, privacy promise, mic permission; no account | DONE (UI) | |
-| 6 | Local analytics events (all 11) | DONE | Tested; viewable in Settings > Usage log |
+| 6 | Analytics events (16): local log + Amplitude + Meta App Events, ATT prompt, "Share usage analytics" switch | DONE | docs/ANALYTICS.md; test/remote_analytics_test.dart |
 | - | Settings: privacy explainer, engine choice, model choice/download, plan status, hidden Benchmark | DONE (UI) | Benchmark UNTESTED on device |
 | - | Speaker labels | NOT BUILT (by decision) | `speaker` field kept, always empty |
 

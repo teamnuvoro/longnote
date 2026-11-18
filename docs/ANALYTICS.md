@@ -1,0 +1,175 @@
+# Analytics: Amplitude + Meta App Events
+
+Added 18 Nov 2026 (branch v1-build). Code: `lib/core/analytics/`.
+
+## How it works
+
+- `Analytics.log(name, recordingId, props)` writes every event to the local
+  sqflite log (as before), then forwards it to the remote sinks while
+  **Settings > Privacy > Share usage analytics** is on (default ON, KV key
+  `set_share_analytics`).
+- Before anything leaves the phone, `remoteSafeProps()` (remote_analytics.dart)
+  drops any key that is or contains `title`, `text`, `transcript`, `summary`,
+  `name`, `file`/`filename`, `path`, `question`, `answer`, `speaker(s)`,
+  `body`, `content`, `email`, `phone`, `subject`, `message`, `query`, `prompt`;
+  drops lists/maps; and turns any string that is not a short code
+  (`^[A-Za-z0-9_.:+-]{1,64}$`) into `other` (so an exception message with a
+  file path can never be sent).
+- Sinks: `AmplitudeSink` (all events) and `MetaSink` (four events only).
+  Tests and simulator QA have no sinks or fakes: no network, no SDK.
+- Every whole-app flow test (`test/flows/`) checks at tear-down that no event
+  has a forbidden key and nothing forwarded contains a note title.
+
+## Events
+
+| Event | Props | Local | Amplitude | Meta |
+|---|---|---|---|---|
+| recording_started | recording_id | yes | yes | - |
+| recording_completed | duration_ms, reason | yes | yes | - |
+| recording_interrupted | cause, at_ms or saved_ms/segments/repaired_files/last_heartbeat_age_s | yes | yes | - |
+| recording_recovered | saved_ms, segments, repaired_files, last_heartbeat_age_s | yes | yes | - |
+| processing_failed | attempt, final, error (a code; free text sent as `other`) | yes | yes | - |
+| processing_retried | manual, attempt | yes | yes | - |
+| transcript_viewed / summary_viewed | recording_id | yes | yes | - |
+| export | kind, via | yes | yes | - |
+| paywall_viewed | placement (`first_run` / `second_recording`) | yes | yes | - |
+| trial_started | plan, period, price, currency, trial_days, trial_ends_at | yes | yes | **StartTrial** (currency, no value: a trial is not revenue) |
+| subscription_purchased | plan, period, price, currency | yes | yes + Amplitude **revenue** event (price, currency, productId, type subscription) | **Subscribe** (value = price, currency) |
+| restore_tapped | from (`paywall`/`settings`/`plan`/`settings_old`) | yes | yes | - |
+| restore_result | from, result (`restored`/`none`/`failed`), active | yes | yes | - |
+| onboarding_completed | mic (`allowed`/`denied`) | yes | yes | **CompleteRegistration** |
+| att_result | status (`authorized`/`denied`/`restricted`/`notSupported`) | yes | yes | - |
+| (Amplitude autocapture) | session start/end, Application Installed / Updated / Opened / Backgrounded | - | yes | - |
+| (Meta) | app activation (`activateApp`, at launch and each return to the app; gives install attribution) | - | - | yes |
+
+`recording_id` is the random note id (a UUID), never the title.
+
+Not covered on the phone: trial -> paid conversion, renewals, cancellations
+and refunds happen at Apple, not in the app. To see them in Amplitude/Meta use
+App Store Server Notifications on the backend (a later task).
+
+## Identity
+
+- Amplitude user id = the Supabase anonymous user id (`SupabaseAuth`
+  session; set at launch from the stored session without a network call, and
+  again whenever a new anonymous user is created).
+- Amplitude device id = random UUID (IDFV off).
+- Meta gets no user id.
+
+## Privacy settings in code
+
+Amplitude (`AmplitudeSink.configuration`): server zone US; tracking options
+`ipAddress`, `city`, `dma`, `region`, `carrier`, `idfv`, `adid`, `appSetId`,
+`latLag` all off (so Amplitude never receives the IP address); no IDFA
+(no IDFA plugin; `useAdvertisingIdForDeviceId` false); autocapture: sessions +
+app lifecycles only; opt-out = `setOptOut(true)`.
+
+Meta (Info.plist + `MetaSink`):
+- `FacebookAutoInitEnabled` = false: the SDK starts only when the app calls
+  `initializeSdk()`, i.e. only while sharing is on.
+- `FacebookAutoLogAppEventsEnabled` = false: no automatic events and no
+  automatic in-app-purchase logging (no double count with our Subscribe /
+  StartTrial). The app calls `activateApp()` itself.
+- `FacebookAdvertiserIDCollectionEnabled` = false by default;
+  `setAdvertiserIdCollectionEnabled(true)` only after ATT "Allow".
+- `FBSDKAutoLogMetaDataEnabled` = false and `setAutoLogMetaDataEnabled(false)`
+  at start (SDK v19 otherwise attaches screen titles and opening URLs).
+- `SKAdNetworkItems`: `v9wttpbfk9.skadnetwork`, `n38lu8286q.skadnetwork`
+  (checked against Meta's SKAdNetwork page on 18 Nov 2026).
+- No `CFBundleURLTypes` / `LSApplicationQueriesSchemes`: only needed for
+  Facebook Login / sharing, which we do not use.
+
+ATT (`TrackingConsent`): Apple's prompt is shown at most once, right after
+onboarding (after the StoreKit refresh, before the first paywall), only when
+Meta is in the build, sharing is on and iOS says `notDetermined`. Text
+(NSUserTrackingUsageDescription): "Lets us see which of our ads brought you to
+Longnote. Your recordings and notes are never shared."
+
+## Keys and builds
+
+| Value | Where it comes from | How it reaches the app |
+|---|---|---|
+| Amplitude API key (project 909345, US) | GitHub secret `AMPLITUDE_API_KEY` | `--dart-define=AMPLITUDE_API_KEY` in ios-testflight.yml |
+| Meta App ID | GitHub secret `META_APP_ID` | PlistBuddy writes `FacebookAppID` into Info.plist at build time + `--dart-define=META_APP_ID` (switches Meta on in Dart) |
+| Meta client token | GitHub secret `META_CLIENT_TOKEN` | PlistBuddy writes `FacebookClientToken` into Info.plist at build time |
+| Amplitude SECRET key | `/root/.secrets/longnote/.env` only | never in the app or CI |
+
+These values ship inside the app and are not secret, but the repo is public,
+so they stay out of git and are masked in CI logs. A build without them
+(local, simulator QA, ios-build-check) has Amplitude and Meta switched off and
+never shows the ATT prompt. Simulator QA also passes `LN_TRACKING=off`.
+The workflow fails if only one of META_APP_ID / META_CLIENT_TOKEN is set
+(initializing Meta without an app id in Info.plist would crash).
+
+## Dashboard settings (manual, not in code)
+
+- Amplitude: set data retention (TTL) to 12 months (ask Amplitude support;
+  the Free plan keeps 1 year). Optionally ask support to "drop IP addresses
+  after ingestion" as a second guard. Turn off Amplitude AI features if wanted.
+- Meta Events Manager: turn off "Log in-app events automatically" and
+  "Automatically include more app event details" for the app (belt and braces
+  with the Info.plist keys); add the iOS bundle id `com.novaralabs.longnote`
+  and App Store id; check that SKAdNetwork is on.
+
+## Delete my data
+
+Not built yet. When it is: a Supabase function (holding
+`AMPLITUDE_SECRET_KEY`) must call Amplitude's User Privacy (deletion) API for
+the user id + device id; the app must not call it (TODO in
+`amplitude_sink.dart`). Meta: no user id is sent; the app can call
+`clearUserData()` and stop logging.
+
+## To-do for the launch session (do NOT edit launch/ from here)
+
+The launch docs were written for "Amplitude only, no tracking". Meta + ATT
+change that. Needed:
+
+Privacy policy (launch/privacy-policy.md):
+1. Section 2 "No ads. No ad tracking...": now false. Say: no ads in the app;
+   we measure our own ads on Meta (Facebook/Instagram).
+2. Section 3 "We do not collect your Apple advertising ID (IDFA) ... the app
+   never shows Apple's Allow tracking prompt": now false. IDFA is shared with
+   Meta only if the user taps "Allow" in Apple's prompt.
+3. New section "Advertising measurement (Meta)": what is sent (app install /
+   open, onboarding finished, trial started, subscription bought with price and
+   currency, device data the Meta SDK collects: device model, OS, app version,
+   IP address at Meta, IDFA only with permission); purpose (measure which ads
+   work; Meta may also use it to optimise ad delivery); Meta Platforms, Inc.
+   as a third party with its own privacy policy and data policy link; how to
+   say no (Apple's prompt; Settings > Share usage analytics; iOS Settings >
+   Privacy > Tracking).
+4. Section 7 processors table: add Meta Platforms, Inc. (USA/Ireland) - note
+   Meta is a third party, not purely our processor, for ad measurement.
+5. CCPA paragraph "We do not sell or share personal information": sharing
+   device/purchase events with Meta for ad measurement is likely "sharing for
+   cross-context behavioural advertising". Needs a lawyer's view; at minimum
+   describe it and the opt-out.
+6. GDPR legal basis: ad measurement with IDFA -> consent (ATT). Without IDFA,
+   the opt-out switch; EU may need opt-in (lawyer).
+7. Section 6 Amplitude list: add restore tapped/result, onboarding completed,
+   ATT answer. Settings path is "Settings > Privacy > Share usage analytics"
+   (matches the app).
+8. Section 9 "Delete my data": add that Meta receives no user id; deletion
+   flow still to be built.
+
+App Store privacy label (launch/app-store-listing.md section 6):
+1. "Tracking" is now YES. Remove "no IDFA, no ad SDK, no ATT prompt".
+2. "Data Used to Track You": Identifiers > Device ID (IDFA, when allowed);
+   Purchases > Purchase History; Usage Data > Product Interaction (install,
+   onboarding finished, trial, subscription) - all for Third-Party Advertising /
+   ad measurement (Developer's Advertising or Marketing).
+3. Data linked to you (Amplitude, unchanged): User ID, Device ID, Product
+   Interaction, Purchase History, Diagnostics - Analytics.
+4. Meta SDK also collects coarse device data and IP at Meta: check Meta's
+   current "App Store privacy details" guidance for FBSDKCoreKit 19 and add
+   anything it lists (e.g. Coarse Location if Meta derives it from IP).
+5. App Review: ATT prompt text must match what the app does; the listing and
+   review notes should say the app requests tracking permission for ad
+   measurement only.
+
+Vendor check (launch/vendor-terms-check.md): add a Meta section (Business
+Tools Terms, data use for ads, retention, EU data transfer).
+
+In-app text already changed in this build: Settings > Privacy > "What happens
+to your audio" now has a "Usage analytics" section naming Amplitude and Meta,
+and "What we never do" no longer says "no tracking SDKs".

@@ -9,6 +9,10 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:longnote/app_services.dart';
+import 'package:longnote/core/analytics/analytics.dart';
+import 'package:longnote/core/analytics/meta_sink.dart';
+import 'package:longnote/core/analytics/remote_analytics.dart';
+import 'package:longnote/core/analytics/tracking_consent.dart';
 import 'package:longnote/core/billing/billing_service.dart';
 import 'package:longnote/core/models/recording.dart';
 import 'package:longnote/features/ask/ask_chat_screen.dart';
@@ -36,6 +40,7 @@ import 'package:longnote/features/paywall/paywall_screen.dart';
 import 'package:longnote/features/paywall/trial_started_screen.dart';
 import 'package:longnote/ui/widgets.dart';
 
+import '../helpers/fake_analytics.dart';
 import '../helpers/screens_harness.dart' show loadAppFonts, phoneView;
 import 'flow_env.dart';
 
@@ -85,6 +90,43 @@ void main() {
     expect(await env.services.kv.getBool(AppServices.kvFirstPaywallSeen), isTrue);
     // Back from Notes does not return to the paywall.
     expect(env.router.canPop(), isFalse);
+  });
+
+  testWidgets('first run with analytics: ATT asked once before the paywall; '
+      'events reach Amplitude + Meta with no note content', (t) async {
+    final sink = FakeSink();
+    final fb = FakeMetaEvents();
+    final att = FakeTrackingConsent(answer: AttStatus.authorized);
+    final meta = MetaSink(fb, enabled: true, attAuthorized: false);
+    await t.runAsync(() async => env = await FlowEnv.create(
+        firstRun: true, sinks: [sink, meta], tracking: att, meta: meta));
+    phoneView(t);
+    mockPlatform();
+    await env.pumpApp(t, location: '/onboarding');
+    await tapAndSettle(t, find.text('Continue'));
+    await tapAndSettle(t, find.text('Continue'));
+    await tapAndSettle(t, find.text('Allow microphone'));
+    expect(att.prompts, 1);
+    expect(onTop<PaywallScreen>(t), isTrue);
+    await tapAndSettle(t, find.text('Start free trial'));
+    await tapAndSettle(t, find.text('Allow the reminder'));
+    expect(onTop<NotesScreen>(t), isTrue);
+
+    expect(sink.names, [
+      AnalyticsEvent.attResult,
+      AnalyticsEvent.onboardingCompleted,
+      AnalyticsEvent.paywallViewed,
+      AnalyticsEvent.trialStarted,
+    ]);
+    expect(sink.propsOf(AnalyticsEvent.onboardingCompleted), {'mic': 'allowed'});
+    expect(fb.advertiserId, isTrue);
+    expect(fb.calls, containsAllInOrder(['CompleteRegistration', 'StartTrial']));
+    expect(fb.calls, isNot(contains('Subscribe')));
+    for (final (name, props) in sink.events) {
+      for (final k in props.keys) {
+        expect(isPiiKey(k), isFalse, reason: '$name: $k');
+      }
+    }
   });
 
   // ---------------------------------------------------------------- Notes home

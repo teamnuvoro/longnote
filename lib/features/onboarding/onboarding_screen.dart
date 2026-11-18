@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../app/routes.dart';
 import '../../app_services.dart';
+import '../../core/analytics/analytics.dart';
 
 /// Three short screens: what it does, the privacy promise, mic permission.
 /// No sign-in, no account.
@@ -36,6 +37,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     // A fresh install can learn about an existing plan a few seconds late
     // (StoreKit syncs after install): ask again before showing the paywall.
     if (!s.billing.entitlement.value.isActive) await s.billing.refresh();
+    // Apple's "Allow tracking?" once, before the paywall (only in builds
+    // with Meta ad measurement; never in tests or simulator QA).
+    await s.askTrackingOnce();
+    await s.analytics.log(AnalyticsEvent.onboardingCompleted,
+        props: {'mic': _micMessage == null ? 'allowed' : 'denied'});
     if (!mounted) return;
     setState(() => _finishing = false);
     if (s.billing.entitlement.value.isActive) {

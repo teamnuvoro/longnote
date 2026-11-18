@@ -115,11 +115,9 @@ class _PaywallScreenState extends State<PaywallScreen> {
       return;
     }
     // Apple's answer decides (not the eligibility guess shown before).
+    await s.logPurchase(plan, startedTrial: res.startedTrial);
+    if (!mounted) return;
     if (res.startedTrial) {
-      final ends = s.billing.entitlement.value.trialEndsAt!;
-      await s.analytics.log(AnalyticsEvent.trialStarted,
-          props: {'plan': plan.id, 'trial_ends_at': ends.toIso8601String()});
-      if (!mounted) return;
       // A2: the reminder permission is asked there, with its reason.
       await context.pushNamed(R.trialStarted);
     }
@@ -128,7 +126,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
 
   Future<void> _restore() async {
     final s = _s;
-    final r = await s.billing.restore();
+    final r = await s.restorePurchases('paywall');
     if (!mounted) return;
     if (s.billing.entitlement.value.isActive) {
       _close(true);

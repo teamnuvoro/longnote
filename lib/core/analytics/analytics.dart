@@ -3,8 +3,11 @@ import 'dart:convert';
 import 'package:sqflite/sqflite.dart';
 
 import '../util/clock.dart';
+import 'remote_analytics.dart';
 
-/// Event names. Local-only; nothing here is ever sent anywhere.
+/// Event names. Every event is kept in the local log and, while "Share usage
+/// analytics" is on, forwarded to Amplitude; a few also go to Meta
+/// (docs/ANALYTICS.md).
 class AnalyticsEvent {
   AnalyticsEvent._();
   static const recordingStarted = 'recording_started';
@@ -19,6 +22,15 @@ class AnalyticsEvent {
   static const paywallViewed = 'paywall_viewed';
   static const trialStarted = 'trial_started';
 
+  /// A paid (non-trial) subscription purchase.
+  static const subscriptionPurchased = 'subscription_purchased';
+  static const restoreTapped = 'restore_tapped';
+  static const restoreResult = 'restore_result';
+  static const onboardingCompleted = 'onboarding_completed';
+
+  /// The App Tracking Transparency answer (only when the prompt was shown).
+  static const attResult = 'att_result';
+
   static const all = [
     recordingStarted,
     recordingCompleted,
@@ -31,6 +43,11 @@ class AnalyticsEvent {
     export,
     paywallViewed,
     trialStarted,
+    subscriptionPurchased,
+    restoreTapped,
+    restoreResult,
+    onboardingCompleted,
+    attResult,
   ];
 }
 
@@ -47,11 +64,46 @@ class LoggedEvent {
       '${props.isEmpty ? '' : '  ${jsonEncode(props)}'}';
 }
 
-/// Local-only event log in sqflite. No third-party SDK, no network.
+/// Event log: always written to sqflite on the phone, then forwarded to the
+/// remote [sinks] (Amplitude, Meta) while [remoteEnabled]. Tests and
+/// simulator QA pass no sinks, so nothing leaves the phone there.
 class Analytics {
-  Analytics(this._db, {Clock clock = const SystemClock()}) : _clock = clock;
+  Analytics(this._db,
+      {Clock clock = const SystemClock(),
+      List<AnalyticsSink> sinks = const [],
+      bool remoteEnabled = true})
+      : _clock = clock,
+        _sinks = List.unmodifiable(sinks),
+        _remoteEnabled = remoteEnabled;
   final Database _db;
   final Clock _clock;
+  final List<AnalyticsSink> _sinks;
+  bool _remoteEnabled;
+
+  List<AnalyticsSink> get sinks => _sinks;
+
+  /// The "Share usage analytics" switch.
+  bool get remoteEnabled => _remoteEnabled;
+
+  /// Turns every remote sink on or off (the local log keeps working: it
+  /// never leaves the phone).
+  Future<void> setRemoteEnabled(bool enabled) async {
+    _remoteEnabled = enabled;
+    for (final s in _sinks) {
+      try {
+        await s.setEnabled(enabled);
+      } catch (_) {}
+    }
+  }
+
+  /// The Supabase anonymous id, once known.
+  Future<void> setUserId(String? userId) async {
+    for (final s in _sinks) {
+      try {
+        await s.setUserId(userId);
+      } catch (_) {}
+    }
+  }
 
   /// Never throws: analytics must not break the app.
   Future<void> log(String name,
@@ -65,6 +117,14 @@ class Analytics {
       });
     } catch (_) {
       // Swallow: a full disk must not crash a recording because of a log row.
+    }
+    if (!_remoteEnabled || _sinks.isEmpty) return;
+    final safe = remoteSafeProps(props);
+    if (recordingId != null) safe['recording_id'] = recordingId;
+    for (final s in _sinks) {
+      try {
+        await s.track(name, safe);
+      } catch (_) {}
     }
   }
 

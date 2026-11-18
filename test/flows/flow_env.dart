@@ -14,6 +14,9 @@ import 'package:http/http.dart' as http;
 import 'package:longnote/app/router.dart';
 import 'package:longnote/app_services.dart';
 import 'package:longnote/core/analytics/analytics.dart';
+import 'package:longnote/core/analytics/meta_sink.dart';
+import 'package:longnote/core/analytics/remote_analytics.dart';
+import 'package:longnote/core/analytics/tracking_consent.dart';
 import 'package:longnote/core/billing/billing_service.dart';
 import 'package:longnote/core/cloud/audio_encoder.dart';
 import 'package:longnote/core/cloud/cloud_pieces.dart';
@@ -43,6 +46,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart' show Sqflite;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import '../helpers/fake_analytics.dart';
 import '../helpers/fake_backend.dart';
 import '../helpers/screens_harness.dart' show FakeScheduler, FakePicker, FakeProbe;
 import '../screens/harness.dart' show FakeEngine, FakePcm, FakeShare;
@@ -177,7 +181,20 @@ class FlowEnv {
   late AppServices services;
   late GoRouter router;
 
-  static Future<FlowEnv> create({bool firstRun = false, bool trial = true}) async {
+  /// Remote analytics for this env (fakes). Every env also gets [guard],
+  /// which records every forwarded event so [dispose] can check that no
+  /// note content was in any of them.
+  List<AnalyticsSink> sinks = const [];
+  final FakeSink guard = FakeSink();
+  TrackingConsent tracking = const NoTrackingConsent();
+  MetaSink? meta;
+
+  static Future<FlowEnv> create(
+      {bool firstRun = false,
+      bool trial = true,
+      List<AnalyticsSink> sinks = const [],
+      TrackingConsent tracking = const NoTrackingConsent(),
+      MetaSink? meta}) async {
     sqfliteFfiInit();
     final dir = Directory.systemTemp.createTempSync('ln_flow_');
     final db = await AppDatabase.open(
@@ -188,7 +205,10 @@ class FlowEnv {
     final clock = FakeClock(DateTime(n.year, n.month, n.day, 10, 24));
     final billing = FakeBillingService(kv: KvStore(db.db), clock: clock);
     await billing.init();
-    final env = FlowEnv._(dir, db, repo, clock, billing);
+    final env = FlowEnv._(dir, db, repo, clock, billing)
+      ..sinks = sinks
+      ..tracking = tracking
+      ..meta = meta;
     if (!firstRun) {
       final kv = KvStore(db.db);
       await kv.setBool(AppServices.kvOnboardingDone, true);
@@ -225,7 +245,8 @@ class FlowEnv {
   /// Builds every service over the database (first launch, or an app
   /// restart: new objects, same DB and files).
   void _build() {
-    final analytics = Analytics(db.db, clock: clock);
+    final analytics =
+        Analytics(db.db, clock: clock, sinks: [guard, ...sinks]);
     share = FakeShare(repo: repo, analytics: analytics);
     final auth = SupabaseAuth(
         config: testConfig, kv: KvStore(db.db), client: http, clock: clock);
@@ -242,6 +263,8 @@ class FlowEnv {
       clock: clock,
       auth: auth,
       api: api,
+      tracking: tracking,
+      meta: meta,
       recorder: (s) => RecordingController(
         repo: repo,
         analytics: analytics,
@@ -299,9 +322,33 @@ class FlowEnv {
 
   Future<void> dispose() async {
     screenNow = DateTime.now;
+    await _checkNoNoteContentInAnalytics();
     services.dispose();
     await db.close();
     if (dir.existsSync()) dir.deleteSync(recursive: true);
+  }
+
+  /// Privacy promise (docs/ANALYTICS.md): no event, local or remote, has a
+  /// title/text/transcript/summary/name key, and nothing forwarded contains
+  /// a note title.
+  Future<void> _checkNoNoteContentInAnalytics() async {
+    final local = await services.analytics.recent(limit: 100000);
+    for (final e in local) {
+      for (final k in e.props.keys) {
+        expect(isPiiKey(k), isFalse, reason: 'local ${e.name} has "$k"');
+      }
+    }
+    final titles = [
+      for (final r in await db.db.query('recordings', columns: ['title']))
+        if ((r['title'] as String? ?? '').length >= 4) r['title'] as String
+    ];
+    for (final (name, props) in guard.events) {
+      for (final v in props.values.whereType<String>()) {
+        for (final t in titles) {
+          expect(v.contains(t), isFalse, reason: '$name carries a note title');
+        }
+      }
+    }
   }
 
   // ---- driving the queue ------------------------------------------------------

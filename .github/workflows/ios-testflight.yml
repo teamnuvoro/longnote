@@ -32,9 +32,13 @@ jobs:
         env:
           KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ISSUER: ${{ secrets.ASC_ISSUER_ID }}
+          AMPLITUDE_API_KEY: ${{ secrets.AMPLITUDE_API_KEY }}
+          META_CLIENT_TOKEN: ${{ secrets.META_CLIENT_TOKEN }}
         run: |
           echo "::add-mask::$KEY_ID"
           echo "::add-mask::$ISSUER"
+          if [ -n "$AMPLITUDE_API_KEY" ]; then echo "::add-mask::$AMPLITUDE_API_KEY"; fi
+          if [ -n "$META_CLIENT_TOKEN" ]; then echo "::add-mask::$META_CLIENT_TOKEN"; fi
 
       - name: Select latest stable Xcode
         uses: maxim-lobanov/setup-xcode@v1
@@ -81,9 +85,18 @@ jobs:
         # repo variables SUPABASE_URL / SUPABASE_ANON_KEY override them; the
         # dart-defines are written into Generated.xcconfig, which the archive
         # step below uses.
+        #
+        # Analytics (docs/ANALYTICS.md): secrets AMPLITUDE_API_KEY (dart-define)
+        # and META_APP_ID + META_CLIENT_TOKEN (written into Info.plist here,
+        # plus the META_APP_ID dart-define that switches Meta on in Dart).
+        # These ship inside the app and are not secret; they are kept out of
+        # the public repo and out of the logs. Missing = that SDK stays off.
         env:
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+          AMPLITUDE_API_KEY: ${{ secrets.AMPLITUDE_API_KEY }}
+          META_APP_ID: ${{ secrets.META_APP_ID }}
+          META_CLIENT_TOKEN: ${{ secrets.META_CLIENT_TOKEN }}
         run: |
           set -eu
           BUILD_NUMBER=$(( ${{ github.run_number }} + 100 ))
@@ -91,6 +104,23 @@ jobs:
           DEFINES=()
           if [ -n "${SUPABASE_URL}" ]; then DEFINES+=(--dart-define=SUPABASE_URL="${SUPABASE_URL}"); fi
           if [ -n "${SUPABASE_ANON_KEY}" ]; then DEFINES+=(--dart-define=SUPABASE_ANON_KEY="${SUPABASE_ANON_KEY}"); fi
+          if [ -n "${AMPLITUDE_API_KEY}" ]; then DEFINES+=(--dart-define=AMPLITUDE_API_KEY="${AMPLITUDE_API_KEY}"); fi
+          if [ -n "${META_APP_ID}" ] || [ -n "${META_CLIENT_TOKEN}" ]; then
+            # Both or neither: initializing the Meta SDK without an app id
+            # in Info.plist would crash the app.
+            if [ -z "${META_APP_ID}" ] || [ -z "${META_CLIENT_TOKEN}" ]; then
+              echo "META_APP_ID and META_CLIENT_TOKEN must both be set" >&2; exit 1
+            fi
+            PLIST=ios/Runner/Info.plist
+            /usr/libexec/PlistBuddy -c "Delete :FacebookAppID" "$PLIST" 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Delete :FacebookClientToken" "$PLIST" 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Add :FacebookAppID string ${META_APP_ID}" "$PLIST"
+            /usr/libexec/PlistBuddy -c "Add :FacebookClientToken string ${META_CLIENT_TOKEN}" "$PLIST"
+            DEFINES+=(--dart-define=META_APP_ID="${META_APP_ID}")
+            echo "Meta App Events: on"
+          else
+            echo "Meta App Events: off (no META_APP_ID secret)"
+          fi
           flutter build ios --config-only --release --no-codesign \
             --build-number "$BUILD_NUMBER" ${DEFINES[@]+"${DEFINES[@]}"}
           (cd ios && pod install)

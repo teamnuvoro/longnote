@@ -154,7 +154,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             leading: const Icon(Icons.restore),
             title: const Text('Restore purchases'),
             onTap: () async {
-              final r = await _s.billing.restore();
+              final r = await _s.restorePurchases('settings_old');
               if (!context.mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                   content: Text(switch (r) {

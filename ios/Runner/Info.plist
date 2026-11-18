@@ -30,6 +30,35 @@
 	<array>
 		<string>audio</string>
 	</array>
+	<key>NSUserTrackingUsageDescription</key>
+	<string>Lets us see which of our ads brought you to Longnote. Your recordings and notes are never shared.</string>
+	<!-- Meta App Events (docs/ANALYTICS.md). FacebookAppID and
+	     FacebookClientToken are added at build time by the CI workflows from
+	     the GitHub secrets META_APP_ID / META_CLIENT_TOKEN. The SDK starts
+	     only when the app calls it (and never while "Share usage analytics"
+	     is off); no automatic event or purchase logging; the advertising ID
+	     only after the user allows tracking. -->
+	<key>FacebookDisplayName</key>
+	<string>Longnote</string>
+	<key>FacebookAutoInitEnabled</key>
+	<false/>
+	<key>FacebookAutoLogAppEventsEnabled</key>
+	<false/>
+	<key>FacebookAdvertiserIDCollectionEnabled</key>
+	<false/>
+	<key>FBSDKAutoLogMetaDataEnabled</key>
+	<false/>
+	<key>SKAdNetworkItems</key>
+	<array>
+		<dict>
+			<key>SKAdNetworkIdentifier</key>
+			<string>v9wttpbfk9.skadnetwork</string>
+		</dict>
+		<dict>
+			<key>SKAdNetworkIdentifier</key>
+			<string>n38lu8286q.skadnetwork</string>
+		</dict>
+	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>LSRequiresIPhoneOS</key>

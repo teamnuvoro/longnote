@@ -82,6 +82,14 @@ class SupabaseAuth {
 
   static const kvSession = 'supabase_session';
 
+  /// Called whenever a session is stored with its (possibly new) user id;
+  /// analytics uses it as the Amplitude user id.
+  void Function(String userId)? onUserId;
+
+  /// The stored anonymous user id, without any network call (null before
+  /// the first sign-up).
+  Future<String?> knownUserId() async => (await _current())?.userId;
+
   AuthSession? _session;
   bool _loaded = false;
   Future<AuthSession>? _inFlight;
@@ -148,8 +156,14 @@ class SupabaseAuth {
   }
 
   Future<AuthSession> _store(AuthSession s) async {
+    final changed = _session?.userId != s.userId;
     _session = s;
     await kv.set(kvSession, jsonEncode(s.toJson()));
+    if (changed) {
+      try {
+        onUserId?.call(s.userId);
+      } catch (_) {}
+    }
     return s;
   }
 

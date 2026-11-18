@@ -30,7 +30,7 @@ class PlanScreen extends StatelessWidget {
 
   Future<void> _restore(BuildContext context) async {
     final s = context.read<AppServices>();
-    final r = await s.billing.restore();
+    final r = await s.restorePurchases('plan');
     if (!context.mounted) return;
     final e = s.billing.entitlement.value;
     showNote(

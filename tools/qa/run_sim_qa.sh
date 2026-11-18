@@ -93,6 +93,7 @@ run() {
     --keep-app-running --no-pub \
     --dart-define=QA_OUT="$OUT" --dart-define=QA_RUN="$name" \
     --dart-define=QA_AUDIO="$OUT/audio" --dart-define=LN_BILLING="$billing" \
+    --dart-define=LN_TRACKING=off \
     > "$OUT/logs/$name.log" 2>&1 &
   local pid=$!
   echo "$name $pid" > "$OUT/state/current-run"

@@ -35,6 +35,11 @@ void main() {
       'export',
       'paywall_viewed',
       'trial_started',
+      'subscription_purchased',
+      'restore_tapped',
+      'restore_result',
+      'onboarding_completed',
+      'att_result',
     ]);
   });
 
