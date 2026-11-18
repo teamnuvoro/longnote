@@ -41,7 +41,7 @@ Longnote is made by **Novara Labs LLP**, a limited liability partnership registe
 | Ad measurement events (section 7) | To measure which of our ads bring people to Longnote | Meta |
 | Your device advertising ID (IDFA), **only if you allow tracking** | Ad measurement and improving our ads (section 7) | Meta |
 | Basic technical data: IP address, device model, iOS version, app version, language, time of request | Needed to deliver any internet request; security and debugging | Short-lived server logs at our providers; Amplitude (IP address not stored); Meta |
-| Subscription events (trial started, bought, renewed, cancelled, with price and currency) | To unlock paid features, to measure revenue, and to measure our ads | Apple; your phone; Amplitude; Meta (trial started and subscription bought only) |
+| Subscription events (trial started, subscription bought, purchase restored, with price and currency) | To unlock paid features, to measure revenue, and to measure our ads | Apple; your phone; Amplitude; Meta (trial started and subscription bought only) |
 
 ### We do not collect
 
@@ -89,7 +89,7 @@ We do not sell your personal data. We do not show ads in the app.
 
 We use **Amplitude** to understand how the app is used, so we can fix problems and improve it.
 
-**What we send:** app events such as app opened, onboarding completed, recording started, recording finished (length), recording interrupted or recovered after a crash, processing failed or retried, transcript or summary viewed, note exported, paywall viewed, your answer to the tracking prompt, restore purchase tapped, trial started, subscription bought, renewed or cancelled (with price and currency), and settings changed. Each event carries basic device data (device model, iOS version, app version, language, country).
+**What we send:** app events such as app opened, onboarding completed, recording started, recording finished (length), recording interrupted or recovered after a crash, processing failed or retried, transcript or summary viewed, note exported, paywall viewed, your answer to the tracking prompt, restore purchase tapped, trial started, and subscription bought (with price and currency). Each event carries basic device data (device model, iOS version, app version, language, country).
 
 **What we never send:** audio, transcript text, summary text, your questions to Ask, note titles, speaker names, or anything that names you.
 
@@ -97,7 +97,7 @@ We use **Amplitude** to understand how the app is used, so we can fix problems a
 
 **Where:** Amplitude stores this data in its data centres in the United States. We keep it for up to 12 months.
 
-**Your choice:** you can turn analytics off at any time in **Settings > Share usage analytics**. After that, no events are sent to Amplitude from your phone.
+**Your choice:** you can turn analytics off at any time in **Settings > Share usage analytics**. After that, the app stops logging new events for Amplitude; anything already waiting to upload may still be sent within about a minute.
 
 ## 7. Ad measurement (Meta)
 
@@ -125,7 +125,7 @@ You can change your answer at any time in **iPhone Settings > Privacy & Security
 
 **Your choices:**
 
-- Turn off **Settings > Share usage analytics** in Longnote. After that, no events are sent to Meta (or to Amplitude) from your phone.
+- Turn off **Settings > Share usage analytics** in Longnote. After that, the app stops logging new events for Meta (and Amplitude); anything already waiting to upload may still be sent within about a minute.
 - Ask the app not to track, or turn off tracking in iPhone Settings, to stop the IDFA being shared.
 - Because we do not give Meta any ID that links these events to you, a deletion request to us cannot delete data Meta already holds. To ask Meta about its data, use the tools in Meta's Privacy Policy.
 

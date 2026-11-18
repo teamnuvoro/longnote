@@ -115,7 +115,11 @@ class _PaywallScreenState extends State<PaywallScreen> {
       return;
     }
     // Apple's answer decides (not the eligibility guess shown before).
-    await s.logPurchase(plan, startedTrial: res.startedTrial);
+    // Never let analytics hold up a paid user (a stuck native SDK call).
+    await s
+        .logPurchase(plan, startedTrial: res.startedTrial)
+        .timeout(const Duration(seconds: 2), onTimeout: () {})
+        .catchError((Object e) => debugPrint('log purchase: $e'));
     if (!mounted) return;
     if (res.startedTrial) {
       // A2: the reminder permission is asked there, with its reason.
