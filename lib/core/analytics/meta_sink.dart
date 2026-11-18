@@ -1,6 +1,5 @@
 import 'package:facebook_app_events/facebook_app_events.dart';
 import 'package:flutter/foundation.dart';
-import 'package:uuid/uuid.dart';
 
 import 'analytics.dart';
 import 'remote_analytics.dart';
@@ -13,9 +12,9 @@ abstract class MetaEvents {
   Future<void> setAutoLogMetaDataEnabled(bool enabled);
   Future<void> setAdvertiserIdCollectionEnabled(bool enabled);
   Future<void> logCompletedRegistration();
-  Future<void> logStartTrial({String? currency, required String orderId});
-  Future<void> logSubscribe(
-      {double? price, String? currency, required String orderId});
+
+  /// The SDK's anonymous install id (AppEvents.shared.anonymousID).
+  Future<String?> anonymousId();
 }
 
 class FacebookMetaEvents implements MetaEvents {
@@ -35,23 +34,22 @@ class FacebookMetaEvents implements MetaEvents {
   @override
   Future<void> logCompletedRegistration() => _fb.logCompletedRegistration();
   @override
-  Future<void> logStartTrial({String? currency, required String orderId}) =>
-      _fb.logStartTrial(currency: currency, orderId: orderId);
-  @override
-  Future<void> logSubscribe(
-          {double? price, String? currency, required String orderId}) =>
-      _fb.logSubscribe(price: price, currency: currency, orderId: orderId);
+  Future<String?> anonymousId() => _fb.getAnonymousId();
 }
 
-/// Meta App Events, for ad measurement only (which ad brought an install,
-/// a trial or a subscription). Sends only four things: app activation,
-/// CompleteRegistration (onboarding finished), StartTrial and Subscribe. No
-/// other event, no user id, no note content.
+/// Meta App Events, for ad measurement only (which ad brought an install).
+/// The app sends only two things: app activation and CompleteRegistration
+/// (onboarding finished). No other event, no user id, no note content.
+///
+/// Trials, paid subscriptions and renewals go to Meta from our SERVER (App
+/// Store Server Notifications, functions/appstore-notifications), keyed by
+/// this SDK's anonymous id ([anonymousId], sent in the tracking profile), so
+/// they are counted once and include renewals the app never sees.
 ///
 /// The SDK is held back until the app decides (Info.plist
 /// FacebookAutoInitEnabled = false, FacebookAutoLogAppEventsEnabled = false):
 /// so the "Share usage analytics" switch stops Meta too, and Meta's own
-/// automatic in-app-purchase logging cannot double count our events.
+/// automatic in-app-purchase logging cannot double count the server's events.
 /// The IDFA is collected only after the user allowed tracking (ATT).
 ///
 /// App ID and client token: Info.plist, written at build time from the
@@ -74,11 +72,10 @@ class MetaSink implements AnalyticsSink {
   bool get started => _started;
   bool get advertiserIdCollection => _attAuthorized;
 
-  /// Our event name -> Meta standard event. Nothing else is sent to Meta.
+  /// Our events that go to Meta from the app. Nothing else is sent to Meta
+  /// from the phone (trial / subscription events come from the server).
   static const forwarded = {
     AnalyticsEvent.onboardingCompleted,
-    AnalyticsEvent.trialStarted,
-    AnalyticsEvent.subscriptionPurchased,
   };
 
   /// Initializes the SDK (only while enabled) and logs app activation.
@@ -126,25 +123,27 @@ class MetaSink implements AnalyticsSink {
     if (!_enabled || !forwarded.contains(name)) return;
     if (!_started) await activate();
     if (!_started) return;
-    final currency = props['currency'] as String?;
-    // A fresh id per event: Meta must not merge two people's purchases.
-    final orderId = const Uuid().v4();
     try {
-      switch (name) {
-        case AnalyticsEvent.onboardingCompleted:
-          await _meta.logCompletedRegistration();
-        case AnalyticsEvent.trialStarted:
-          // No value: a free trial is not revenue.
-          await _meta.logStartTrial(currency: currency, orderId: orderId);
-        case AnalyticsEvent.subscriptionPurchased:
-          final price = props['price'];
-          await _meta.logSubscribe(
-              price: price is num ? price.toDouble() : null,
-              currency: currency,
-              orderId: orderId);
+      if (name == AnalyticsEvent.onboardingCompleted) {
+        await _meta.logCompletedRegistration();
       }
     } catch (e) {
       debugPrint('meta $name: $e');
+    }
+  }
+
+  /// The SDK's anonymous install id, for the server's Meta events. Null
+  /// while sharing is off (the SDK is not even started then) or on error.
+  Future<String?> anonymousId() async {
+    if (!_enabled) return null;
+    if (!_started) await activate();
+    if (!_started) return null;
+    try {
+      final id = await _meta.anonymousId();
+      return id == null || id.isEmpty ? null : id;
+    } catch (e) {
+      debugPrint('meta anon id: $e');
+      return null;
     }
   }
 }

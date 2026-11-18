@@ -37,6 +37,9 @@ import FoundationModels
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "StorePlugin") {
       StorePlugin.register(with: registrar)
     }
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "DeviceInfoPlugin") {
+      DeviceInfoPlugin.register(with: registrar)
+    }
   }
 }
 
@@ -46,10 +49,12 @@ import FoundationModels
 //   products {ids: [String]} -> [{id, displayPrice, price: Double, currency,
 //             periodUnit: day|week|month|year, periodValue: Int,
 //             trialDays: Int? (free-trial intro offer), eligibleForIntro: Bool}]
-//   purchase {id} -> {result: success|cancelled|pending|unverified|not_found|unknown,
+//   purchase {id, appAccountToken?: String (UUID = the Supabase user id; links
+//             Apple's server notifications to the user; ignored if not a UUID)}
+//             -> {result: success|cancelled|pending|unverified|not_found|unknown,
 //                     status: <status map, on success>}
 //   status   -> {active: Bool, productId?, purchasedAtMs?, expiresAtMs?, isTrial?,
-//                originalId?}
+//                originalId?, jws? (Transaction.jwsRepresentation)}
 //   restore  -> AppStore.sync(), then the status map
 //   renewal {productId} -> {willAutoRenew: Bool, autoRenewPreference: String?}
 //             or nil when unknown (needs the network)
@@ -107,7 +112,7 @@ public class StorePlugin: NSObject, FlutterPlugin {
             result(FlutterError(code: "bad_args", message: "id is required", details: nil))
             return
           }
-          result(try await StorePlugin.purchase(id))
+          result(try await StorePlugin.purchase(id, appAccountToken: args["appAccountToken"] as? String))
         case "status":
           result(await StorePlugin.status())
         case "restore":
@@ -146,11 +151,17 @@ public class StorePlugin: NSObject, FlutterPlugin {
     return out
   }
 
-  static func purchase(_ id: String) async throws -> [String: Any] {
+  static func purchase(_ id: String, appAccountToken: String?) async throws -> [String: Any] {
     guard let product = try await Product.products(for: [id]).first else {
       return ["result": "not_found"]
     }
-    switch try await product.purchase() {
+    // Apple copies this UUID into the signed transaction and every App Store
+    // Server Notification, so our server knows whose trial / renewal it is.
+    var options: Set<Product.PurchaseOption> = []
+    if let t = appAccountToken, let uuid = UUID(uuidString: t) {
+      options.insert(.appAccountToken(uuid))
+    }
+    switch try await product.purchase(options: options) {
     case .success(let verification):
       switch verification {
       case .verified(let transaction):
@@ -188,6 +199,9 @@ public class StorePlugin: NSObject, FlutterPlugin {
       "purchasedAtMs": Int64(t.purchaseDate.timeIntervalSince1970 * 1000),
       "isTrial": t.offerType == .introductory,
       "originalId": String(t.originalID),
+      // Apple-signed transaction; the app sends it in the tracking profile
+      // so the server can link this subscription to the current user.
+      "jws": t.jwsRepresentation,
     ]
     if let e = t.expirationDate {
       m["expiresAtMs"] = Int64(e.timeIntervalSince1970 * 1000)
@@ -235,6 +249,66 @@ public class StorePlugin: NSObject, FlutterPlugin {
     case .year: return p.value * 365
     @unknown default: return p.value
     }
+  }
+}
+
+// MARK: - Device info for Meta's server-side events
+//
+// Channel "longnote/device":
+//   extinfo -> [String] x 16, the "extinfo" array Meta's Conversions API /
+//   App Events API wants with app events sent from a server (same fields
+//   and order the Meta iOS SDK sends): i2, bundle id, short version, build,
+//   iOS version, machine (e.g. iPhone15,2), locale, time zone abbreviation,
+//   carrier (empty: iOS no longer gives it), screen width, height (points),
+//   scale, CPU cores, disk total/free (empty: not sent), time zone name.
+// Only read while "Share usage analytics" is on (docs/ANALYTICS.md).
+public class DeviceInfoPlugin: NSObject, FlutterPlugin {
+  public static func register(with registrar: FlutterPluginRegistrar) {
+    let channel = FlutterMethodChannel(name: "longnote/device", binaryMessenger: registrar.messenger())
+    registrar.addMethodCallDelegate(DeviceInfoPlugin(), channel: channel)
+  }
+
+  public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    guard call.method == "extinfo" else {
+      result(FlutterMethodNotImplemented)
+      return
+    }
+    DispatchQueue.main.async {
+      result(DeviceInfoPlugin.extinfo())
+    }
+  }
+
+  static func machine() -> String {
+    var info = utsname()
+    uname(&info)
+    let mirror = Mirror(reflecting: info.machine)
+    return mirror.children.reduce(into: "") { s, c in
+      if let v = c.value as? Int8, v != 0 { s.append(Character(UnicodeScalar(UInt8(v)))) }
+    }
+  }
+
+  static func extinfo() -> [String] {
+    let b = Bundle.main
+    let screen = UIScreen.main
+    let tz = TimeZone.current
+    return [
+      "i2",
+      b.bundleIdentifier ?? "",
+      b.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
+      b.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "",
+      UIDevice.current.systemVersion,
+      machine(),
+      Locale.current.identifier,
+      tz.abbreviation() ?? "",
+      "",
+      String(Int(screen.bounds.width)),
+      String(Int(screen.bounds.height)),
+      String(format: "%.2f", screen.scale),
+      String(ProcessInfo.processInfo.activeProcessorCount),
+      "",
+      "",
+      tz.identifier,
+    ]
   }
 }
 

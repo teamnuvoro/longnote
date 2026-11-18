@@ -3,12 +3,10 @@ import 'package:amplitude_flutter/autocapture/autocapture.dart';
 import 'package:amplitude_flutter/configuration.dart';
 import 'package:amplitude_flutter/constants.dart';
 import 'package:amplitude_flutter/events/base_event.dart';
-import 'package:amplitude_flutter/events/revenue.dart';
 import 'package:amplitude_flutter/tracking_options.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
-import 'analytics.dart';
 import 'remote_analytics.dart';
 
 /// Amplitude project 909345 (US). The API key is public by design (it ships
@@ -70,22 +68,15 @@ class AmplitudeSink implements AnalyticsSink {
     return AmplitudeSink._(amp);
   }
 
+  /// No Amplitude revenue from the phone: revenue (first payment, renewals,
+  /// refunds) is sent once by the server from Apple's notifications
+  /// (functions/appstore-notifications), so it is never double counted.
+  /// The app's trial_started / subscription_purchased stay as plain events
+  /// with `source: app`.
   @override
   Future<void> track(String name, Map<String, Object> props) async {
     try {
       await _amp.track(BaseEvent(name, eventProperties: props));
-      if (name == AnalyticsEvent.subscriptionPurchased) {
-        final price = props['price'];
-        if (price is num) {
-          final r = Revenue()
-            ..price = price.toDouble()
-            ..quantity = 1
-            ..productId = props['plan'] as String?
-            ..revenueCurrency = props['currency'] as String?
-            ..revenueType = 'subscription';
-          await _amp.revenue(r);
-        }
-      }
     } catch (e) {
       debugPrint('amplitude: $e');
     }

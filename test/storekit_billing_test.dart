@@ -21,6 +21,7 @@ class _FakeStore {
   bool? grantTrial;
   bool restoreThrows = false;
   final calls = <String>[];
+  Map<Object?, Object?>? lastPurchaseArgs;
 
   static Map<String, Object?> product(String id, String unit, String label,
           double price) =>
@@ -56,6 +57,7 @@ class _FakeStore {
           {...product('other.thing', 'month', r'$1', 1), 'eligibleForIntro': true},
         ];
       case 'purchase':
+        lastPurchaseArgs = call.arguments as Map;
         if (purchaseResult == 'success') {
           final id = (call.arguments as Map)['id'] as String;
           status = {
@@ -63,6 +65,7 @@ class _FakeStore {
             'productId': id,
             'isTrial': grantTrial ?? eligible,
             'expiresAtMs': DateTime(2026, 11, 21, 10).millisecondsSinceEpoch,
+            'jws': 'signed.transaction.jws',
           };
           eligible = false;
           return {'result': 'success', 'status': status};
@@ -318,5 +321,38 @@ void main() {
         isNull);
     expect(entitlementFromStore({'active': false}, trialEligible: false).trialUsed,
         isTrue);
+  });
+
+  group('appAccountToken (server-side subscription events)', () {
+    const uid = '8f0f3c4e-1111-4222-8333-944445555666';
+    Future<PurchaseResult> buy(StoreKitBillingService b) =>
+        b.purchase(planForId('com.novaralabs.longnote.annual'));
+
+    test('the Supabase user id goes to StoreKit; profile sync starts', () async {
+      final b = await boot();
+      var started = 0;
+      b.appAccountToken = () async => uid;
+      b.onPurchaseStarting = () => started++;
+      expect((await buy(b)).success, isTrue);
+      expect(store.lastPurchaseArgs, {'id': 'com.novaralabs.longnote.annual', 'appAccountToken': uid});
+      expect(started, 1);
+      expect(b.transactionJws, 'signed.transaction.jws');
+    });
+
+    test('offline / slow / not a UUID: buys without a token', () async {
+      final b = await boot();
+      b.accountTokenTimeout = const Duration(milliseconds: 50);
+      for (final f in <Future<String?> Function()>[
+        () async => throw Exception('offline'),
+        () => Completer<String?>().future,
+        () async => 'not-a-uuid',
+        () async => null,
+      ]) {
+        store.status = {'active': false};
+        b.appAccountToken = f;
+        expect((await buy(b)).success, isTrue);
+        expect(store.lastPurchaseArgs, {'id': 'com.novaralabs.longnote.annual'});
+      }
+    });
   });
 }

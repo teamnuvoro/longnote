@@ -11,6 +11,7 @@ import 'core/analytics/analytics.dart';
 import 'core/analytics/meta_sink.dart';
 import 'core/analytics/remote_analytics.dart';
 import 'core/analytics/tracking_consent.dart';
+import 'core/analytics/tracking_profile.dart';
 import 'core/audio/pcm_source.dart';
 import 'core/billing/billing_service.dart';
 import 'core/billing/paywall_gate.dart';
@@ -97,6 +98,12 @@ class AppServices {
   late final RecordingController recorder;
   late final NoteProcessor processor;
   CloudPipeline? cloud;
+
+  /// Sends the tracking profile the server needs for subscription events
+  /// (docs/ANALYTICS.md "Server events"); null without a backend.
+  TrackingProfileSender? trackingProfile;
+  void _profileChanged() => unawaited(trackingProfile?.sync());
+
   late final SpeakerStore speakers = SpeakerStore(repo);
   late final MomentStore moments = MomentStore(repo);
   late final ChatStore chat = ChatStore(repo);
@@ -141,6 +148,7 @@ class AppServices {
     final before = await tracking.status();
     if (before != AttStatus.notDetermined) {
       await m.setAttAuthorized(before == AttStatus.authorized);
+      _profileChanged();
       return;
     }
     final answer = await tracking.request();
@@ -150,6 +158,7 @@ class AppServices {
       return;
     }
     await m.setAttAuthorized(answer == AttStatus.authorized);
+    _profileChanged();
     await analytics.log(AnalyticsEvent.attResult, props: {'status': answer.name});
   }
 
@@ -157,6 +166,7 @@ class AppServices {
   Future<void> setShareAnalytics(bool share) async {
     await settings.setShareAnalytics(share);
     await analytics.setRemoteEnabled(share);
+    _profileChanged();
   }
 
   /// "Restore purchases" from any screen ([from] = where, for analytics).
@@ -171,10 +181,13 @@ class AppServices {
     return r;
   }
 
-  /// After a successful purchase: trial_started or subscription_purchased
-  /// (with price + currency, for Amplitude revenue and Meta Subscribe).
+  /// After a successful purchase: trial_started or subscription_purchased,
+  /// marked `source: app`. Only Amplitude gets them, without revenue: the
+  /// money events (Amplitude revenue, Meta StartTrial / Subscribe /
+  /// Purchase) come from the server, from Apple's notifications.
   Future<void> logPurchase(Plan plan, {required bool startedTrial}) async {
     final props = <String, Object?>{
+      'source': 'app',
       'plan': plan.id,
       'period': plan.periodWord,
       'price': plan.price,
@@ -381,6 +394,37 @@ class AppServices {
       if (uid != null) await analytics.setUserId(uid);
     }
     unawaited(meta?.activate());
+    if (auth != null && api != null) {
+      final store = billing is StoreKitBillingService ? billing : null;
+      final authed = auth;
+      s.trackingProfile = TrackingProfileSender(
+        kv: kv,
+        send: (body) => api.call('tracking-profile', body,
+            timeout: const Duration(seconds: 20)),
+        shareEnabled: settings.shareAnalytics,
+        knownUserId: auth.knownUserId,
+        metaAnonId: meta?.anonymousId,
+        attAuthorized: () async =>
+            await tracking.status() == AttStatus.authorized,
+        transactionJws: store == null ? null : () async => store.transactionJws,
+        device: useMeta || AmplitudeSink.isConfigured
+            ? const NativeDeviceInfo()
+            : const NoDeviceInfo(),
+      );
+      if (store != null) {
+        // StoreKit's appAccountToken = our user id (signs in if needed;
+        // offline -> no token, the purchase still works).
+        store.appAccountToken =
+            () async => await authed.knownUserId() ?? await authed.userId();
+        // The profile must reach the server before Apple's notification
+        // does (seconds after the purchase): start it with the purchase.
+        store.onPurchaseStarting =
+            () => unawaited(s.trackingProfile?.sync(allowSignIn: true));
+      }
+      s._watchProfile();
+      // Once per launch, off the startup path; sends only if changed.
+      Timer(const Duration(seconds: 6), s._profileChanged);
+    }
     s.whisperChoice.value = WhisperChoice.parse(await kv.get(kvWhisper));
     s.useFakeTranscriber = await kv.getBool(kvFakeTranscriber);
 
@@ -503,8 +547,17 @@ class AppServices {
   Future<void> transcribeOnPhoneInstead(String id) =>
       processor.transcribeOnPhoneInstead(id, jobs);
 
+  bool _profileSyncOn = false;
+  void _watchProfile() {
+    if (_profileSyncOn) return;
+    _profileSyncOn = true;
+    // A purchase, renewal or restore changes the signed transaction.
+    billing.entitlement.addListener(_profileChanged);
+  }
+
   void dispose() {
     if (_reminderSyncOn) billing.entitlement.removeListener(_syncReminder);
+    if (_profileSyncOn) billing.entitlement.removeListener(_profileChanged);
     _netSub?.cancel();
     _lifecycleListener?.dispose();
     jobs.dispose();

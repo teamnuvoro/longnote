@@ -30,7 +30,7 @@ class FakeSink implements AnalyticsSink {
 class FakeMetaEvents implements MetaEvents {
   final calls = <String>[];
   bool? advertiserId;
-  final subscribes = <(double?, String?)>[];
+  String? anonId = 'XZTEST-ANON-1';
 
   @override
   Future<void> initializeSdk() async => calls.add('init');
@@ -49,14 +49,7 @@ class FakeMetaEvents implements MetaEvents {
   Future<void> logCompletedRegistration() async =>
       calls.add('CompleteRegistration');
   @override
-  Future<void> logStartTrial({String? currency, required String orderId}) async =>
-      calls.add('StartTrial');
-  @override
-  Future<void> logSubscribe(
-      {double? price, String? currency, required String orderId}) async {
-    subscribes.add((price, currency));
-    calls.add('Subscribe');
-  }
+  Future<String?> anonymousId() async => anonId;
 }
 
 /// Fake ATT: [answer] is what the user taps; counts prompts.

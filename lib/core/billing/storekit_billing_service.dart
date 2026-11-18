@@ -27,6 +27,33 @@ class StoreKitBillingService implements BillingService {
 
   final KvStore kv;
   final MethodChannel _ch;
+
+  /// Gives the Supabase user id (a UUID) for StoreKit's appAccountToken, so
+  /// Apple's server notifications name the user (server-side trial /
+  /// renewal events, docs/ANALYTICS.md). Null or a failure = buy without a
+  /// token: a purchase must never fail because we are offline.
+  Future<String?> Function()? appAccountToken;
+
+  /// Called as a purchase starts (sends the tracking profile, unawaited).
+  void Function()? onPurchaseStarting;
+
+  /// Upper bound for [appAccountToken] (it may sign in anonymously).
+  Duration accountTokenTimeout = const Duration(seconds: 5);
+
+  Future<String?> _accountToken() async {
+    final f = appAccountToken;
+    if (f == null) return null;
+    try {
+      final t = await f().timeout(accountTokenTimeout);
+      return t != null && _uuid.hasMatch(t) ? t : null;
+    } catch (e) {
+      debugPrint('store account token: $e');
+      return null;
+    }
+  }
+
+  static final _uuid = RegExp(
+      r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$');
   final Duration statusTimeout;
   final Duration productsTimeout;
 
@@ -108,7 +135,14 @@ class StoreKitBillingService implements BillingService {
     if (m != null) _apply(m);
   }
 
+  /// StoreKit's Apple-signed current transaction (null when none); sent in
+  /// the tracking profile so the server can link the subscription.
+  String? get transactionJws => _jws;
+  String? _jws;
+
   void _apply(Map<String, Object?> m) {
+    final jws = m['jws'];
+    _jws = m['active'] == true && jws is String && jws.isNotEmpty ? jws : null;
     var e = entitlementFromStore(m, trialEligible: _eligible);
     final prev = _ent.value;
     // Keep the last known auto-renew answer until the network confirms it.
@@ -227,9 +261,15 @@ class StoreKitBillingService implements BillingService {
           error: 'Can’t reach the App Store right now. Check your connection '
               'and try again. Nothing was charged.');
     }
+    final token = await _accountToken();
     try {
-      final r = await _ch
-          .invokeMapMethod<String, Object?>('purchase', {'id': plan.id});
+      onPurchaseStarting?.call();
+    } catch (_) {}
+    try {
+      final r = await _ch.invokeMapMethod<String, Object?>('purchase', {
+        'id': plan.id,
+        'appAccountToken': ?token,
+      });
       switch (r?['result']) {
         case 'success':
           final st = r!['status'];

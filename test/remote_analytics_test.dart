@@ -179,7 +179,8 @@ void main() {
           ['init', 'metadata:false', 'advertiserId:false', 'activate']);
     });
 
-    test('only onboarding, trial and paid subscription are sent', () async {
+    test('only onboarding is sent from the app (money events come from the server)',
+        () async {
       final fb = FakeMetaEvents();
       final meta = MetaSink(fb, enabled: true, attAuthorized: false);
       final a = analyticsWith([meta]);
@@ -188,8 +189,19 @@ void main() {
       for (final n in AnalyticsEvent.all) {
         await a.log(n, props: {'price': 9.99, 'currency': 'INR', 'plan': 'p'});
       }
-      expect(fb.calls, ['StartTrial', 'Subscribe', 'CompleteRegistration']);
-      expect(fb.subscribes.single, (9.99, 'INR'));
+      expect(fb.calls, ['CompleteRegistration']);
+    });
+
+    test('anonymous id: only while sharing is on (starts the SDK first)',
+        () async {
+      final fb = FakeMetaEvents();
+      final meta = MetaSink(fb, enabled: false, attAuthorized: false);
+      expect(await meta.anonymousId(), isNull);
+      expect(fb.calls, isEmpty, reason: 'SDK never touched while off');
+      await meta.setEnabled(true);
+      expect(await meta.anonymousId(), 'XZTEST-ANON-1');
+      fb.anonId = '';
+      expect(await meta.anonymousId(), isNull);
     });
 
     test('advertiser id collection follows the ATT answer', () async {
@@ -297,6 +309,7 @@ void main() {
       final s = await services(analytics: analyticsWith([sink]));
       await s.logPurchase(inrAnnual, startedTrial: false);
       expect(sink.propsOf(AnalyticsEvent.subscriptionPurchased), {
+        'source': 'app',
         'plan': 'com.novaralabs.longnote.annual',
         'period': 'year',
         'price': 4999.0,
@@ -362,7 +375,8 @@ void main() {
       expect(cfg['useAdvertisingIdForDeviceId'], isFalse);
     });
 
-    test('track, revenue for paid purchases, opt-out, user id', () async {
+    test('track (no revenue from the app: the server sends it), opt-out, user id',
+        () async {
       final sink = await AmplitudeSink.create(
           enabled: true, key: 'test-key', channel: channel);
       calls.clear();
@@ -372,14 +386,9 @@ void main() {
       await sink.setEnabled(false);
       await sink.setUserId('anon-uuid-1');
       expect(calls.map((c) => c.method),
-          ['track', 'revenue', 'track', 'setOptOut', 'setUserId']);
+          ['track', 'track', 'setOptOut', 'setUserId']);
       final ev = ((calls[0].arguments as Map)['event'] as Map);
       expect(ev['event_type'], 'subscription_purchased');
-      final rev = ((calls[1].arguments as Map)['event'] as Map)['event_properties']
-          as Map;
-      expect(rev[r'$price'], 9.99);
-      expect(rev[r'$currency'], 'USD');
-      expect(rev[r'$productId'], 'com.novaralabs.longnote.monthly');
     });
   });
 }

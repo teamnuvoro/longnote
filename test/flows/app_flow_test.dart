@@ -120,8 +120,11 @@ void main() {
     ]);
     expect(sink.propsOf(AnalyticsEvent.onboardingCompleted), {'mic': 'allowed'});
     expect(fb.advertiserId, isTrue);
-    expect(fb.calls, containsAllInOrder(['CompleteRegistration', 'StartTrial']));
+    // The trial goes to Meta from the server (Apple's notification), not the app.
+    expect(fb.calls, contains('CompleteRegistration'));
+    expect(fb.calls, isNot(contains('StartTrial')));
     expect(fb.calls, isNot(contains('Subscribe')));
+    expect(sink.propsOf(AnalyticsEvent.trialStarted)['source'], 'app');
     for (final (name, props) in sink.events) {
       for (final k in props.keys) {
         expect(isPiiKey(k), isFalse, reason: '$name: $k');
