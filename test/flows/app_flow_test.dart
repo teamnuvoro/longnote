@@ -92,7 +92,7 @@ void main() {
     expect(env.router.canPop(), isFalse);
   });
 
-  testWidgets('first run with analytics: ATT asked once before the paywall; '
+  testWidgets('first run with analytics: no ATT prompt (v1); '
       'events reach Amplitude + Meta with no note content', (t) async {
     final sink = FakeSink();
     final fb = FakeMetaEvents();
@@ -106,20 +106,19 @@ void main() {
     await tapAndSettle(t, find.text('Continue'));
     await tapAndSettle(t, find.text('Continue'));
     await tapAndSettle(t, find.text('Allow microphone'));
-    expect(att.prompts, 1);
+    expect(att.prompts, 0); // no "Allow tracking?" in v1
     expect(onTop<PaywallScreen>(t), isTrue);
     await tapAndSettle(t, find.text('Start free trial'));
     await tapAndSettle(t, find.text('Allow the reminder'));
     expect(onTop<NotesScreen>(t), isTrue);
 
     expect(sink.names, [
-      AnalyticsEvent.attResult,
       AnalyticsEvent.onboardingCompleted,
       AnalyticsEvent.paywallViewed,
       AnalyticsEvent.trialStarted,
     ]);
     expect(sink.propsOf(AnalyticsEvent.onboardingCompleted), {'mic': 'allowed'});
-    expect(fb.advertiserId, isTrue);
+    expect(fb.advertiserId, isFalse); // never the IDFA
     // The trial goes to Meta from the server (Apple's notification), not the app.
     expect(fb.calls, contains('CompleteRegistration'));
     expect(fb.calls, isNot(contains('StartTrial')));

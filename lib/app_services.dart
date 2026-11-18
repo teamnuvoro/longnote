@@ -136,8 +136,8 @@ class AppServices {
   /// prompt is never shown twice.
   static const kvAttAsked = 'att_asked';
 
-  /// Right after onboarding (before the first paywall): asks Apple's "Allow
-  /// tracking?" once, only when Meta is in the build, analytics sharing is
+  /// NOT CALLED in v1 (no ATT prompt; owner, 18 Nov 2026). Would ask Apple's
+  /// "Allow tracking?" once, only when Meta is in the build, analytics sharing is
   /// on and iOS has no answer yet. Meta collects the IDFA only if allowed.
   Future<void> askTrackingOnce() async {
     final m = meta;
@@ -338,9 +338,9 @@ class AppServices {
     // LN_TRACKING=off (simulator QA) also keeps Meta and the ATT prompt out.
     const trackingOff = String.fromEnvironment('LN_TRACKING') == 'off';
     final useMeta = MetaSink.isConfigured && !trackingOff && Platform.isIOS;
-    final tracking = useMeta
-        ? const AppleTrackingConsent()
-        : const NoTrackingConsent();
+    // No ATT prompt in v1 (owner, 18 Nov 2026): Meta never gets the IDFA.
+    // askTrackingOnce() stays (tested with fakes) in case that changes.
+    const tracking = NoTrackingConsent();
     final meta = useMeta
         ? MetaSink(FacebookMetaEvents(),
             enabled: share,

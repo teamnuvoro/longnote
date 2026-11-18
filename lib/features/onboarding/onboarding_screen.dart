@@ -37,9 +37,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     // A fresh install can learn about an existing plan a few seconds late
     // (StoreKit syncs after install): ask again before showing the paywall.
     if (!s.billing.entitlement.value.isActive) await s.billing.refresh();
-    // Apple's "Allow tracking?" once, before the paywall (only in builds
-    // with Meta ad measurement; never in tests or simulator QA).
-    await s.askTrackingOnce();
+    // No "Allow tracking?" prompt (owner, 18 Nov 2026): Meta runs without
+    // the advertising ID.
     await s.analytics.log(AnalyticsEvent.onboardingCompleted,
         props: {'mic': _micMessage == null ? 'allowed' : 'denied'});
     if (!mounted) return;

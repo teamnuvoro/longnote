@@ -30,8 +30,6 @@
 	<array>
 		<string>audio</string>
 	</array>
-	<key>NSUserTrackingUsageDescription</key>
-	<string>Lets us see which of our ads brought you to Longnote. Your recordings and notes are never shared.</string>
 	<!-- Meta App Events (docs/ANALYTICS.md). FacebookAppID and
 	     FacebookClientToken are added at build time by the CI workflows from
 	     the GitHub secrets META_APP_ID / META_CLIENT_TOKEN. The SDK starts

@@ -186,7 +186,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _Header('About'),
           ListTile(
             title: const Text('Longnote'),
-            subtitle: const Text('Version 0.1.0 (test build)'),
+            subtitle: const Text('Version 1.0.0'),
             onTap: () {
               // Hidden: tap 7 times to open the Benchmark screen.
               if (++_versionTaps >= 7) {
