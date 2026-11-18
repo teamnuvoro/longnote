@@ -184,12 +184,15 @@ public class StorePlugin: NSObject, FlutterPlugin {
   /// offline from StoreKit's on-device cache.
   static func status() async -> [String: Any] {
     var best: StoreKit.Transaction?
+    var bestJws: String?
     for await verification in StoreKit.Transaction.currentEntitlements {
       guard case .verified(let t) = verification,
             t.productType == .autoRenewable,
             t.revocationDate == nil else { continue }
       if best == nil || (t.expirationDate ?? .distantPast) > (best!.expirationDate ?? .distantPast) {
         best = t
+        // The Apple-signed form (on the VerificationResult, not the Transaction).
+        bestJws = verification.jwsRepresentation
       }
     }
     guard let t = best else { return ["active": false] }
@@ -199,10 +202,10 @@ public class StorePlugin: NSObject, FlutterPlugin {
       "purchasedAtMs": Int64(t.purchaseDate.timeIntervalSince1970 * 1000),
       "isTrial": t.offerType == .introductory,
       "originalId": String(t.originalID),
-      // Apple-signed transaction; the app sends it in the tracking profile
-      // so the server can link this subscription to the current user.
-      "jws": t.jwsRepresentation,
     ]
+    // Apple-signed transaction; the app sends it in the tracking profile
+    // so the server can link this subscription to the current user.
+    if let j = bestJws { m["jws"] = j }
     if let e = t.expirationDate {
       m["expiresAtMs"] = Int64(e.timeIntervalSince1970 * 1000)
     }
