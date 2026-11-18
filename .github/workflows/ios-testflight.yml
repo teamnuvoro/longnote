@@ -125,6 +125,44 @@ jobs:
             --build-number "$BUILD_NUMBER" ${DEFINES[@]+"${DEFINES[@]}"}
           (cd ios && pod install)
 
+      - name: Note existing development certificates
+        env:
+          KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ISSUER: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -eu
+          python3 -m venv "$RUNNER_TEMP/certvenv"
+          "$RUNNER_TEMP/certvenv/bin/pip" install --quiet "pyjwt[crypto]"
+          cat > "$RUNNER_TEMP/devcerts.py" <<'PY'
+          # Lists / revokes "Created via API" development certificates.
+          # Automatic signing makes a new one on every CI runner; Apple caps
+          # them, so each run revokes only the ones it created itself.
+          import json, os, sys, time, urllib.request, jwt
+          kid, iss = os.environ["KEY_ID"], os.environ["ISSUER"]
+          key = open(os.path.expanduser(f"~/.appstoreconnect/private_keys/AuthKey_{kid}.p8")).read()
+          tok = jwt.encode({"iss": iss, "iat": int(time.time()), "exp": int(time.time()) + 600,
+                            "aud": "appstoreconnect-v1"}, key, algorithm="ES256", headers={"kid": kid})
+          def call(method, path):
+              r = urllib.request.Request("https://api.appstoreconnect.apple.com" + path, method=method,
+                                         headers={"Authorization": "Bearer " + tok})
+              with urllib.request.urlopen(r) as resp:
+                  body = resp.read()
+                  return json.loads(body) if body else None
+          def ids():
+              d = call("GET", "/v1/certificates?limit=200&filter[certificateType]=DEVELOPMENT")["data"]
+              return {c["id"] for c in d if c["attributes"]["name"] == "Apple Development: Created via API"}
+          before = os.path.join(os.environ["RUNNER_TEMP"], "devcerts-before.json")
+          if sys.argv[1] == "save":
+              json.dump(sorted(ids()), open(before, "w"))
+              print("development certificates noted")
+          else:
+              new = ids() - set(json.load(open(before)))
+              for c in sorted(new):
+                  call("DELETE", f"/v1/certificates/{c}")
+              print(f"revoked {len(new)} certificate(s) created by this run")
+          PY
+          "$RUNNER_TEMP/certvenv/bin/python" "$RUNNER_TEMP/devcerts.py" save
+
       - name: Archive (automatic signing with API key)
         env:
           KEY_ID: ${{ secrets.ASC_KEY_ID }}
@@ -161,6 +199,16 @@ jobs:
             -authenticationKeyID "$KEY_ID" \
             -authenticationKeyIssuerID "$ISSUER"
           ls -la "$RUNNER_TEMP/export"
+
+      - name: Revoke this run's development certificate
+        if: ${{ always() }}
+        env:
+          KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ISSUER: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          if [ -f "$RUNNER_TEMP/devcerts-before.json" ]; then
+            "$RUNNER_TEMP/certvenv/bin/python" "$RUNNER_TEMP/devcerts.py" revoke || echo "certificate cleanup failed (not fatal)"
+          fi
 
       - name: Upload to TestFlight
         if: ${{ inputs.upload }}
