@@ -104,6 +104,12 @@ class _PaywallScreenState extends State<PaywallScreen> {
     if (!res.success) _buying = false;
     if (!mounted) return;
     setState(() => _busy = false);
+    // A plan arrived during the call (e.g. Ask to Buy approved while the
+    // sheet was open): the listener skipped it, so close here.
+    if (!res.success && s.billing.entitlement.value.isActive) {
+      _close(true);
+      return;
+    }
     if (!res.success) {
       showNote(context, res.error ?? 'Purchase did not complete. Nothing was charged.');
       return;

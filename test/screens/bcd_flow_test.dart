@@ -1,3 +1,4 @@
+import 'dart:async';
 // Flow tests for screens B (Notes), C (Recording) and D (Note): real
 // router, real database and recorder (fake microphone), fake share/audio.
 import 'package:flutter/foundation.dart';
@@ -165,6 +166,31 @@ void main() {
     expect(note!.language, 'bn');
     await tap(tester, byLabel('Stop & save'));
     await drain(tester);
+  });
+
+  testWidgets('a start that hangs unlocks Close after 15 s', (tester) async {
+    await boot(tester, seed: false);
+    FakePcm.startGate = Completer<void>();
+    addTearDown(() => FakePcm.startGate = null);
+    await tap(tester, find.text('Record'));
+    await tester.pump(const Duration(milliseconds: 500)); // open tap guard
+    await tester.tap(find.byKey(const ValueKey('record-start')));
+    await tester.pump();
+    final close = byLabel('Close (nothing is recorded)');
+    expect(tester.widget<LnPressable>(close).onPressed, isNull);
+    await tester.pump(const Duration(seconds: 16));
+    expect(find.text('Starting is taking long. Close and try again.'),
+        findsOneWidget);
+    expect(tester.widget<LnPressable>(close).onPressed, isNotNull);
+    await tester.pump(const Duration(seconds: 3)); // toast goes away
+    await tester.tap(close, warnIfMissed: true);
+    for (var i = 0; i < 20; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.byType(RecordingScreen), findsNothing);
+    FakePcm.startGate!.complete();
+    await drain(tester);
+    await tester.pump(const Duration(seconds: 5));
   });
 
   testWidgets('Record -> pause -> resume -> stop -> note appears processing',

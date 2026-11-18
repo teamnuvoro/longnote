@@ -170,12 +170,19 @@ class FakePcm implements PcmSource {
 
   /// The source of the current test recording (to feed it audio).
   static FakePcm? last;
+
+  /// When set, start() waits on it (a stuck microphone / audio session).
+  static Completer<void>? startGate;
   final audio = StreamController<Uint8List>();
   final ints = StreamController<InterruptionPhase>.broadcast();
   @override
   Future<bool> hasPermission({bool request = true}) async => true;
   @override
-  Future<Stream<Uint8List>> start() async => audio.stream;
+  Future<Stream<Uint8List>> start() async {
+    final gate = startGate;
+    if (gate != null) await gate.future;
+    return audio.stream;
+  }
   @override
   Future<void> pause() async {}
   @override

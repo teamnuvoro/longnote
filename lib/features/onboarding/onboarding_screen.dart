@@ -19,6 +19,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   int _page = 0;
   String? _micMessage;
 
+  /// Checking the App Store for an existing plan (up to a few seconds).
+  bool _finishing = false;
+
   @override
   void dispose() {
     _pages.dispose();
@@ -26,12 +29,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   Future<void> _finish() async {
+    if (_finishing) return;
     final s = context.read<AppServices>();
+    setState(() => _finishing = true);
     await s.kv.setBool(AppServices.kvOnboardingDone, true);
     // A fresh install can learn about an existing plan a few seconds late
     // (StoreKit syncs after install): ask again before showing the paywall.
     if (!s.billing.entitlement.value.isActive) await s.billing.refresh();
     if (!mounted) return;
+    setState(() => _finishing = false);
     if (s.billing.entitlement.value.isActive) {
       // Already subscribed (reinstall / restored): no paywall.
       await s.kv.setBool(AppServices.kvFirstPaywallSeen, true);
@@ -127,12 +133,21 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 width: double.infinity,
                 height: 52,
                 child: FilledButton(
-                  onPressed: _page < 2
-                      ? _next
-                      : (_micMessage == null ? _askMic : _finish),
-                  child: Text(_page < 2
-                      ? 'Continue'
-                      : (_micMessage == null ? 'Allow microphone' : 'Continue')),
+                  onPressed: _finishing
+                      ? null
+                      : _page < 2
+                          ? _next
+                          : (_micMessage == null ? _askMic : _finish),
+                  child: _finishing
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : Text(_page < 2
+                          ? 'Continue'
+                          : (_micMessage == null
+                              ? 'Allow microphone'
+                              : 'Continue')),
                 ),
               ),
             ),

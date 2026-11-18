@@ -132,6 +132,8 @@ class _RecordingScreenState extends State<RecordingScreen> {
       stuck.cancel();
       if (!mounted) return;
       final live = _s.recorder.isActive;
+      if (live) await _applyPendingLanguage();
+      if (!mounted) return;
       setState(() {
         _starting = false;
         // Normally nothing started; if capture did start, show it live.
@@ -148,15 +150,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
       return;
     }
     stuck.cancel();
-    final pick = _pendingLanguage;
-    final id = _s.recorder.current?.id;
-    if (pick != null && id != null) {
-      try {
-        await _repo.setNoteOptions(id, language: pick);
-      } catch (e) {
-        debugPrint('ready language: $e');
-      }
-    }
+    await _applyPendingLanguage();
     if (!mounted) return;
     _startedAt = clock.now();
     setState(() {
@@ -164,6 +158,20 @@ class _RecordingScreenState extends State<RecordingScreen> {
       _ready = false;
     });
     unawaited(_loadNote());
+  }
+
+  /// The language picked on the ready screen goes onto the note Start made
+  /// (shown at once, so the chip does not flash the Settings default).
+  Future<void> _applyPendingLanguage() async {
+    final pick = _pendingLanguage;
+    final id = _s.recorder.current?.id;
+    if (pick == null || id == null) return;
+    if (mounted) setState(() => _language = pick);
+    try {
+      await _repo.setNoteOptions(id, language: pick);
+    } catch (e) {
+      debugPrint('ready language: $e');
+    }
   }
 
   void _minimise() =>
@@ -230,8 +238,16 @@ class _RecordingScreenState extends State<RecordingScreen> {
         context,
         builder: (_) => LanguageSheet(selected: current),
       );
-      if (code == null || !mounted || !_ready) return;
-      setState(() => _pendingLanguage = code);
+      if (code == null || !mounted) return;
+      if (_ready) {
+        setState(() => _pendingLanguage = code);
+        return;
+      }
+      // Start was tapped while the sheet was opening: the note exists now.
+      final id = _s.recorder.current?.id;
+      if (id == null) return;
+      setState(() => _language = code);
+      await _repo.setNoteOptions(id, language: code);
       return;
     }
     final rec = c.current;
@@ -254,6 +270,9 @@ class _RecordingScreenState extends State<RecordingScreen> {
         _ready &&
         (c.state == CaptureState.idle || c.state == CaptureState.starting);
     final starting = ready && (_starting || c.state == CaptureState.starting);
+    // Close unlocks when the 15 s stuck timer clears _starting, even if the
+    // controller itself is still stuck in "starting".
+    final closeLocked = ready && _starting;
     if (!ready && _leaving && c.state == CaptureState.idle) {
       return const Scaffold(backgroundColor: LnColors.night);
     }
@@ -349,7 +368,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
                                 semanticLabel: ready
                                     ? 'Close (nothing is recorded)'
                                     : 'Back to notes (keeps recording)',
-                                onPressed: starting ? null : _minimise,
+                                onPressed: closeLocked ? null : _minimise,
                               ),
                             ),
                             if (!ready)
