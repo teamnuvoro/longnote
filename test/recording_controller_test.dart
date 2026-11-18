@@ -14,15 +14,19 @@ import 'package:longnote/core/recording/recovery_service.dart';
 import 'helpers/test_env.dart';
 
 class FakePcmSource implements PcmSource {
-  FakePcmSource({this.permission = true});
+  FakePcmSource({this.permission = true, this.startFails = false});
   final bool permission;
+  final bool startFails;
   final audio = StreamController<Uint8List>();
   final ints = StreamController<InterruptionPhase>.broadcast();
   final paused = <String>[];
   @override
   Future<bool> hasPermission({bool request = true}) async => permission;
   @override
-  Future<Stream<Uint8List>> start() async => audio.stream;
+  Future<Stream<Uint8List>> start() async {
+    if (startFails) throw StateError('audio session failed');
+    return audio.stream;
+  }
   @override
   Future<void> pause() async => paused.add('pause');
   @override
@@ -62,6 +66,14 @@ void main() {
         useTimers: false,
         onFinished: (r) async => finished?.add(r),
       );
+
+  test('a start that fails after the row was made leaves no ghost note',
+      () async {
+    final c = make(FakePcmSource(startFails: true));
+    await expectLater(c.start(), throwsA(isA<StateError>()));
+    expect(c.state, CaptureState.idle);
+    expect(await env.repo.all(), isEmpty);
+  });
 
   test('records, marks an interruption gap, stops -> completed with audio',
       () async {

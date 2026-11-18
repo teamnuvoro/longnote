@@ -457,7 +457,9 @@ class AppServices {
           outputLanguage: await settings.summaryLanguage());
       return r;
     } catch (_) {
-      jobs.resume();
+      // Capture may have started and only the note options failed: keep
+      // the queue paused while it records.
+      if (!recorder.isActive) jobs.resume();
       rethrow;
     }
   }

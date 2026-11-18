@@ -105,6 +105,7 @@ class RecordingController extends ChangeNotifier {
     _openGapId = null;
     _gapStartedAt = null;
     notifyListeners();
+    String? insertedId;
     try {
       final source = sourceFactory();
       if (!await source.hasPermission()) {
@@ -120,6 +121,7 @@ class RecordingController extends ChangeNotifier {
         heartbeatAt: now,
       );
       await repo.insert(rec);
+      insertedId = rec.id;
       final dir = Directory(repo.storage.dirFor(rec.id));
       dir.createSync(recursive: true);
 
@@ -182,7 +184,8 @@ class RecordingController extends ChangeNotifier {
       return rec;
     } catch (_) {
       // The source failed to start: free the file, the mic and the
-      // listeners. The row stays "recording" and is repaired at next launch.
+      // listeners, and remove the empty row (no audio was captured) so
+      // Notes shows no ghost "recording" after a failed Start.
       _flushTimer?.cancel();
       _heartbeatTimer?.cancel();
       await _intSub?.cancel();
@@ -199,6 +202,11 @@ class RecordingController extends ChangeNotifier {
       _source = null;
       current = null;
       state = CaptureState.idle;
+      if (insertedId != null) {
+        try {
+          await repo.deleteByUser(insertedId);
+        } catch (_) {/* repaired at next launch as before */}
+      }
       notifyListeners();
       rethrow;
     }

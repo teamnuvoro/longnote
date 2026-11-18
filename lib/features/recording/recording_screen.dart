@@ -115,15 +115,26 @@ class _RecordingScreenState extends State<RecordingScreen> {
     if (clock.now().difference(_openedAt) < _openTapGuard) return;
     _startedAt = clock.now();
     setState(() => _starting = true);
+    // If iOS never answers (mic or audio session stuck), unlock Close so
+    // the user is not trapped; a late start still shows up as recording.
+    final stuck = Timer(const Duration(seconds: 15), () {
+      if (!mounted || !_starting) return;
+      setState(() => _starting = false);
+      showToast(context, 'Starting is taking long. Close and try again.');
+    });
     try {
       await _s.startRecording();
     } catch (e) {
+      stuck.cancel();
       if (!mounted) return;
+      final live = _s.recorder.isActive;
       setState(() {
         _starting = false;
         // Normally nothing started; if capture did start, show it live.
-        _ready = !_s.recorder.isActive;
+        _ready = !live;
       });
+      // Capture is running (only a note setting failed): no error toast.
+      if (live) return;
       showToast(
           context,
           e.toString().contains('permission')
@@ -131,6 +142,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
               : 'Could not start recording. Please try again.');
       return;
     }
+    stuck.cancel();
     if (!mounted) return;
     _startedAt = clock.now();
     setState(() {
