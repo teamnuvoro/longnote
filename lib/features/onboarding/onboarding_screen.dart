@@ -28,6 +28,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Future<void> _finish() async {
     final s = context.read<AppServices>();
     await s.kv.setBool(AppServices.kvOnboardingDone, true);
+    // A fresh install can learn about an existing plan a few seconds late
+    // (StoreKit syncs after install): ask again before showing the paywall.
+    if (!s.billing.entitlement.value.isActive) await s.billing.refresh();
     if (!mounted) return;
     if (s.billing.entitlement.value.isActive) {
       // Already subscribed (reinstall / restored): no paywall.

@@ -80,6 +80,18 @@ void main() {
       expect(line(), contains(r'$59.99 a year'));
     });
 
+    testWidgets('a plan that arrives while the paywall is open closes it '
+        '(StoreKit syncing after a reinstall)', (t) async {
+      await openPaywall(t);
+      expect(find.text('Start free trial'), findsOneWidget);
+      // Not bought on this paywall: the store reports an existing plan.
+      await t.runAsync(() => env.billing.purchase(monthlyPlan));
+      await settle(t);
+      expect(find.text('Start free trial'), findsNothing);
+      expect(find.byType(NotesScreen), findsOneWidget);
+      expect(find.text('You’re in. Your trial is on.'), findsNothing);
+    });
+
     testWidgets('start trial -> allow -> reminder scheduled -> Notes', (t) async {
       await openPaywall(t);
       await t.tap(find.text('Monthly'));

@@ -47,11 +47,32 @@ class _PaywallScreenState extends State<PaywallScreen> {
   bool _busy = false;
   bool _closed = false;
 
+  /// From Start until the purchase failed, or for good once it succeeded
+  /// (the trial screen and [_close] follow; late renewal info must not
+  /// close anything on top of the paywall).
+  bool _buying = false;
+
   AppServices get _s => context.read<AppServices>();
+  late final BillingService _billing = _s.billing;
+
+  /// A plan that shows up while the paywall is open (StoreKit syncing after
+  /// a reinstall, Ask to Buy approved, bought on another device) closes it.
+  /// Not during our own purchase: [_buy] decides what comes next.
+  void _onEntitlement() {
+    if (!mounted || _buying || _closed) return;
+    if (_billing.entitlement.value.isActive) _close(true);
+  }
+
+  @override
+  void dispose() {
+    _billing.entitlement.removeListener(_onEntitlement);
+    super.dispose();
+  }
 
   @override
   void initState() {
     super.initState();
+    _billing.entitlement.addListener(_onEntitlement);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       final s = _s;
@@ -78,7 +99,9 @@ class _PaywallScreenState extends State<PaywallScreen> {
     final plan = _selected;
     final s = _s;
     setState(() => _busy = true);
+    _buying = true;
     final res = await s.billing.purchase(plan);
+    if (!res.success) _buying = false;
     if (!mounted) return;
     setState(() => _busy = false);
     if (!res.success) {

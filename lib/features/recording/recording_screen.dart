@@ -38,7 +38,8 @@ class RecordingScreen extends StatefulWidget {
   /// Route query parameter (`/record?ready=1`) for [ready].
   static const readyParam = 'ready';
 
-  /// Open in the "ready" state: no recording yet, one Start button.
+  /// Open in the "ready" state: the same screen, nothing recording yet,
+  /// Start in the middle; Discard and Stop & save wait (greyed out).
   final bool ready;
 
   @override
@@ -50,6 +51,9 @@ class _RecordingScreenState extends State<RecordingScreen> {
   late final RecordingRepository _repo = context.read<RecordingRepository>();
   String? _language;
   String? _title;
+
+  /// Language picked on the ready screen, applied once Start succeeds.
+  String? _pendingLanguage;
   String? _lastId;
   bool _busy = false;
 
@@ -136,13 +140,23 @@ class _RecordingScreenState extends State<RecordingScreen> {
       // Capture is running (only a note setting failed): no error toast.
       if (live) return;
       showToast(
-          context,
-          e.toString().contains('permission')
-              ? 'Microphone is off. Turn it on in iPhone Settings › Longnote.'
-              : 'Could not start recording. Please try again.');
+        context,
+        e.toString().contains('permission')
+            ? 'Microphone is off. Turn it on in iPhone Settings › Longnote.'
+            : 'Could not start recording. Please try again.',
+      );
       return;
     }
     stuck.cancel();
+    final pick = _pendingLanguage;
+    final id = _s.recorder.current?.id;
+    if (pick != null && id != null) {
+      try {
+        await _repo.setNoteOptions(id, language: pick);
+      } catch (e) {
+        debugPrint('ready language: $e');
+      }
+    }
     if (!mounted) return;
     _startedAt = clock.now();
     setState(() {
@@ -189,8 +203,11 @@ class _RecordingScreenState extends State<RecordingScreen> {
   Future<void> _rename(RecordingController c) async {
     final rec = c.current;
     if (rec == null) return;
-    final name = await askForText(context,
-        title: 'Name this note', initial: _title ?? rec.title);
+    final name = await askForText(
+      context,
+      title: 'Name this note',
+      initial: _title ?? rec.title,
+    );
     if (name == null) return;
     rec.title = name;
     await _repo.rename(rec.id, name);
@@ -205,6 +222,18 @@ class _RecordingScreenState extends State<RecordingScreen> {
   }
 
   Future<void> _chooseLanguage(RecordingController c) async {
+    if (_ready) {
+      // Nothing records yet: remember it for the note Start creates.
+      final current = _pendingLanguage ?? await _s.settings.audioLanguage();
+      if (!mounted) return;
+      final code = await showLnSheet<String>(
+        context,
+        builder: (_) => LanguageSheet(selected: current),
+      );
+      if (code == null || !mounted || !_ready) return;
+      setState(() => _pendingLanguage = code);
+      return;
+    }
     final rec = c.current;
     if (rec == null) return;
     final code = await showLnSheet<String>(
@@ -220,35 +249,42 @@ class _RecordingScreenState extends State<RecordingScreen> {
     final c = context.watch<RecordingController>();
     final bottom = MediaQuery.paddingOf(context).bottom;
 
-    if (_ready && (c.state == CaptureState.idle || c.state == CaptureState.starting)) {
-      return _Ready(
-        starting: _starting || c.state == CaptureState.starting,
-        onStart: _start,
-        onClose: _minimise,
-      );
-    }
-    if (_leaving && c.state == CaptureState.idle) {
+    // Ready (Record on Notes): the same screen before anything records.
+    final ready =
+        _ready &&
+        (c.state == CaptureState.idle || c.state == CaptureState.starting);
+    final starting = ready && (_starting || c.state == CaptureState.starting);
+    if (!ready && _leaving && c.state == CaptureState.idle) {
       return const Scaffold(backgroundColor: LnColors.night);
     }
     // Ended on its own (e.g. storage full) while this screen was open.
-    if (c.state == CaptureState.idle) {
+    if (!ready && c.state == CaptureState.idle) {
       return _Ended(
-        message: c.banner ?? 'The recording has ended. Everything up to now is saved.',
+        message:
+            c.banner ??
+            'The recording has ended. Everything up to now is saved.',
         noteId: _lastId,
       );
     }
 
-    final paused = c.state == CaptureState.paused;
-    final banner = c.banner;
+    final paused = !ready && c.state == CaptureState.paused;
+    final banner = ready ? null : c.banner;
     final call = paused && banner != null && banner.startsWith('Paused by');
-    final elapsed = c.elapsed;
-    final rec = c.current;
+    final elapsed = ready ? Duration.zero : c.elapsed;
+    final rec = ready ? null : c.current;
     final started = rec?.createdAt;
-    final saved = c.lastSavedAt != null;
+    final saved = !ready && c.lastSavedAt != null;
     final stopping = c.state == CaptureState.stopping;
+    final language = ready ? _pendingLanguage : _language;
 
     Widget info;
-    if (call) {
+    if (ready) {
+      info = Text(
+        starting ? 'Starting…' : 'Tap Start when you’re ready.',
+        textAlign: TextAlign.center,
+        style: LnText.meta.copyWith(color: LnColors.nightText3),
+      );
+    } else if (call) {
       info = _CallBanner(
         title: 'Paused for a phone call',
         body:
@@ -260,19 +296,25 @@ class _RecordingScreenState extends State<RecordingScreen> {
       info = SizedBox(
         width: 300,
         child: Text(
-            'Paused at ${timerText(elapsed)}. Nothing is recorded until you resume.',
-            textAlign: TextAlign.center,
-            style: LnText.meta.copyWith(color: LnColors.nightText3)),
+          'Paused at ${timerText(elapsed)}. Nothing is recorded until you resume.',
+          textAlign: TextAlign.center,
+          style: LnText.meta.copyWith(color: LnColors.nightText3),
+        ),
       );
     } else if (banner != null) {
       info = _CallBanner(title: 'Recording', body: banner);
     } else {
-      info = Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-        const LnIcon(LnIcons.lock, size: 14, color: LnColors.nightText3),
-        const SizedBox(width: 8),
-        Text('You can lock your phone. Recording continues.',
-            style: LnText.meta.copyWith(color: LnColors.nightText3)),
-      ]);
+      info = Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const LnIcon(LnIcons.lock, size: 14, color: LnColors.nightText3),
+          const SizedBox(width: 8),
+          Text(
+            'You can lock your phone. Recording continues.',
+            style: LnText.meta.copyWith(color: LnColors.nightText3),
+          ),
+        ],
+      );
     }
 
     return Scaffold(
@@ -284,137 +326,230 @@ class _RecordingScreenState extends State<RecordingScreen> {
           builder: (context, box) => SingleChildScrollView(
             child: ConstrainedBox(
               constraints: BoxConstraints(minHeight: box.maxHeight),
-              child: IntrinsicHeight(child: Column(children: [
-          const SizedBox(height: 4),
-          // Top bar: minimise, status, saved.
-          SizedBox(
-            height: 44,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: LnSpace.page),
-              child: Stack(alignment: Alignment.center, children: [
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: LnIconButton(
-                    icon: LnIcons.chevronDown,
-                    background: LnColors.nightFill,
-                    color: LnColors.nightText,
-                    semanticLabel: 'Back to notes (keeps recording)',
-                    onPressed: _minimise,
-                  ),
-                ),
-                LnStatusPill(paused ? LnStatus.paused : LnStatus.recording,
-                    label: call ? 'Paused for a call' : null),
-                if (saved)
-                  const Align(
-                      alignment: Alignment.centerRight,
-                      child: LnStatusPill(LnStatus.saved)),
-              ]),
-            ),
-          ),
-          const SizedBox(height: 38),
-          LnPressable(
-            onPressed: () => _rename(c),
-            semanticLabel: 'Rename',
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: LnSpace.page),
-              child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                Flexible(
-                  child: Text(_title ?? rec?.title ?? 'Recording',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: LnText.recordingTitle),
-                ),
-                const SizedBox(width: 8),
-                const LnIcon(LnIcons.pencil, size: 15, color: LnColors.nightText3),
-              ]),
-            ),
-          ),
-          const SizedBox(height: 12),
-          if (started != null)
-            Text('${shortDate(started)} · started ${timeOfDay(started)}',
-                style: LnText.meta.copyWith(color: LnColors.nightText3)),
-          const SizedBox(height: 57),
-          SizedBox(
-            height: 78,
-            child: Center(
-              child: Semantics(
-                label: 'Recorded time',
-                child: AnimatedDefaultTextStyle(
-                  duration: const Duration(milliseconds: 200),
-                  style: LnText.timer.copyWith(
-                      color: paused ? LnColors.nightText3 : LnColors.nightText,
-                      fontFeatures: const [FontFeature.tabularFigures()]),
-                  child: Text(timerText(elapsed)),
+              child: IntrinsicHeight(
+                child: Column(
+                  children: [
+                    const SizedBox(height: 4),
+                    // Top bar: minimise, status, saved.
+                    SizedBox(
+                      height: 44,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: LnSpace.page,
+                        ),
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: LnIconButton(
+                                icon: LnIcons.chevronDown,
+                                background: LnColors.nightFill,
+                                color: LnColors.nightText,
+                                semanticLabel: ready
+                                    ? 'Close (nothing is recorded)'
+                                    : 'Back to notes (keeps recording)',
+                                onPressed: starting ? null : _minimise,
+                              ),
+                            ),
+                            if (!ready)
+                              LnStatusPill(
+                                paused ? LnStatus.paused : LnStatus.recording,
+                                label: call ? 'Paused for a call' : null,
+                              ),
+                            if (saved)
+                              const Align(
+                                alignment: Alignment.centerRight,
+                                child: LnStatusPill(LnStatus.saved),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 38),
+                    // Ready: plain title (a disabled tap area would fade it).
+                    _TapIf(
+                      onTap: ready ? null : () => _rename(c),
+                      semanticLabel: 'Rename',
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: LnSpace.page,
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                ready
+                                    ? 'New recording'
+                                    : _title ?? rec?.title ?? 'Recording',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: LnText.recordingTitle,
+                              ),
+                            ),
+                            if (!ready) ...[
+                              const SizedBox(width: 8),
+                              const LnIcon(
+                                LnIcons.pencil,
+                                size: 15,
+                                color: LnColors.nightText3,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    if (ready)
+                      Text(
+                        '${shortDate(clock.now())} · not started yet',
+                        style: LnText.meta.copyWith(color: LnColors.nightText3),
+                      )
+                    else if (started != null)
+                      Text(
+                        '${shortDate(started)} · started ${timeOfDay(started)}',
+                        style: LnText.meta.copyWith(color: LnColors.nightText3),
+                      ),
+                    const SizedBox(height: 57),
+                    SizedBox(
+                      height: 78,
+                      child: Center(
+                        child: Semantics(
+                          label: 'Recorded time',
+                          child: AnimatedDefaultTextStyle(
+                            duration: const Duration(milliseconds: 200),
+                            style: LnText.timer.copyWith(
+                              color: paused || ready
+                                  ? LnColors.nightText3
+                                  : LnColors.nightText,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
+                            ),
+                            child: Text(timerText(elapsed)),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                    SizedBox(
+                      height: 120,
+                      child: _LiveWaveform(controller: c, paused: paused),
+                    ),
+                    const SizedBox(height: 28),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        LnPillChip(
+                          dark: true,
+                          icon: LnIcons.globe,
+                          label: language == null || language == 'auto'
+                              ? 'Auto-detect'
+                              : audioLanguageFor(language).name,
+                          onTap: starting ? null : () => _chooseLanguage(c),
+                        ),
+                        const SizedBox(width: 8),
+                        _Dim(
+                          off: ready,
+                          child: LnPillChip(
+                            dark: true,
+                            icon: LnIcons.bookmark,
+                            label: 'Mark moment',
+                            onTap: ready ? null : () => _mark(c),
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(
+                      height: call || (paused && banner != null) ? 27 : 37,
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: LnSpace.page,
+                      ),
+                      child: info,
+                    ),
+                    const Spacer(),
+                    // Controls: Discard · Start/Pause/Resume (big, middle) · Stop & save.
+                    // Ready: Start in the middle; the other two wait, greyed out.
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _RoundButton(
+                          label: 'Discard',
+                          background: LnColors.nightFill,
+                          onTap: stopping || ready ? null : _discard,
+                          child: const LnIcon(
+                            LnIcons.x,
+                            size: 22.8,
+                            color: LnColors.nightText,
+                          ),
+                        ),
+                        const SizedBox(width: 44),
+                        if (ready)
+                          _RoundButton(
+                            key: const ValueKey('record-start'),
+                            label: 'Start',
+                            size: 84,
+                            background: LnColors.signal,
+                            strongLabel: true,
+                            onTap: starting ? null : _start,
+                            child: starting
+                                ? const SizedBox(
+                                    width: 28,
+                                    height: 28,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.5,
+                                      color: LnColors.nightText,
+                                    ),
+                                  )
+                                : const LnIcon(
+                                    LnIcons.mic,
+                                    size: 34,
+                                    color: LnColors.nightText,
+                                  ),
+                          )
+                        else
+                          _RoundButton(
+                            label: paused
+                                ? (call ? 'Resume now' : 'Resume')
+                                : 'Pause',
+                            size: 84,
+                            background: paused
+                                ? LnColors.signal
+                                : LnColors.nightFill,
+                            strongLabel: true,
+                            onTap: stopping
+                                ? null
+                                : () => _pauseOrResume(c, paused),
+                            child: LnIcon(
+                              paused ? LnIcons.play : LnIcons.pause,
+                              size: 32,
+                              color: LnColors.nightText,
+                            ),
+                          ),
+                        const SizedBox(width: 44),
+                        _RoundButton(
+                          label: 'Stop & save',
+                          background: LnColors.card,
+                          onTap: stopping || ready ? null : () => _stop(c),
+                          child: Container(
+                            width: 20,
+                            height: 20,
+                            decoration: BoxDecoration(
+                              color: LnColors.signal,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: (call ? 16 : 30) + bottom),
+                  ],
                 ),
               ),
-            ),
-          ),
-          const SizedBox(height: 32),
-          SizedBox(
-            height: 120,
-            child: _LiveWaveform(controller: c, paused: paused),
-          ),
-          const SizedBox(height: 28),
-          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            LnPillChip(
-              dark: true,
-              icon: LnIcons.globe,
-              label: _language == null || _language == 'auto'
-                  ? 'Auto-detect'
-                  : audioLanguageFor(_language).name,
-              onTap: () => _chooseLanguage(c),
-            ),
-            const SizedBox(width: 8),
-            LnPillChip(
-              dark: true,
-              icon: LnIcons.bookmark,
-              label: 'Mark moment',
-              onTap: () => _mark(c),
-            ),
-          ]),
-          SizedBox(height: call || (paused && banner != null) ? 27 : 37),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: LnSpace.page),
-            child: info,
-          ),
-          const Spacer(),
-          // Controls: Discard · Pause/Resume (big, middle) · Stop & save.
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _RoundButton(
-                label: 'Discard',
-                background: LnColors.nightFill,
-                onTap: stopping ? null : _discard,
-                child: const LnIcon(LnIcons.x, size: 22.8, color: LnColors.nightText),
-              ),
-              const SizedBox(width: 44),
-              _RoundButton(
-                label: paused ? (call ? 'Resume now' : 'Resume') : 'Pause',
-                size: 84,
-                background: paused ? LnColors.signal : LnColors.nightFill,
-                strongLabel: true,
-                onTap: stopping ? null : () => _pauseOrResume(c, paused),
-                child: LnIcon(paused ? LnIcons.play : LnIcons.pause,
-                    size: 32, color: LnColors.nightText),
-              ),
-              const SizedBox(width: 44),
-              _RoundButton(
-                label: 'Stop & save',
-                background: LnColors.card,
-                onTap: stopping ? null : () => _stop(c),
-                child: Container(
-                  width: 20,
-                  height: 20,
-                  decoration: BoxDecoration(
-                      color: LnColors.signal, borderRadius: BorderRadius.circular(4)),
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: (call ? 16 : 30) + bottom),
-        ])),
             ),
           ),
         ),
@@ -431,7 +566,6 @@ class _RoundButton extends StatelessWidget {
     required this.child,
     this.onTap,
     this.size = 60,
-    this.width = 84,
     this.strongLabel = false,
   });
   final String label;
@@ -439,37 +573,46 @@ class _RoundButton extends StatelessWidget {
   final Widget child;
   final VoidCallback? onTap;
   final double size;
-  final double width;
   final bool strongLabel;
 
   @override
   Widget build(BuildContext context) => LnPressable(
-        onPressed: onTap,
-        semanticLabel: label,
-        pressedOpacity: 0.7,
-        child: SizedBox(
-          width: width,
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: size,
-              height: size,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(color: background, shape: BoxShape.circle),
-              child: child,
+    onPressed: onTap,
+    semanticLabel: label,
+    pressedOpacity: 0.7,
+    child: SizedBox(
+      width: 84,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            width: size,
+            height: size,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: background,
+              shape: BoxShape.circle,
             ),
-            const SizedBox(height: 8),
-            Text(label,
-                maxLines: 1,
-                softWrap: false,
-                overflow: TextOverflow.visible,
-                style: strongLabel
-                    ? LnText.smallButton.copyWith(
-                        fontSize: 12, color: LnColors.nightText)
-                    : LnText.chip.copyWith(color: LnColors.nightText3)),
-          ]),
-        ),
-      );
+            child: child,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.visible,
+            style: strongLabel
+                ? LnText.smallButton.copyWith(
+                    fontSize: 12,
+                    color: LnColors.nightText,
+                  )
+                : LnText.chip.copyWith(color: LnColors.nightText3),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 /// Amber banner (C3 "Paused for a phone call").
@@ -479,29 +622,43 @@ class _CallBanner extends StatelessWidget {
   final String body;
   @override
   Widget build(BuildContext context) => Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: const Color(0xFF2A2214),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFF5A4318)),
-        ),
-        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const LnIcon(LnIcons.phone, size: 18, color: LnColors.pausedPillText),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(title,
-                  style: LnText.smallButton
-                      .copyWith(fontSize: 14, color: LnColors.pausedPillText)),
+    width: double.infinity,
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+    decoration: BoxDecoration(
+      color: const Color(0xFF2A2214),
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: const Color(0xFF5A4318)),
+    ),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const LnIcon(LnIcons.phone, size: 18, color: LnColors.pausedPillText),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: LnText.smallButton.copyWith(
+                  fontSize: 14,
+                  color: LnColors.pausedPillText,
+                ),
+              ),
               const SizedBox(height: 2),
-              Text(body,
-                  style: LnText.meta.copyWith(
-                      height: 18 / 13, color: const Color(0xFFD8C7A6))),
-            ]),
+              Text(
+                body,
+                style: LnText.meta.copyWith(
+                  height: 18 / 13,
+                  color: const Color(0xFFD8C7A6),
+                ),
+              ),
+            ],
           ),
-        ]),
-      );
+        ),
+      ],
+    ),
+  );
 }
 
 /// Live waveform from the real input level (dBFS), newest bar at the red
@@ -552,7 +709,9 @@ class _LiveWaveformState extends State<_LiveWaveform> {
     final v = ((_peak + 60) / 60).clamp(0.0, 1.0);
     _peak = -60;
     final h = RecordingLevels.of(id)..add(v);
-    if (h.length > RecordingLevels.max) h.removeRange(0, h.length - RecordingLevels.max);
+    if (h.length > RecordingLevels.max) {
+      h.removeRange(0, h.length - RecordingLevels.max);
+    }
     _repaint.value++;
   }
 
@@ -574,8 +733,11 @@ class _LiveWaveformState extends State<_LiveWaveform> {
 }
 
 class _WavePainter extends CustomPainter {
-  _WavePainter({required this.levels, required this.paused, required Listenable repaint})
-      : super(repaint: repaint);
+  _WavePainter({
+    required this.levels,
+    required this.paused,
+    required Listenable repaint,
+  }) : super(repaint: repaint);
   final List<double> levels;
   final bool paused;
 
@@ -586,25 +748,32 @@ class _WavePainter extends CustomPainter {
     const step = 6.0, barW = 3.0;
     final head = (size.width * 0.623).roundToDouble(); // Figma: x 245 of 393
     final mid = size.height / 2;
-    final bar = Paint()..color = paused ? LnColors.nightText3 : LnColors.nightText;
+    final bar = Paint()
+      ..color = paused ? LnColors.nightText3 : LnColors.nightText;
     var x = head - step;
     for (var i = levels.length - 1; i >= 0 && x >= 0; i--, x -= step) {
       final v = levels[i];
       // Perceptual curve so speech fills the height.
       final h = (4 + 100 * v * v).clamp(4.0, 104.0);
       canvas.drawRRect(
-          RRect.fromRectAndRadius(
-              Rect.fromLTWH(x, mid - h / 2, barW, h), const Radius.circular(1.5)),
-          bar);
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(x, mid - h / 2, barW, h),
+          const Radius.circular(1.5),
+        ),
+        bar,
+      );
     }
     final dot = Paint()..color = _dot;
     for (var dx = head + 2.5; dx < size.width; dx += step) {
       canvas.drawCircle(Offset(dx + 1.5, mid), 1.5, dot);
     }
     canvas.drawRRect(
-        RRect.fromRectAndRadius(Rect.fromLTWH(head - 1, 4, 2, size.height - 8),
-            const Radius.circular(1)),
-        Paint()..color = LnColors.signal);
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(head - 1, 4, 2, size.height - 8),
+        const Radius.circular(1),
+      ),
+      Paint()..color = LnColors.signal,
+    );
   }
 
   @override
@@ -612,74 +781,39 @@ class _WavePainter extends CustomPainter {
       old.paused != paused || old.levels != levels;
 }
 
-/// Before anything records (Record on Notes): close, or one big Start.
-class _Ready extends StatelessWidget {
-  const _Ready({required this.starting, required this.onStart, required this.onClose});
-  final bool starting;
-  final VoidCallback onStart;
-  final VoidCallback onClose;
-
+/// [child] as a tap target only when [onTap] is set; otherwise drawn as is
+/// (not faded like a disabled [LnPressable]).
+class _TapIf extends StatelessWidget {
+  const _TapIf({
+    required this.onTap,
+    required this.semanticLabel,
+    required this.child,
+  });
+  final VoidCallback? onTap;
+  final String semanticLabel;
+  final Widget child;
   @override
-  Widget build(BuildContext context) {
-    final bottom = MediaQuery.paddingOf(context).bottom;
-    return Scaffold(
-      backgroundColor: LnColors.night,
-      body: SafeArea(
-        bottom: false,
-        child: Column(children: [
-          const SizedBox(height: 4),
-          SizedBox(
-            height: 44,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: LnSpace.page),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: LnIconButton(
-                  icon: LnIcons.chevronDown,
-                  background: LnColors.nightFill,
-                  color: LnColors.nightText,
-                  semanticLabel: 'Close (nothing is recorded)',
-                  onPressed: starting ? null : onClose,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 38),
-          Text('New recording', style: LnText.recordingTitle),
-          const Spacer(),
-          Semantics(
-            label: 'Recorded time',
-            child: Text(timerText(Duration.zero),
-                style: LnText.timer.copyWith(
-                    color: LnColors.nightText3,
-                    fontFeatures: const [FontFeature.tabularFigures()])),
-          ),
-          const SizedBox(height: 16),
-          Text(starting ? 'Starting…' : 'Tap Start when you’re ready.',
-              textAlign: TextAlign.center,
-              style: LnText.meta.copyWith(color: LnColors.nightText3)),
-          const Spacer(),
-          _RoundButton(
-            key: const ValueKey('record-start'),
-            label: 'Start recording',
-            size: 84,
-            width: 160,
-            background: LnColors.signal,
-            strongLabel: true,
-            onTap: starting ? null : onStart,
-            child: starting
-                ? const SizedBox(
-                    width: 28,
-                    height: 28,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2.5, color: LnColors.nightText))
-                : const LnIcon(LnIcons.mic, size: 38, color: LnColors.nightText),
-          ),
-          SizedBox(height: 30 + bottom),
-        ]),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => onTap == null
+      ? child
+      : LnPressable(
+          onPressed: onTap,
+          semanticLabel: semanticLabel,
+          child: child,
+        );
+}
+
+/// Greyed out like a disabled [LnPressable]; for Mark moment on the ready
+/// screen (a chip without an action does not fade by itself).
+class _Dim extends StatelessWidget {
+  const _Dim({required this.off, required this.child});
+  final bool off;
+  final Widget child;
+  @override
+  Widget build(BuildContext context) => AnimatedOpacity(
+    duration: const Duration(milliseconds: 200),
+    opacity: off ? 0.4 : 1, // same as a disabled LnPressable
+    child: child,
+  );
 }
 
 /// Shown when capture ended on its own (mic error, storage full).
@@ -689,39 +823,47 @@ class _Ended extends StatelessWidget {
   final String? noteId;
   @override
   Widget build(BuildContext context) => Scaffold(
-        backgroundColor: LnColors.night,
-        body: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(LnSpace.page),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              const Spacer(),
-              Text('Recording stopped',
-                  textAlign: TextAlign.center, style: LnText.recordingTitle),
-              const SizedBox(height: 12),
-              Text(message,
-                  textAlign: TextAlign.center,
-                  style: LnText.body.copyWith(color: LnColors.nightText2)),
-              const Spacer(),
-              if (noteId != null) ...[
-                LnPrimaryButton(
-                  label: 'Open the note',
-                  onPressed: () {
-                    final router = GoRouter.of(context);
-                    if (router.canPop()) router.pop();
-                    router.pushNamed(R.note, pathParameters: {'id': noteId!});
-                  },
-                ),
-                const SizedBox(height: 10),
-              ],
-              LnSecondaryButton(
-                label: 'Back to notes',
-                onPressed: () =>
-                    context.canPop() ? context.pop() : context.goNamed(R.notes),
+    backgroundColor: LnColors.night,
+    body: SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(LnSpace.page),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Spacer(),
+            Text(
+              'Recording stopped',
+              textAlign: TextAlign.center,
+              style: LnText.recordingTitle,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: LnText.body.copyWith(color: LnColors.nightText2),
+            ),
+            const Spacer(),
+            if (noteId != null) ...[
+              LnPrimaryButton(
+                label: 'Open the note',
+                onPressed: () {
+                  final router = GoRouter.of(context);
+                  if (router.canPop()) router.pop();
+                  router.pushNamed(R.note, pathParameters: {'id': noteId!});
+                },
               ),
-            ]),
-          ),
+              const SizedBox(height: 10),
+            ],
+            LnSecondaryButton(
+              label: 'Back to notes',
+              onPressed: () =>
+                  context.canPop() ? context.pop() : context.goNamed(R.notes),
+            ),
+          ],
         ),
-      );
+      ),
+    ),
+  );
 }
 
 /// Language for this recording (C1 chip): auto-detect or one of 60+.
@@ -750,7 +892,9 @@ class LanguageSheet extends StatelessWidget {
             padding: EdgeInsets.zero,
             itemCount: items.length,
             separatorBuilder: (_, _) => const Padding(
-                padding: EdgeInsets.only(left: 16), child: LnHairline()),
+              padding: EdgeInsets.only(left: 16),
+              child: LnHairline(),
+            ),
             itemBuilder: (context, i) {
               final l = items[i];
               return LnListRow(

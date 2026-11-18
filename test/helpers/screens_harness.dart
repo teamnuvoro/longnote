@@ -147,6 +147,7 @@ class ScreensEnv {
       analytics: Analytics(db.db, clock: clock),
       billing: billing,
       scheduler: scheduler,
+      clock: clock, // reminders use the test clock, not the real date
       recordingsRoot: rec.path,
       api: withApi ? api : null,
     );

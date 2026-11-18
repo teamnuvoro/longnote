@@ -120,10 +120,22 @@ void main() {
     expect(find.text('New recording'), findsOneWidget);
     expect(find.text('Tap Start when you’re ready.'), findsOneWidget);
     expect(start, findsOneWidget);
-    expect(byLabel('Start recording'), findsOneWidget);
+    // The same screen as while recording: Start in the middle, Discard and
+    // Stop & save in their places (greyed out, not tappable yet), the
+    // language chip and Mark moment.
+    expect(byLabel('Start'), findsOneWidget);
     expect(byLabel('Pause'), findsNothing);
-    expect(byLabel('Stop & save'), findsNothing);
-    expect(byLabel('Discard'), findsNothing);
+    expect(byLabel('Stop & save'), findsOneWidget);
+    expect(byLabel('Discard'), findsOneWidget);
+    expect(find.text('Auto-detect'), findsOneWidget);
+    expect(find.text('Mark moment'), findsOneWidget);
+    expect(find.text('00:00:00'), findsOneWidget);
+    await tap(tester, byLabel('Stop & save'));
+    await tap(tester, byLabel('Discard'));
+    await tap(tester, find.text('Mark moment'));
+    expect(find.text('Discard this recording?'), findsNothing);
+    expect(find.textContaining('Moment marked'), findsNothing);
+    expect(find.byType(RecordingScreen), findsOneWidget);
     expect(c.state, CaptureState.idle);
     expect(await count(), 0);
 
@@ -133,9 +145,15 @@ void main() {
     expect(c.isActive, isFalse);
     expect(await count(), 0);
 
-    // Record -> Start: the same screen turns into the live view.
+    // Record -> pick a language -> Start: the same screen goes live and the
+    // note keeps the language picked before Start.
     await tap(tester, find.text('Record'));
     expect(c.state, CaptureState.idle);
+    await tap(tester, find.text('Auto-detect'));
+    await tap(tester, find.text('Bengali').last);
+    expect(find.text('Bengali'), findsOneWidget);
+    expect(c.state, CaptureState.idle);
+    expect(await count(), 0);
     await tap(tester, start);
     expect(c.state, CaptureState.recording);
     expect(find.byType(RecordingScreen), findsOneWidget);
@@ -143,6 +161,8 @@ void main() {
     expect(byLabel('Pause'), findsOneWidget);
     expect(byLabel('Stop & save'), findsOneWidget);
     expect(await count(), 1);
+    final note = await tester.runAsync(() => h.repo.get(c.current!.id));
+    expect(note!.language, 'bn');
     await tap(tester, byLabel('Stop & save'));
     await drain(tester);
   });
