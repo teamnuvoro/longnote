@@ -92,6 +92,20 @@ summarizes (times logged); M3 transcript lines, speakers, fast scrolling, player
 M4 Ask on the long note; M5 no note left stuck. The watcher pauses the hang check and
 the harness pauses the frame probe while the app is in the background.
 
+**Launch 6 (store, 18 Nov):** fresh install with the microphone revoked by
+`simctl privacy` before launch, the app's own microphone source and REAL App Store
+billing (`LN_BILLING=store`; launches 1-5 use `LN_BILLING=fake`). N1-N2 "Allow
+microphone" while iOS denies it: no crash, the "turn it on in iPhone Settings" text,
+Continue goes on; S1-S3 no "simulated" note, Restore/Terms/Privacy present, both
+products load from the sandbox App Store ($59.99/year, $9.99/month, 3-day trial,
+eligible); N3-N4 Start with the mic denied: "Microphone is off", nothing recorded.
+Nothing is bought (Apple's sheet is a system dialog).
+
+**Slow CI Macs (18 Nov):** the same commit that passed 47/47 on 16 Nov failed at
+launch on 18 Nov ("no frame for 6-8 s"), so the harness gives 40 s of launch grace
+(missing frames are logged as "slow start") and H3 measures the real gap between its
+two taps (726 ms on that machine).
+
 ## Not covered (needs the iPhone: docs/DEVICE-TEST-V1.md)
 
 - Lock screen while recording, a real phone call, battery/heat, 1-3 h recordings, feel.
