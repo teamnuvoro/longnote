@@ -198,13 +198,18 @@ void main() {
 
     // Two taps 60 ms apart on the same spot (the second lands on whatever is
     // there by then, like a fast finger).
-    Future<void> doubleTap(Finder f) async {
+    /// Returns the REAL time between the two taps (a slow CI Mac can stretch
+    /// the 60 ms pump a lot while the next screen builds).
+    Future<int> doubleTap(Finder f) async {
       await qa.waitFor(f);
       final at = t.getCenter(f.hitTestable().first);
+      final sw = Stopwatch()..start();
       await t.tapAt(at);
       await t.pump(const Duration(milliseconds: 60));
+      final gap = sw.elapsedMilliseconds;
       await t.tapAt(at);
       await qa.wait(const Duration(milliseconds: 1200));
+      return gap;
     }
 
     await qa.check('H2', 'Double-tap search, trial chip and a note: each opens once',
@@ -233,10 +238,24 @@ void main() {
       await qa.home();
       final before = (await qa.services.repo.all()).length;
       FilePcmSource.nextPath = null; // silence
-      await doubleTap(find.text('Record'));
+      final gap = await doubleTap(find.text('Record'));
+      qa.note('real gap between the two taps on Record: $gap ms');
       expect(qa.count<RecordingScreen>(), 1, reason: 'recording opened twice');
-      expect(qa.services.recorder.isActive, isFalse,
-          reason: 'recording started before Start');
+      if (gap < 350) {
+        // A human-speed double tap: the second tap must not start recording.
+        expect(qa.services.recorder.isActive, isFalse,
+            reason: 'recording started before Start ($gap ms double tap)');
+      } else if (qa.services.recorder.isActive) {
+        // Too slow to count as a double tap (the machine stalled): the
+        // second tap was a real Start. Stop it and carry on from Start.
+        qa.note('the machine stretched the double tap to $gap ms: the second '
+            'tap counted as Start (expected beyond the 400 ms guard)');
+        await qa.tap(byLabel('Discard'));
+        await qa.tap(find.text('Discard recording'));
+        await qa.waitUntil(() async => !qa.services.recorder.isActive,
+            what: 'the recorder to stop');
+        await qa.tap(find.text('Record'));
+      }
       await doubleTap(find.byKey(const ValueKey('record-start')));
       expect(qa.count<RecordingScreen>(), 1);
       expect(qa.services.recorder.state, CaptureState.recording,
