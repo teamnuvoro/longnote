@@ -1,6 +1,6 @@
 // deno test --allow-env supabase/functions/_shared/tracking_profile_test.ts
 import { assertEquals, assertThrows } from "jsr:@std/assert@1";
-import { ProfileError, profileRow } from "./tracking_profile.ts";
+import { ProfileError, profileRow, transactionJws } from "./tracking_profile.ts";
 
 const ext = ["i2", "com.novaralabs.longnote", "1.0.0", "112", "18.1", "iPhone15,2", "en_IN", "IST", "", "393", "852", "3", "6", "", "", "Asia/Kolkata"];
 
@@ -27,4 +27,12 @@ Deno.test("bad input refused", () => {
     { share_analytics: true, device_model: "<script>" },
     { share_analytics: true, att_enabled: "1" },
   ]) assertThrows(() => profileRow(b as Record<string, unknown>), ProfileError);
+});
+
+Deno.test("transaction_jws: read only when sharing, size-capped, never stored in the row", () => {
+  const r = profileRow({ share_analytics: true, transaction_jws: "a.b.c" });
+  assertEquals("transaction_jws" in r, false);
+  assertEquals(transactionJws({ share_analytics: true, transaction_jws: "a.b.c" }), "a.b.c");
+  assertEquals(transactionJws({ share_analytics: false, transaction_jws: "a.b.c" }), null);
+  assertThrows(() => profileRow({ share_analytics: true, transaction_jws: "x".repeat(16_001) }), ProfileError);
 });

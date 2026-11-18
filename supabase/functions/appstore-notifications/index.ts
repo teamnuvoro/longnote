@@ -140,14 +140,17 @@ async function handleNotification(req: Request): Promise<Response> {
   }
 
   // ---- who is it?
+  // The subscription's linked user wins (it follows a reinstall: the app
+  // proves the subscription with StoreKit's signed transaction, see
+  // tracking-profile); else the appAccountToken set at purchase.
   let userId: string | null = null;
   const token = tx?.appAccountToken;
-  if (token && UUID.test(token)) userId = token.toLowerCase();
   const { data: subRow } = otid
     ? await db.from("subscriptions").select("user_id,last_offer_type,last_offer_discount_type,last_price,paid_count")
       .eq("original_transaction_id", otid).maybeSingle()
     : { data: null };
-  if (!userId && subRow?.user_id) userId = subRow.user_id as string;
+  if (subRow?.user_id) userId = subRow.user_id as string;
+  else if (token && UUID.test(token)) userId = token.toLowerCase();
   const prior: PriorState | null = subRow
     ? {
       last_offer_type: subRow.last_offer_type ?? null,

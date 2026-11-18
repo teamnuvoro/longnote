@@ -14,6 +14,15 @@ function str(v: unknown, max: number, name: string): string | null {
   return v;
 }
 
+/** The row for tracking_profiles. `transaction_jws` (StoreKit's signed
+ * current transaction) is checked here for size only and read by
+ * [transactionJws]; it is not stored in the profile. */
+export function transactionJws(body: Record<string, unknown>): string | null {
+  return body.share_analytics === true && typeof body.transaction_jws === "string" && body.transaction_jws
+    ? body.transaction_jws
+    : null;
+}
+
 export function profileRow(body: Record<string, unknown>): Record<string, unknown> {
   if (typeof body.share_analytics !== "boolean") throw new ProfileError("share_analytics must be true or false");
   const now = new Date().toISOString();
@@ -34,6 +43,10 @@ export function profileRow(body: Record<string, unknown>): Record<string, unknow
       throw new ProfileError("extinfo must be 16 strings");
     }
     extinfo = e as string[];
+  }
+  const jws = body.transaction_jws;
+  if (jws !== undefined && jws !== null && (typeof jws !== "string" || jws.length > 16_000)) {
+    throw new ProfileError("bad transaction_jws");
   }
   return {
     share_analytics: true,
