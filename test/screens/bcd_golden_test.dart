@@ -104,7 +104,8 @@ void main() {
     final r = Recording(
         id: 'live',
         title: 'Weekly product sync',
-        createdAt: todayAt(10, 24),
+        // Fixed date: the screen shows "Tue, Nov 17 · started 10:24 AM".
+        createdAt: DateTime(2026, 11, 17, 10, 24),
         status: RecordingStatus.recording);
     await h.repo.insert(r);
     await h.repo.setNoteOptions('live', language: 'en');

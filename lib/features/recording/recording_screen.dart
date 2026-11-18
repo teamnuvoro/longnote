@@ -72,6 +72,10 @@ class _RecordingScreenState extends State<RecordingScreen> {
       c.resume();
       return;
     }
+    // Measured from the Start TAP: the live controls can appear before
+    // startRecording() returns, so the second tap of a double tap on Start
+    // would otherwise land on Pause.
+    if (_starting) return;
     final at = _startedAt;
     if (at != null && clock.now().difference(at) < _startTapGuard) return;
     c.pause();
@@ -109,6 +113,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
   Future<void> _start() async {
     if (_starting || !_ready) return;
     if (clock.now().difference(_openedAt) < _openTapGuard) return;
+    _startedAt = clock.now();
     setState(() => _starting = true);
     try {
       await _s.startRecording();

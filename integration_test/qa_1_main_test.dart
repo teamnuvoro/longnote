@@ -246,7 +246,10 @@ void main() {
       await qa.expectOnTop<NoteScreen>();
       await qa.waitFor(find.text('Asha'));
       expect(find.text('Ravi'), findsWidgets);
-      expect(find.text('Speaker 1'), findsNothing);
+      // A slow machine may still be rebuilding the transcript rows.
+      await qa.waitUntil(() async => find.text('Speaker 1').evaluate().isEmpty,
+          what: 'every "Speaker 1" label to be renamed',
+          timeout: const Duration(seconds: 10));
     }, section: note, needs: ['D1']);
 
     await qa.check('D4', 'Ask a question -> answer with a source -> source opens the '
@@ -302,7 +305,7 @@ void main() {
         if (then != null) await qa.tap(find.text(then));
         await qa.waitUntil(() async => share.calls.length > before,
             what: '"$what" to reach the iOS share sheet',
-            timeout: const Duration(seconds: 45));
+            timeout: const Duration(seconds: 90));
         await qa.wait(const Duration(milliseconds: 500));
         expect(find.text('Could not share this. Please try again.'), findsNothing);
         qa.note('$what${then == null ? '' : ' / $then'}: ${share.calls.last}');

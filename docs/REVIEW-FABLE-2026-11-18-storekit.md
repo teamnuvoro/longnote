@@ -193,3 +193,104 @@ looks wrong).
   the owner's TestFlight sandbox checklist: buy trial -> A2 -> reminder
   scheduled; cancel in sandbox Settings -> relaunch -> "You cancelled";
   refund via sandbox -> locked; second device Restore; airplane-mode launch.
+
+## Re-review of ec2bd4c
+
+Reviewer: Claude Fable 5.1, 2026-11-18. Diff-only, read against the full
+files it touches (AppDelegate.swift StorePlugin, app_services.dart,
+billing_service.dart, storekit_billing_service.dart, trial_reminder.dart,
+paywall_screen.dart, plan_screen.dart, settings_home_screen.dart, main.dart,
+onboarding_screen.dart, router.dart, trial_started_screen.dart, the three
+test files). 236/236 tests pass per the author; Swift not compiled yet.
+
+### Verdict: APPROVED
+
+Findings 1-7, 9 and 10 are fixed as asked and none of the fixes introduces a
+money or unlock bug. Checked in particular:
+
+- 1: `refresh()` on `resumed` (never throws, idempotent); `canStartRecording`
+  refreshes only when `renewsAt` is past, so the common path has no extra
+  latency; `FakeBillingService.refresh` = `_roll()`, `TestBilling.refresh`
+  no-op. Plan-screen refresh (1c) was not added; the resume refresh covers
+  all but "app stayed on screen across the expiry". Acceptable.
+- 2: `startedTrial` is Apple's answer; the paywall uses `res.startedTrial`
+  alone; `trialEndsAt!` is safe because `entitlementFromStore` only returns
+  `trial` when `expiresAtMs` is present. `restore()` re-runs `loadPlans`.
+- 3: `syncWith` cannot cancel a reminder before it exists (kv null -> return),
+  keeps it while status is trial + willRenew + same end, cancels otherwise.
+  The purchase -> `_apply` -> listener -> A2 -> `onTrialStarted` order has no
+  window for a false cancel. Listener installed once (`_reminderSyncOn`),
+  errors caught.
+- 4: cache stores exactly the fields `planFromStore` needs; JSON round trip of
+  Double/int is fine; seeded into both `_plans` and `storePlans` before the
+  first frame; corrupt cache ignored. `purchase()` with a cached plan but no
+  network fails in the native `Product.products(for:)` -> "couldn't complete",
+  which is correct.
+- 5: `RestoreResult` returned on both paths; the three live screens
+  (paywall, Plan, Settings home) show the right message; `restored` is
+  decided from the entitlement, not from the exception, so a cancelled
+  sign-in with a valid local entitlement still unlocks.
+- 6: Swift matches `currentProductID`, falls back to the first verified
+  renewal; `fallback.map(renewalMap)` and the unqualified static reference
+  are valid Swift 5; `autoRenewPreference`/`currentProductID` exist on iOS
+  15+. Dart only accepts a known product id that differs from the current
+  one; `_apply` carries `switchesToPlanId` across identical refreshes and
+  drops it when the plan or date changes (then re-fetches). Plan screen
+  orders cancelled > switch > next charge. Correct.
+- 7: `refresh()` wraps `_readStatus().timeout` in try/catch; the `changed`
+  handler can no longer throw. `init()` keeps its own try.
+- 9: product name line on the paywall; `main.dart` and onboarding skip the
+  first-run paywall for an active entitlement.
+- 10: `StoreKit.Transaction` in all three places.
+
+### Remaining issues (none blocking)
+
+1. minor — `lib/core/billing/trial_reminder.dart:79-84`,
+   `lib/features/settings/plan_screen.dart:112-115`. A yearly trial with a
+   pending downgrade to monthly (`switchesToPlanId` set, status still trial,
+   `willRenew` true) keeps the reminder that says "you will be charged
+   Rs 5,900" and the Plan screen says "Apple charges Rs 5,900"; Apple will
+   charge Rs 999. Overstates, never understates, so not a money bug. Fix:
+   in `syncWith` treat `e.switchesToPlanId != null` like a cancel (or
+   reschedule with `planForId(switchesToPlanId)` in the body); in the Plan
+   trial branch mention the switch.
+
+2. minor — `lib/core/billing/storekit_billing_service.dart:187,325,145`. A
+   stale "not eligible" guess cannot recover while the entitlement is
+   inactive: `entitlementFromStore` writes `trialUsed = !trialEligible`,
+   `_set` then forces `_eligible = false`, and `_loadPlans` skips
+   `_setEligible` whenever `trialUsed` is true. Scenario: second Apple ID on
+   the same phone after the first one's trial lapsed; `Restore` finds
+   nothing, `products` says eligible, kv stays "0", the paywall says
+   "charged today" while Apple's sheet offers the trial. Fix 2 makes the
+   post-purchase flow (A2, reminder) correct anyway, so only the pre-purchase
+   copy is wrong. Fix: in `_loadPlans` apply Apple's answer whenever
+   `!_ent.value.isActive` (not `!trialUsed`), and have `entitlementFromStore`
+   not derive `trialUsed` from the guess for inactive entitlements.
+
+3. low — `lib/app_services.dart:393-397`. `dispose()` does not
+   `billing.entitlement.removeListener(_syncReminder)`. Harmless in the app
+   (one AppServices per process); in tests that rebuild services over a
+   shared billing the old listener keeps firing `syncWith` on the same kv
+   (double cancel, no wrong state). Fix: remove the listener in `dispose()`.
+
+4. low — `lib/main.dart:56-60`. The subscriber skip does not set
+   `kvFirstPaywallSeen` (onboarding's skip does). A reinstalling subscriber
+   with zero notes whose plan later lapses gets the first-run paywall once
+   on a later launch (with "Subscribe", not "Start free trial"). Cosmetic.
+   Fix: write the flag when skipping for `isActive`.
+
+5. low — `lib/features/settings/settings_screen.dart:156` (Advanced
+   settings, routed at router.dart:290). "Restore purchases" calls
+   `restore()` and ignores the result: no message at all on any outcome.
+   Pre-existing, not introduced here. Fix: reuse the Settings-home
+   `_restore` handler or drop the row (the home screen has one).
+
+6. low — finding 4's second half (no USD number while no store price is
+   known) is not implemented: a true first launch with no cache still shows
+   `$59.99 / $9.99` until `products` answers. First launch is online and
+   the paywall comes after onboarding, so the window is small. Accept for v1.
+
+Still open and owner-side: finding 8 (Terms/Privacy URLs, ASC review
+screenshot). The Swift must compile in CI before TestFlight; I expect only
+the warnings listed in 10 of the first review.

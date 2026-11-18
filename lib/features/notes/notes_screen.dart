@@ -14,6 +14,7 @@ import '../../core/recording/recording_repository.dart';
 import '../../core/util/clock.dart';
 import '../../core/util/coalescing_runner.dart';
 import '../../ui/widgets.dart';
+import '../common/screen_clock.dart';
 import '../note/kit.dart';
 import '../recording/recording_screen.dart';
 
@@ -391,7 +392,7 @@ class _TrialChip extends StatelessWidget {
           if (e.status != EntitlementStatus.trial || end == null) {
             return const SizedBox.shrink();
           }
-          final hours = end.difference(DateTime.now()).inHours;
+          final hours = end.difference(screenNow()).inHours;
           final days = (hours / 24).ceil();
           final label = days <= 0
               ? 'Trial · ends today'
