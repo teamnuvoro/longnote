@@ -15,3 +15,4 @@ run 2026-11-16T21:35:56Z final: Fable F1-F3 approved (05c5303)
 2026-11-18T01:50:05Z rerun: H3 measures the real double-tap gap
 2026-11-18T17:58:53Z ready screen = recording screen + paywall reinstall fix (2ab3f68)
 2026-11-18T18:32:12Z analytics (Amplitude+Meta+ATT) + privacy screen + ready-screen fixes
+2026-11-18T18:50:04Z build 111 candidate: Meta SDK 18.0.3 pin + live links (466fc8d)
