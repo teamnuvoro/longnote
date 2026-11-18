@@ -19,7 +19,8 @@ Longnote is made by **Novara Labs LLP**, a limited liability partnership registe
 - **Audio leaves your phone only to be transcribed.** We delete it from our servers and from our speech-to-text provider once the transcript is made.
 - **Transcript text is sent to OpenAI** to write summaries and answer your questions. OpenAI does not train on it, but may keep it for up to 30 days for abuse checks.
 - **We use Amplitude for app analytics.** It never receives your audio, transcripts, summaries or note titles.
-- **We use Meta (Facebook) to measure our ads.** Meta receives a few events, such as an install, a trial start or a purchase. It never receives your recordings or notes. If you allow tracking when iOS asks, Meta also receives your device's advertising ID.
+- **We use Meta (Facebook) to measure our ads.** Meta receives a few events, such as an install, a trial start, a purchase or a renewal. It never receives your recordings or notes. If you allow tracking when iOS asks, Meta also receives your device's advertising ID.
+- **Apple tells our server about your subscription** (trial, purchase, renewal, refund). Our server passes trial, purchase and renewal events, with price and currency, to Meta and Amplitude, only while **Share usage analytics** is on.
 - **No ads inside the app. We do not sell your data.**
 - One switch in Settings, **Share usage analytics**, turns off both Amplitude and Meta.
 
@@ -41,7 +42,9 @@ Longnote is made by **Novara Labs LLP**, a limited liability partnership registe
 | Ad measurement events (section 7) | To measure which of our ads bring people to Longnote | Meta |
 | Your device advertising ID (IDFA), **only if you allow tracking** | Ad measurement and improving our ads (section 7) | Meta |
 | Basic technical data: IP address, device model, iOS version, app version, language, time of request | Needed to deliver any internet request; security and debugging | Short-lived server logs at our providers; Amplitude (IP address not stored); Meta |
-| Subscription events (trial started, subscription bought, purchase restored, with price and currency) | To unlock paid features, to measure revenue, and to measure our ads | Apple; your phone; Amplitude; Meta (trial started and subscription bought only) |
+| Subscription events (trial started, subscription bought, purchase restored, with price and currency) | To unlock paid features, to measure revenue, and to measure our ads | Apple; your phone; Amplitude |
+| Subscription notifications from Apple (trial started, subscription bought, renewed, refunded, expired, auto-renew turned on or off, billing problem; with the plan, price, currency, dates and Apple's transaction number) | To measure revenue and to measure our ads (section 9) | Our backend; Amplitude; Meta (trial started, subscription bought and renewed only) |
+| Ad measurement details: the random ID that Meta's SDK creates for the app, whether you allowed tracking, your **Share usage analytics** choice, and device details (device model, iOS version, app version, language, time zone, screen size) | So our server can send subscription events to Meta and Amplitude, and knows when it must not | Our backend; Meta (with subscription events) |
 
 ### We do not collect
 
@@ -80,6 +83,8 @@ We do not sell your personal data. We do not show ads in the app.
 | Usage counts | 90 days |
 | Hashed IP address and daily counts | 2 days |
 | Crash and error reports | 30 days |
+| Subscription notifications from Apple | 13 months, then deleted |
+| Subscription status (plan, trial or paid, expiry date) and ad measurement details | While you use the app. Deleted with your anonymous ID |
 | Anonymous ID and push token | While you use the app. Removed when you ask us to delete your data (section 10). If the app is not used for 90 days, the anonymous ID and its records are deleted |
 | Server logs at our providers (IP address, time, request path) | A short time, usually days, for security and debugging |
 | Amplitude analytics events | Up to 12 months, then deleted |
@@ -89,7 +94,7 @@ We do not sell your personal data. We do not show ads in the app.
 
 We use **Amplitude** to understand how the app is used, so we can fix problems and improve it.
 
-**What we send:** app events such as app opened, onboarding completed, recording started, recording finished (length), recording interrupted or recovered after a crash, processing failed or retried, transcript or summary viewed, note exported, paywall viewed, your answer to the tracking prompt, restore purchase tapped, trial started, and subscription bought (with price and currency). Each event carries basic device data (device model, iOS version, app version, language, country).
+**What we send:** app events such as app opened, onboarding completed, recording started, recording finished (length), recording interrupted or recovered after a crash, processing failed or retried, transcript or summary viewed, note exported, paywall viewed, your answer to the tracking prompt, restore purchase tapped, trial started, and subscription bought. Our server also sends subscription events it receives from Apple: trial started, subscription bought, trial turned into a paid subscription, renewal, refund, expiry, auto-renew turned on or off, and billing problem (with plan, price and currency). Each event from the app carries basic device data (device model, iOS version, app version, language, country). Events from our server carry the app version and no IP address.
 
 **What we never send:** audio, transcript text, summary text, your questions to Ask, note titles, speaker names, or anything that names you.
 
@@ -108,7 +113,9 @@ We advertise Longnote on Facebook and Instagram. We use the **Meta App Events SD
 - the app was installed or opened;
 - onboarding was completed;
 - a free trial was started (with currency);
-- a subscription was bought (with price and currency).
+- a subscription was bought or renewed (with price and currency).
+
+The app sends the first two. Trial, purchase and renewal events are sent by **our server**, after Apple tells it about your subscription, together with the random ID that Meta's SDK created for the app, whether you allowed tracking, and basic device details (device model, iOS version, app version, language, time zone, screen size). Our server never sends Meta your IP address, your IDFA, your anonymous ID or anything you recorded.
 
 Meta's SDK also sends basic technical data with each event, such as device model, iOS version, app version, language, time zone and the IP address of the connection, and a random ID that the SDK creates for the app.
 
@@ -125,7 +132,7 @@ You can change your answer at any time in **iPhone Settings > Privacy & Security
 
 **Your choices:**
 
-- Turn off **Settings > Share usage analytics** in Longnote. After that, the app stops logging new events for Meta (and Amplitude); anything already waiting to upload may still be sent within about a minute.
+- Turn off **Settings > Share usage analytics** in Longnote. After that, the app stops logging new events for Meta (and Amplitude), and our server stops sending your subscription events to Meta and Amplitude; anything already waiting to upload may still be sent within about a minute.
 - Ask the app not to track, or turn off tracking in iPhone Settings, to stop the IDFA being shared.
 - Because we do not give Meta any ID that links these events to you, a deletion request to us cannot delete data Meta already holds. To ask Meta about its data, use the tools in Meta's Privacy Policy.
 
@@ -135,18 +142,22 @@ We use these companies to run Longnote.
 
 | Company | What it does for us | Data it receives | Where | Uses your data to train AI? |
 |---|---|---|---|---|
-| **Supabase, Inc.** (USA) | Backend hosting: anonymous sign-in, database, temporary audio storage, server functions | Anonymous ID, audio (temporary), transcript (temporary), job records, usage counts, hashed IP, crash reports, push token, technical logs | USA (AWS us-east-1) | No. Supabase processes our data only on our instructions |
+| **Supabase, Inc.** (USA) | Backend hosting: anonymous sign-in, database, temporary audio storage, server functions | Anonymous ID, audio (temporary), transcript (temporary), job records, usage counts, hashed IP, crash reports, push token, subscription notifications and status, ad measurement details (section 3), technical logs | USA (AWS us-east-1) | No. Supabase processes our data only on our instructions |
 | **Soniox, Inc.** (USA) | Speech-to-text with speaker labels | Audio, and the transcript it creates (temporary) | USA | No. Soniox states it does not use customer content to train or improve its models |
 | **OpenAI, L.L.C.** (USA) | Summaries and answers to Ask questions | Transcript text, your question, the summary style and language you chose | USA | No. OpenAI states data sent to its API is not used to train its models. Kept up to 30 days for abuse checks |
 | **Amplitude, Inc.** (USA) | Product analytics | App events and basic device data (section 6). No content | USA | Used only to provide analytics to us |
 | **Meta Platforms, Inc.** (USA) and **Meta Platforms Ireland Limited** | Ad measurement | Ad measurement events, basic technical data, and the IDFA if you allow tracking (section 7). No content | USA and other countries | Meta acts as an independent controller for its own uses; see [Meta's Privacy Policy](https://www.facebook.com/privacy/policy) |
-| **Apple Inc.** (USA) | App Store payments and subscriptions; push notifications; SKAdNetwork ad measurement | Your purchase (Apple handles it under its own privacy policy); push token and the "note ready" message | Worldwide | Apple's own policy applies |
+| **Apple Inc.** (USA) | App Store payments and subscriptions; subscription notifications to our server; push notifications; SKAdNetwork ad measurement | Your purchase (Apple handles it under its own privacy policy), and your anonymous ID, which the app gives Apple with a purchase so Apple's notifications to our server say whose subscription it is; push token and the "note ready" message | Worldwide | Apple's own policy applies |
 
 Supabase, Soniox, OpenAI and Amplitude act as our processors: they may only use your data to provide their service to us.
 
 ## 9. Subscriptions and payments
 
-Subscriptions are sold and billed by Apple through the App Store. Apple handles your payment details under its own privacy policy. We receive only the subscription status (for example: trial, active, expired) so the app knows what to unlock. We record trial and subscription events, with price and currency, in Amplitude to measure revenue. We also send "trial started" and "subscription bought" events to Meta to measure our ads (section 7).
+Subscriptions are sold and billed by Apple through the App Store. Apple handles your payment details under its own privacy policy. We never see your card or Apple ID.
+
+When you buy, the app gives Apple your anonymous ID, so that Apple's **App Store Server Notifications** to our server say whose subscription it is. Apple then tells our server when a trial starts, a subscription is bought, renewed, refunded or expires, when auto-renew is turned on or off, and when a payment fails, with the plan, price, currency, dates and Apple's transaction number. Our server checks that each notification is really signed by Apple.
+
+While **Share usage analytics** is on, our server sends these events to **Amplitude** to measure revenue, and sends "trial started", "subscription bought" and "renewed" (with price and currency) to **Meta** to measure our ads (section 7). When the switch is off, our server records the subscription status only and sends nothing to Amplitude or Meta. No recording, transcript, summary or note content is ever part of these events.
 
 ## 10. Your choices and rights
 
@@ -155,7 +166,7 @@ You can:
 - **Delete a note.** Delete it in the app. It is removed from your phone. (Our servers do not keep notes.)
 - **Delete your account.** If you have signed in with an account, go to **Settings > Account > Delete account**. This deletes your account and everything our backend holds for it, asks Amplitude to delete your analytics events, and signs you out. We confirm by email if you gave us one.
 - **Delete all your data without an account.** Email support@novaralabs.in with the Support ID shown in **Settings > Privacy**. We will:
-  - delete your anonymous ID, job records, usage counts and push token from our backend;
+  - delete your anonymous ID, job records, usage counts, push token, subscription status and ad measurement details from our backend;
   - ask Amplitude to delete all analytics events linked to your IDs (Amplitude completes this within about 30 days);
   - confirm by email within 30 days.
   Notes, transcripts, summaries and audio on your phone are removed when you delete them in the app or delete the app.

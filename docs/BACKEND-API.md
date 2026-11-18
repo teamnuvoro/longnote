@@ -278,6 +278,61 @@ of this user) or over a cap (`"reason": "user_day" | "ip_day"`): the app should 
 24 h and 200 per IP (/64) per UTC day, checked and inserted in one SQL step (`ln_report_insert`, safe under parallel calls).
 Stored in `client_reports` (service role only), deleted after 30 days.
 
+### 4.6 `appstore-notifications` (called by Apple, not the app)
+
+App Store Server Notifications **V2**. URL (Production and Sandbox, set in App Store Connect through the API on 18 Nov):
+`https://<ref>.supabase.co/functions/v1/appstore-notifications`. `verify_jwt` off: Apple sends no Supabase token; the
+body is authenticated by Apple's signature instead.
+
+Request (Apple): `{"signedPayload": "<JWS>"}`. Steps:
+1. Verify the JWS (`_shared/appstore_jws.ts`): `alg` ES256; `x5c` = leaf, intermediate, root; root byte-equal to the
+   embedded **Apple Root CA - G3** (SHA-256 `63:34:3A:...:91:79`); leaf signed by intermediate, intermediate by root, each
+   valid at the payload's `signedDate`; intermediate is a CA with OID 1.2.840.113635.100.6.2.1, leaf has OID
+   1.2.840.113635.100.6.11.1; signature checks with the leaf key. Same for `signedTransactionInfo` and
+   `signedRenewalInfo`. No OCSP (as Apple's library with online checks off). Failure -> `400`.
+2. `bundleId` must be `com.novaralabs.longnote` (`APPLE_BUNDLE_ID`), environment `Production` or `Sandbox`, and for
+   Production `appAppleId` = `APPLE_APP_ID` (secret). Otherwise `200 {"ignored": ...}` so Apple stops retrying.
+3. `ln_appstore_claim` stores the notification once per `notificationUUID` (a repeat -> `200 {"duplicate": true}`).
+4. User = the subscription's linked user (`subscriptions.user_id`), else the transaction's `appAccountToken` (the app
+   sets it to the Supabase user id). Plans the events (docs/ANALYTICS.md "Server events"), stores the plan and the new
+   subscription state, replies **`200 {"ok": true}`**, then sends to Amplitude / Meta in the background
+   (`EdgeRuntime.waitUntil`, 10 s timeout, one retry on 429/5xx/network, never more). Results go to
+   `appstore_notifications.meta_result` / `amplitude_result`.
+5. An error before the plan is stored -> `500` (Apple retries after 1, 12, 24, 48, 72 h; the claim lets a retry
+   continue a run that died: `processing` older than 2 min is re-run, `planned` is re-sent from the stored plan).
+
+Verified live 18 Nov: Apple's "Request a Test Notification" (sandbox) -> Apple `sendAttemptResult: SUCCESS`, row
+`TEST / Sandbox / done`. The signed payload is the fixture in `_shared/testdata/` (a real Apple chain).
+
+### 4.7 `tracking-profile`
+
+What the server needs to send this user's subscription events, and whether it may. User JWT required. Body ≤ 24 KB.
+
+```json
+{"share_analytics": true, "att_enabled": false, "meta_anon_id": "XZ8F...-...", "app_version": "1.0.0",
+ "os_version": "18.1", "device_model": "iPhone15,2", "locale": "en_IN",
+ "extinfo": ["i2","com.novaralabs.longnote","1.0.0","112","18.1","iPhone15,2","en_IN","IST","","393","852","3.00","6","","","Asia/Kolkata"],
+ "transaction_jws": "<StoreKit Transaction.jwsRepresentation, optional>"}
+```
+- `share_analytics: false` -> only that is stored; every other column is set to null; no events are sent for this user.
+- Strings: short codes only (`[A-Za-z0-9_.,:+- ()]`, length caps); `extinfo` exactly 16 strings ≤ 64 chars; `currency`
+  optional ISO code. Anything else -> `400 bad_request`.
+- `transaction_jws`: verified like 4.6; if it is ours, its `originalTransactionId` is linked to this user in
+  `subscriptions` (a reinstall keeps its renewals), or seeded from it if new. Not stored in the profile. A bad one is
+  ignored (`"linked": false`).
+- Reply `200 {"ok": true, "linked": bool}`. One row per user (upsert).
+- The app sends it only when it changed (checked once per launch, and on the analytics switch, the ATT answer, the
+  start of a purchase and entitlement changes); before the first sign-in it sends nothing, except right before a
+  purchase.
+
+### Tables (migration 00008)
+
+| table | key | who can access | kept |
+|---|---|---|---|
+| `tracking_profiles` | `user_id` (→ auth.users, cascade) | RLS: a user may select / insert / update only their own row; service role all | while the user exists |
+| `appstore_notifications` | `notification_uuid` | service role only | 13 months (pg_cron `longnote-appstore-notifications-ttl`) |
+| `subscriptions` | `original_transaction_id` (`user_id` → auth.users, set null) | service role only | kept (no personal data once the user is gone) |
+
 ## 5. Limits (env-configurable function secrets)
 
 | secret | default | what |
@@ -336,6 +391,9 @@ Usage is readable by the app: `select * from usage_daily where day = <today UTC>
 | `ip_daily` (hashed IP, counts, dollars) | our DB | after 2 days |
 | summary (idempotency cache, `summary_cache`) | our DB | 15-30 min after it was written |
 | crash reports (`client_reports`) | our DB | after 30 days |
+| App Store notifications (`appstore_notifications`: decoded payload, transaction, what we sent) | our DB | after 13 months |
+| tracking profile (`tracking_profiles`) | our DB | with the anonymous user (cascade) |
+| subscription state (`subscriptions`) | our DB | kept; `user_id` set to null when the user is deleted |
 | anonymous user (`auth.users`) with no session activity for 90 days | Supabase Auth | deleted by `ln_cleanup_db` (≤500 per run); its jobs/usage go with it. The app signs up again (section 1) |
 | Ask answers | nowhere | never stored; OpenAI API data is not used for training (OpenAI API policy; their abuse-monitoring retention applies) |
 
@@ -446,7 +504,12 @@ the hourly 24 h storage sweep on a real stale object (the delete call it uses is
 
 ## 10. Operations
 
-- Deploy functions: `SUPABASE_ACCESS_TOKEN=... supabase functions deploy --use-api --project-ref <ref>` (verify_jwt per function in `supabase/config.toml`: off only for `soniox-webhook` and `cleanup`, which check their own secret headers).
+- Deploy functions: `SUPABASE_ACCESS_TOKEN=... supabase functions deploy --use-api --project-ref <ref>` (verify_jwt per function in `supabase/config.toml`: off only for `soniox-webhook` and `cleanup`, which check their own secret headers, and `appstore-notifications`, which checks Apple's signature).
+- Deno tests: `deno test --allow-env --allow-read supabase/functions/_shared/` (36: IP buckets, Apple JWS incl. a real
+  Apple-signed fixture, notification mapping, tracking profile).
+- Migration 00008 (`subscription_events`: tracking_profiles, appstore_notifications, subscriptions,
+  `ln_appstore_claim`, TTL cron) applied with psql on 18 Nov and recorded; dry-run twice in a rolled-back
+  transaction first (re-runnable); RLS checked (own row only; another user's row refused; service tables denied).
 - Migrations: `supabase/migrations/*.sql` (00001-00007) were applied with psql and recorded in
   `supabase_migrations.schema_migrations` (00006 `client_reports` was applied earlier and recorded on 16 Nov with 00007).
   All seven are re-runnable in order (`if not exists` / `drop ... if exists` / `create or replace`; checked by running
@@ -459,5 +522,8 @@ the hourly 24 h storage sweep on a real stale object (the delete call it uses is
 - Server secrets (names only): `OPENAI_API_KEY`, `SONIOX_API_KEY`, `SONIOX_WEBHOOK_SECRET`, `CLEANUP_SECRET`, `LIMIT_*`
   (set now: `LIMIT_ASK_PER_DAY`, `LIMIT_AUDIO_SECONDS_PER_DAY`, `LIMIT_AUDIO_SECONDS_PER_HOUR`, `LIMIT_GLOBAL_USD_PER_DAY`,
   `LIMIT_SUMMARY_PER_DAY`; the new pool / dollar caps run on their defaults).
+  Subscription events (18 Nov): `AMPLITUDE_API_KEY`, `APPLE_APP_ID`, `META_APP_ID`, `META_DATASET_ID`,
+  `META_CAPI_TOKEN`; optional `META_TEST_EVENT_CODE` (sandbox -> Meta Test Events), `META_GRAPH_VERSION` (default
+  v24.0), `META_APP_SECRET` (App Events API fallback; not set), `APPLE_BUNDLE_ID`.
   The two generated secrets are also in `.env.local`. Vault (for pg_cron): `project_url`, `cleanup_secret`.
 - Soniox account limits to watch: 100 pending and 2,000 stored transcriptions (we delete each one), 10 GB / 1,000 files (we use URLs, not files).
