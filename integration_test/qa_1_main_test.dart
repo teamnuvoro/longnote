@@ -307,6 +307,17 @@ void main() {
       await backToNote();
       await qa.tap(byLabel('Share'));
       await qa.expectOnTop<ShareSheet>();
+      // Taps during the sheet's slide-up are dropped by Flutter; on a slow
+      // simulator it can take seconds (19 Nov: first PDF tap lost, second
+      // worked). Tap once it is fully open, as a person would.
+      await qa.waitUntil(
+          () async =>
+              ModalRoute.of(t.element(find.byType(ShareSheet)))
+                  ?.animation
+                  ?.isCompleted ??
+              true,
+          what: 'the share sheet to finish opening',
+          timeout: const Duration(seconds: 20));
       Future<void> option(String what, {String? then}) async {
         final before = share.calls.length;
         await qa.tap(find.text(what));
