@@ -62,3 +62,18 @@ See the last line of this file.
 `flutter test test/flows/app_flow_test.dart test/analytics_test.dart`: all passed (20 Nov 2026). `flutter analyze` on the two feature folders: no issues.
 
 VERDICT: CHANGES REQUESTED
+
+## Re-check (ec221e1)
+
+Scope: `git show ec221e1 -- lib test` only.
+
+- M1 fixed. `PaywallMore(firstRun:)` → `_Faq._qs` drops the `free` item unless `firstRun`; `paywall_screen.dart` passes `widget.placement == 'first_run'`, which is exactly the router's distinction. `test/paywall_more_test.dart` covers both placements.
+- M2 fixed, honestly. `RecordUse.style` maps the first answer to a real `SummaryStyle` (`other` → null); `_finish` calls `AppSettings.setDefaultStyle` (`app_settings.dart:30`). The ready screen says "Summaries set up for <first answer>" only when a style was set, otherwise "9 summary styles, from meetings to lectures" (true: 9 enum values); the subtitle's "Change it any time in Settings" is true (settings_home_screen uses `SummaryStyle`). Flow test asserts `lecture` with answers and `meeting` without.
+- M3 fixed. `billing.refresh()` 8 s timeout and `analytics.log` 2 s timeout, both with `catchError`; `_finishing` can no longer stay true.
+- m1 fixed (`faq`, not on the denylist; ids are safe tokens). m2 fixed (`_asking` guard, reset in `finally`, `!mounted` before `_finish`). m3 fixed (`_go` and PopScope both ignore while `_finishing`). m4 fixed (`dir` forward/back). m5 fixed (`Wrap`). m6 covered by the M2 wording.
+
+Nits, no change needed: the CTA does not show `busy` while the iOS mic question is open (the guard makes it harmless); "Something else" first + "Lectures" second keeps Meeting notes (documented choice).
+
+`flutter analyze` (onboarding, paywall, the new test): no issues. `flutter test test/paywall_more_test.dart test/flows/app_flow_test.dart`: all passed.
+
+VERDICT: APPROVED
