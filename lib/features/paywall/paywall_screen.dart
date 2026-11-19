@@ -270,9 +270,12 @@ class _PaywallScreenState extends State<PaywallScreen> {
                             const SizedBox(height: 18),
                             PaywallMore(
                               key: _moreKey,
+                              // The free recording is only still unused on
+                              // the first-run paywall.
+                              firstRun: widget.placement == 'first_run',
                               onFaqOpened: (id) => _s.analytics.log(
                                   AnalyticsEvent.paywallFaqOpened,
-                                  props: {'question': id}),
+                                  props: {'faq': id}),
                             ),
                           ]),
                     ),

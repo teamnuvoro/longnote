@@ -1,3 +1,4 @@
+import '../../core/summary/summary_style.dart';
 import '../../ui/icons.dart';
 
 /// What the user said they will record (onboarding question 1). The first
@@ -18,6 +19,17 @@ enum RecordUse {
   /// For "Summaries made for lectures and meetings".
   final String short;
   final LnIcons icon;
+
+  /// The default summary style this answer sets (null: keep the default).
+  SummaryStyle? get style => switch (this) {
+        RecordUse.meetings => SummaryStyle.meeting,
+        RecordUse.lectures => SummaryStyle.lecture,
+        RecordUse.interviews => SummaryStyle.interview,
+        RecordUse.calls => SummaryStyle.clientCall,
+        RecordUse.talks => SummaryStyle.sermon,
+        RecordUse.doctor => SummaryStyle.doctorVisit,
+        RecordUse.other => null,
+      };
 }
 
 /// How long the recordings usually run (onboarding question 2).

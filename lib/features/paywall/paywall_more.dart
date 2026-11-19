@@ -7,7 +7,11 @@ import '../common/widgets.dart';
 /// it works, honest billing, and common questions. Every claim here is true
 /// of the app today (keep it that way when features change).
 class PaywallMore extends StatelessWidget {
-  const PaywallMore({super.key, this.onFaqOpened});
+  const PaywallMore({super.key, this.onFaqOpened, this.firstRun = true});
+
+  /// First-run paywall: the free first recording is still unused, so the
+  /// "Can I try it without paying?" answer is true only here.
+  final bool firstRun;
 
   /// Called with the question's id when a question is opened (analytics).
   final void Function(String id)? onFaqOpened;
@@ -25,7 +29,7 @@ class PaywallMore extends StatelessWidget {
           const _HonestBilling(),
           const SizedBox(height: 28),
           const _Heading('Questions'),
-          _Faq(onOpened: onFaqOpened),
+          _Faq(onOpened: onFaqOpened, firstRun: firstRun),
           const SizedBox(height: 12),
         ],
       );
@@ -169,14 +173,15 @@ class _HonestBilling extends StatelessWidget {
 }
 
 class _Faq extends StatefulWidget {
-  const _Faq({this.onOpened});
+  const _Faq({this.onOpened, required this.firstRun});
   final void Function(String id)? onOpened;
+  final bool firstRun;
   @override
   State<_Faq> createState() => _FaqState();
 }
 
 class _FaqState extends State<_Faq> {
-  static const _qs = [
+  static const _all = [
     (
       'length',
       'Is there a limit on recording time?',
@@ -209,6 +214,11 @@ class _FaqState extends State<_Faq> {
     ),
   ];
   final _open = <String>{};
+
+  List<(String, String, String)> get _qs => [
+        for (final q in _all)
+          if (q.$1 != 'free' || widget.firstRun) q,
+      ];
 
   @override
   Widget build(BuildContext context) => LnCard(

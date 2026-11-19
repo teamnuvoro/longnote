@@ -15,6 +15,7 @@ import 'package:longnote/core/analytics/remote_analytics.dart';
 import 'package:longnote/core/analytics/tracking_consent.dart';
 import 'package:longnote/core/billing/billing_service.dart';
 import 'package:longnote/core/models/recording.dart';
+import 'package:longnote/core/summary/summary_style.dart';
 import 'package:longnote/features/ask/ask_chat_screen.dart';
 import 'package:longnote/features/ask/ask_screen.dart';
 import 'package:longnote/features/common/note_ready_ask.dart';
@@ -102,6 +103,8 @@ void main() {
     await tapAndSettle(t, find.text('Allow microphone'));
     expect(await env.services.kv.get(OnboardingScreen.kvUses), '');
     expect(await env.services.kv.get(OnboardingScreen.kvLength), isNull);
+    // No answer: the default summary style stays "Meeting notes".
+    expect(await env.services.settings.defaultStyle(), SummaryStyle.meeting);
 
     expect(onTop<PaywallScreen>(t), isTrue);
     await tapAndSettle(t, find.text('Start free trial'));
@@ -160,6 +163,8 @@ void main() {
           'first_use': 'lectures',
           'length': 'over_2h',
         });
+    // The first answer (lectures) became the default summary style.
+    expect(await env.services.settings.defaultStyle(), SummaryStyle.lecture);
     expect(fb.advertiserId, isFalse); // never the IDFA
     // The trial goes to Meta from the server (Apple's notification), not the app.
     expect(fb.calls, contains('CompleteRegistration'));

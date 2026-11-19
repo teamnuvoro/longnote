@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../app/routes.dart';
 import '../../app_services.dart';
 import '../../core/analytics/analytics.dart';
+import '../../core/summary/summary_style.dart';
 import '../../ui/widgets.dart';
 import '../common/widgets.dart';
 import 'onboarding_content.dart';
@@ -57,11 +58,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     super.dispose();
   }
 
-  void _logStep() {
+  void _logStep({bool back = false}) {
     if (!mounted) return;
-    _s.analytics.log(AnalyticsEvent.onboardingStep,
-        props: {'step': _step.name, 'index': _page});
+    _s.analytics.log(AnalyticsEvent.onboardingStep, props: {
+      'step': _step.name,
+      'index': _page,
+      'dir': back ? 'back' : 'forward',
+    });
   }
+
+  /// The style the first answer sets as the default (null: none).
+  SummaryStyle? get _style => _uses.isEmpty ? null : _uses.first.style;
 
   Future<void> _finish() async {
     if (_finishing) return;
@@ -70,18 +77,30 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     await s.kv.setBool(AppServices.kvOnboardingDone, true);
     await s.kv.set(OnboardingScreen.kvUses, _uses.map((u) => u.id).join(','));
     await s.kv.set(OnboardingScreen.kvLength, _length?.id);
+    // The first answer picks the default summary style ("ready" says so).
+    final style = _style;
+    if (style != null) await s.settings.setDefaultStyle(style);
     // A fresh install can learn about an existing plan a few seconds late
     // (StoreKit syncs after install): ask again before showing the paywall.
-    if (!s.billing.entitlement.value.isActive) await s.billing.refresh();
+    if (!s.billing.entitlement.value.isActive) {
+      await s.billing
+          .refresh()
+          .timeout(const Duration(seconds: 8), onTimeout: () {})
+          .catchError((Object e) => debugPrint('onboarding refresh: $e'));
+    }
     // No "Allow tracking?" prompt (owner, 18 Nov 2026): Meta runs without
     // the advertising ID.
-    await s.analytics.log(AnalyticsEvent.onboardingCompleted, props: {
-      'mic': _micMessage == null ? 'allowed' : 'denied',
-      // One flag per answer (remote props only allow short codes).
-      for (final u in RecordUse.values) 'use_${u.id}': _uses.contains(u),
-      'first_use': _uses.isEmpty ? 'none' : _uses.first.id,
-      'length': _length?.id ?? 'skipped',
-    });
+    // Never let analytics hold the user here (a stuck native SDK call).
+    await s.analytics
+        .log(AnalyticsEvent.onboardingCompleted, props: {
+          'mic': _micMessage == null ? 'allowed' : 'denied',
+          // One flag per answer (remote props only allow short codes).
+          for (final u in RecordUse.values) 'use_${u.id}': _uses.contains(u),
+          'first_use': _uses.isEmpty ? 'none' : _uses.first.id,
+          'length': _length?.id ?? 'skipped',
+        })
+        .timeout(const Duration(seconds: 2), onTimeout: () {})
+        .catchError((Object e) => debugPrint('onboarding log: $e'));
     if (!mounted) return;
     setState(() => _finishing = false);
     if (s.billing.entitlement.value.isActive) {
@@ -94,7 +113,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     context.goNamed(R.paywall, queryParameters: {'first': '1'});
   }
 
+  /// The iOS microphone question is open (a second tap must not ask again).
+  bool _asking = false;
+
   Future<void> _askMic() async {
+    if (_asking || _finishing) return;
+    _asking = true;
     // The recorder's own microphone source (a fake one in tests).
     final src = _s.recorder.sourceFactory();
     bool ok;
@@ -104,21 +128,24 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       ok = false;
     } finally {
       src.dispose();
+      _asking = false;
     }
+    if (!mounted) return;
     if (ok) {
       await _finish();
-    } else if (mounted) {
+    } else {
       setState(() => _micMessage =
           'No problem. You can turn the microphone on later in iPhone Settings > Longnote. Recording needs it.');
     }
   }
 
   void _go(int page) {
-    if (page < 0 || page >= _steps.length) return;
+    if (page < 0 || page >= _steps.length || _finishing) return;
+    final back = page < _page;
     setState(() => _page = page);
     _pages.animateToPage(page,
         duration: const Duration(milliseconds: 380), curve: Curves.easeOutCubic);
-    _logStep();
+    _logStep(back: back);
   }
 
   void _next() {
@@ -201,10 +228,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           ),
         _Step.privacy => const _Privacy(),
         _Step.ready => _Ready(
+            personal: _style != null,
             items: [
-              _uses.isEmpty
-                  ? 'Summaries for meetings, lectures and more'
-                  : 'Summaries made for ${_uses.map((u) => u.short).take(2).join(' and ')}',
+              _style == null
+                  ? '9 summary styles, from meetings to lectures'
+                  : 'Summaries set up for ${_uses.first.short}',
               'Recording with no time limit',
               'Speaker names in transcripts',
               'Ask about any note',
@@ -218,7 +246,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && _page > 0) _go(_page - 1);
+        if (!didPop && _page > 0 && !_finishing) _go(_page - 1);
       },
       child: LnScaffold(
         backgroundColor: LnColors.paper,
@@ -500,8 +528,9 @@ class _Privacy extends StatelessWidget {
 }
 
 class _Ready extends StatelessWidget {
-  const _Ready({required this.items});
+  const _Ready({required this.items, required this.personal});
   final List<String> items;
+  final bool personal;
   @override
   Widget build(BuildContext context) => _PageBody(children: [
         const SizedBox(height: 4),
@@ -509,7 +538,10 @@ class _Ready extends StatelessWidget {
         const SizedBox(height: 8),
         Text('Your Longnote is ready.', style: _title),
         const SizedBox(height: 10),
-        Text('Set up for the way you record.',
+        Text(
+            personal
+                ? 'Set up for the way you record. Change it any time in Settings.'
+                : 'Everything you need to start recording.',
             style: LnText.body.copyWith(color: LnColors.ink2)),
         const SizedBox(height: 24),
         SetupChecklist(items: items),

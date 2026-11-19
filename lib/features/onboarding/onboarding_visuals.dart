@@ -320,11 +320,9 @@ class HoursVisual extends StatelessWidget {
             const SizedBox(height: 18),
             const WaveBars(color: LnColors.recordingPillText, height: 40),
             const SizedBox(height: 18),
-            Row(children: [
+            Wrap(spacing: 6, runSpacing: 6, children: [
               for (final p in const ['Part 1 saved', 'Part 2 saved', 'Part 3 …'])
-                Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: Container(
+                Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                         color: p.endsWith('…')
@@ -338,7 +336,6 @@ class HoursVisual extends StatelessWidget {
                                 ? LnColors.recordingPillText
                                 : LnColors.savedPillText)),
                   ),
-                ),
             ]),
           ]),
         ),
