@@ -4,6 +4,7 @@
 // (the TestFlight 105 freezes) -> summary -> transcript (2 speakers) -> tap a
 // line seeks -> rename speakers -> Ask + source chip -> share options ->
 // search finds a spoken word. Real app, real Supabase backend.
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -318,8 +319,19 @@ void main() {
               true,
           what: 'the share sheet to finish opening',
           timeout: const Duration(seconds: 20));
+      // TEMP diagnosis (19 Nov): what is under the PDF row before the tap.
+      String hitPath(Finder f) {
+        final c = t.getCenter(f.first);
+        final r = HitTestResult();
+        WidgetsBinding.instance.hitTestInView(r, c, t.view.viewId);
+        return r.path
+            .take(14)
+            .map((e) => e.target.runtimeType.toString())
+            .join(' > ');
+      }
       Future<void> option(String what, {String? then}) async {
         final before = share.calls.length;
+        if (what == 'PDF') qa.note('hit path at PDF: ${hitPath(find.text(what))}');
         await qa.tap(find.text(what));
         if (then != null) await qa.tap(find.text(then));
         try {
@@ -335,6 +347,7 @@ void main() {
               'Preparing… ${on('Preparing…')}, error toast '
               '${on('Could not share this. Please try again.')}, '
               'sheet on top ${qa.onTop<ShareSheet>()}, calls ${share.calls.length}');
+          qa.note('hit path before 2nd tap: ${hitPath(find.text(what))}');
           await qa.tap(find.text(what));
           if (then != null) await qa.tap(find.text(then));
           final again = await () async {
