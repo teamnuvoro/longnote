@@ -33,10 +33,17 @@ class _ShareSheetState extends State<ShareSheet> {
   /// actions wait for it instead of doing nothing.
   late final Future<void> _loaded;
 
+  /// The load has finished. Until then every row is tappable (the tap
+  /// waits for the load): on a slow phone a row that was still disabled
+  /// swallowed the first tap (QA 19 Nov, gesture trace).
+  bool _ready = false;
+
   @override
   void initState() {
     super.initState();
-    _loaded = _load().catchError((_) {});
+    _loaded = _load().catchError((_) {}).whenComplete(() {
+      if (mounted) setState(() => _ready = true);
+    });
   }
 
   Future<void> _load() async {
@@ -73,18 +80,14 @@ class _ShareSheetState extends State<ShareSheet> {
   }
 
   Future<void> _run(String kind, Future<void> Function(Recording n) job) async {
-    debugPrint('share[$kind]: tap');
     await _loaded;
     if (!mounted) return;
     final n = _note;
-    debugPrint('share[$kind]: loaded note=${n != null} busy=$_busy');
     if (n == null || _busy != null) return;
     setState(() => _busy = kind);
     try {
       await job(n);
-      debugPrint('share[$kind]: done');
-    } catch (e) {
-      debugPrint('share[$kind]: failed ${e.runtimeType}');
+    } catch (_) {
       if (mounted) showToast(context, 'Could not share this. Please try again.');
     } finally {
       if (mounted) setState(() => _busy = null);
@@ -121,7 +124,7 @@ class _ShareSheetState extends State<ShareSheet> {
     await _loaded;
     if (!mounted) return;
     final n = _note;
-    if (n == null) return;
+    if (n == null || n.durationMs == 0) return;
     if (n.source == 'imported') {
       // The original file is shared as is; no format to choose.
       await _run('audio', (n) => _s.share.shareAudio(n, origin: _origin()));
@@ -162,6 +165,8 @@ class _ShareSheetState extends State<ShareSheet> {
       (ms / 3600000 * perHour).ceil().clamp(1, 1 << 20);
 
   Future<void> _copy() async {
+    await _loaded;
+    if (!mounted) return;
     final t = _summaryText;
     final n = _note;
     if (t == null || n == null) return showToast(context, 'There is no summary yet.');
@@ -202,7 +207,7 @@ class _ShareSheetState extends State<ShareSheet> {
                 title: 'PDF',
                 subtitle: 'Summary and full transcript, ready to send',
                 busy: _busy == 'pdf',
-                onTap: n == null ? null : _pdf,
+                onTap: !_ready || n != null ? _pdf : null,
               ),
               const _Divider(),
               _ShareRow(
@@ -210,7 +215,7 @@ class _ShareSheetState extends State<ShareSheet> {
                 title: 'Summary',
                 subtitle: 'As text: decisions and action items',
                 busy: _busy == 'summary',
-                onTap: hasSummary ? _summaryShare : null,
+                onTap: !_ready || hasSummary ? _summaryShare : null,
               ),
               const _Divider(),
               _ShareRow(
@@ -220,7 +225,7 @@ class _ShareSheetState extends State<ShareSheet> {
                     ? 'As text, with speaker names and times'
                     : 'As text, with times',
                 busy: _busy == 'transcript',
-                onTap: _hasTranscript ? _transcriptShare : null,
+                onTap: !_ready || _hasTranscript ? _transcriptShare : null,
               ),
               const _Divider(),
               _ShareRow(
@@ -230,13 +235,13 @@ class _ShareSheetState extends State<ShareSheet> {
                     ? 'M4A or WAV'
                     : 'M4A · ${clockText(n.durationMs)} · about ${_mb(n.durationMs, 15)} MB',
                 busy: _busy == 'audio',
-                onTap: n == null || n.durationMs == 0 ? null : _audio,
+                onTap: !_ready || (n != null && n.durationMs > 0) ? _audio : null,
               ),
             ]),
           ),
           const SizedBox(height: 12),
           LnPressable(
-            onPressed: hasSummary ? _copy : null,
+            onPressed: !_ready || hasSummary ? _copy : null,
             semanticLabel: 'Copy summary',
             child: Container(
               height: 50,

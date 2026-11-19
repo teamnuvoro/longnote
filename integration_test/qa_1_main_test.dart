@@ -4,7 +4,6 @@
 // (the TestFlight 105 freezes) -> summary -> transcript (2 speakers) -> tap a
 // line seeks -> rename speakers -> Ask + source chip -> share options ->
 // search finds a spoken word. Real app, real Supabase backend.
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -308,67 +307,13 @@ void main() {
       await backToNote();
       await qa.tap(byLabel('Share'));
       await qa.expectOnTop<ShareSheet>();
-      // Taps during the sheet's slide-up are dropped by Flutter; on a slow
-      // simulator it can take seconds (19 Nov: first PDF tap lost, second
-      // worked). Tap once it is fully open, as a person would.
-      await qa.waitUntil(
-          () async =>
-              ModalRoute.of(t.element(find.byType(ShareSheet)))
-                  ?.animation
-                  ?.isCompleted ??
-              true,
-          what: 'the share sheet to finish opening',
-          timeout: const Duration(seconds: 20));
-      // TEMP diagnosis (19 Nov): what is under the PDF row before the tap.
-      String hitPath(Finder f) {
-        final c = t.getCenter(f.first);
-        final r = HitTestResult();
-        WidgetsBinding.instance.hitTestInView(r, c, t.view.viewId);
-        return r.path
-            .take(14)
-            .map((e) => e.target.runtimeType.toString())
-            .join(' > ');
-      }
       Future<void> option(String what, {String? then}) async {
         final before = share.calls.length;
-        if (what == 'PDF') qa.note('hit path at PDF: ${hitPath(find.text(what))}');
-        if (what == 'PDF') {
-          debugPrintGestureArenaDiagnostics = true;
-          debugPrintRecognizerCallbacksTrace = true;
-        }
         await qa.tap(find.text(what));
-        debugPrintGestureArenaDiagnostics = false;
-        debugPrintRecognizerCallbacksTrace = false;
         if (then != null) await qa.tap(find.text(then));
-        try {
-          await qa.waitUntil(() async => share.calls.length > before,
-              what: '"$what" to reach the iOS share sheet',
-              timeout: const Duration(seconds: 45));
-        } on TestFailure {
-          // Diagnose (19 Nov: PDF never reached the share sheet twice).
-          bool on(String s) => find.text(s).evaluate().isNotEmpty;
-          qa.note('$what: no share call after 45 s; '
-              'texts "$what" ${find.text(what).evaluate().length} '
-              '(tappable ${find.text(what).hitTestable().evaluate().length}), '
-              'Preparing… ${on('Preparing…')}, error toast '
-              '${on('Could not share this. Please try again.')}, '
-              'sheet on top ${qa.onTop<ShareSheet>()}, calls ${share.calls.length}');
-          qa.note('hit path before 2nd tap: ${hitPath(find.text(what))}');
-          await qa.tap(find.text(what));
-          if (then != null) await qa.tap(find.text(then));
-          final again = await () async {
-            try {
-              await qa.waitUntil(() async => share.calls.length > before,
-                  what: 'second tap', timeout: const Duration(seconds: 30));
-              return true;
-            } on TestFailure {
-              return false;
-            }
-          }();
-          qa.note('$what: second tap ${again ? 'reached' : 'did NOT reach'} the share sheet; '
-              'Preparing… ${on('Preparing…')}');
-          throw TestFailure('"$what" did not reach the iOS share sheet on the first tap');
-        }
+        await qa.waitUntil(() async => share.calls.length > before,
+            what: '"$what" to reach the iOS share sheet',
+            timeout: const Duration(seconds: 90));
         await qa.wait(const Duration(milliseconds: 500));
         expect(find.text('Could not share this. Please try again.'), findsNothing);
         qa.note('$what${then == null ? '' : ' / $then'}: ${share.calls.last}');

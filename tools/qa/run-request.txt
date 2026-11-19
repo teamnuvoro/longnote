@@ -19,3 +19,4 @@ run 2026-11-16T21:35:56Z final: Fable F1-F3 approved (05c5303)
 2026-11-19T04:43:30Z no ATT + server events + QA P1/P2 + D2 wait (1ae9afb+)
 2026-11-19T05:57:40Z share sheet waits for load + P2 scroll (rerun after 44460275194: D5/P2/K2)
 2026-11-19T07:25:07Z D5 waits for the share sheet to open (full run)
+2026-11-19T10:01:04Z share rows tappable while loading (D5 root cause) - full run

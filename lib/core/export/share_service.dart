@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -72,11 +71,9 @@ class ShareService {
       fonts: await _loadFonts(),
       speakerNames: speakerNames,
     );
-    debugPrint('share[pdf]: built ${bytes.length} bytes');
     final dir = await getTemporaryDirectory();
     final f = File(p.join(dir.path, '${safeFileName(r.title)}.pdf'));
     await f.writeAsBytes(bytes, flush: true);
-    debugPrint('share[pdf]: written, opening the share sheet');
     await SharePlus.instance.share(ShareParams(
         files: [XFile(f.path, mimeType: 'application/pdf')],
         subject: r.title,
