@@ -73,14 +73,18 @@ class _ShareSheetState extends State<ShareSheet> {
   }
 
   Future<void> _run(String kind, Future<void> Function(Recording n) job) async {
+    debugPrint('share[$kind]: tap');
     await _loaded;
     if (!mounted) return;
     final n = _note;
+    debugPrint('share[$kind]: loaded note=${n != null} busy=$_busy');
     if (n == null || _busy != null) return;
     setState(() => _busy = kind);
     try {
       await job(n);
-    } catch (_) {
+      debugPrint('share[$kind]: done');
+    } catch (e) {
+      debugPrint('share[$kind]: failed ${e.runtimeType}');
       if (mounted) showToast(context, 'Could not share this. Please try again.');
     } finally {
       if (mounted) setState(() => _busy = null);
