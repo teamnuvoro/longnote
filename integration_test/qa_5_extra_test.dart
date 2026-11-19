@@ -73,6 +73,55 @@ void main() {
       await qa.expectOnTop<NotesScreen>();
     }, section: 'Start');
 
+    // ---------------------------------------- Owner's phone checks (19 Nov)
+    const owner = 'Owner checks (simulated)';
+    await qa.check('P1', 'Record opens the SAME recording screen: title, 00:00:00, language '
+        'chip, Discard and Stop & save in place but disabled, Start in the middle; '
+        'nothing records until Start', () async {
+      if (!qa.onTop<NotesScreen>()) await qa.home();
+      await qa.tap(find.text('Record'));
+      await qa.expectOnTop<RecordingScreen>();
+      await qa.waitFor(find.byKey(const ValueKey('record-start')), what: 'Start');
+      expect(find.text('New recording'), findsOneWidget);
+      expect(find.text('00:00:00'), findsOneWidget);
+      expect(find.text('Auto-detect'), findsOneWidget);
+      expect(find.text('Mark moment'), findsOneWidget);
+      for (final l in ['Discard', 'Stop & save']) {
+        final f = byLabel(l);
+        expect(f, findsOneWidget, reason: '$l missing');
+        expect(t.widget<LnPressable>(f).onPressed, isNull, reason: '$l should be disabled');
+      }
+      await qa.shot('ready-screen');
+      await qa.wait(const Duration(seconds: 3));
+      expect(c().state, CaptureState.idle, reason: 'recording started without Start');
+      await qa.tap(byLabel('Close (nothing is recorded)'));
+      await qa.expectOnTop<NotesScreen>();
+      expect(c().isActive, isFalse);
+    }, section: owner, needs: ['K0']);
+
+    await qa.check('P2', 'Settings > What happens to your audio: Support ID shown (or the '
+        '"made after your first cloud transcription" line), no tracking prompt anywhere',
+        () async {
+      if (!qa.onTop<NotesScreen>()) await qa.home();
+      await qa.tap(find.text('Settings'));
+      await qa.scrollTo(find.text('What happens to your audio'),
+          within: find.byType(Scrollable).first);
+      await qa.tap(find.text('What happens to your audio'));
+      await qa.waitFor(find.text('Support ID'), what: 'the Support ID section');
+      await qa.scrollTo(find.text('Support ID'), within: find.byType(Scrollable).first);
+      final id = await qa.services.auth?.knownUserId();
+      qa.note('support id: ${id == null ? 'none yet' : '${id.substring(0, 8)}…'}');
+      if (id != null) {
+        await qa.waitFor(find.text(id), what: 'the Support ID value');
+      } else {
+        await qa.waitFor(find.text('Made after your first cloud transcription'),
+            what: 'the no-ID line');
+      }
+      await qa.shot('support-id');
+      await qa.back();
+      await qa.home();
+    }, section: owner, needs: ['K0']);
+
     // ------------------------------------------------------------ Phone call
     const call = 'Phone call (simulated)';
     late Recording callNote;

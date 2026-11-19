@@ -225,7 +225,15 @@ void main() {
       await qa.tap(byLabel(label), after: const Duration(milliseconds: 1500));
       final player = find.byType(LnMiniPlayer);
       await qa.waitFor(player, what: 'the mini player');
-      final pos = t.widget<LnMiniPlayer>(player.last).position.inMilliseconds;
+      int readPos() =>
+          t.widget<LnMiniPlayer>(player.last).position.inMilliseconds;
+      // A slow CI machine can finish the seek after the first read (18 Nov:
+      // read 0 ms while the screenshot showed 0:08), so wait for it.
+      try {
+        await qa.waitUntil(() async => readPos() >= startMs - 1000,
+            timeout: const Duration(seconds: 6), what: 'the player to seek');
+      } catch (_) {/* the expect below reports the real value */}
+      final pos = readPos();
       qa.note('tapped "$label" -> player at $pos ms');
       expect(pos, inInclusiveRange(startMs - 1000, startMs + 4000));
       // Stop playback before going on.
