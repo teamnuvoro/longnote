@@ -12,6 +12,7 @@ import '../common/external.dart';
 import '../common/links.dart';
 import '../common/screen_clock.dart';
 import '../common/widgets.dart';
+import 'paywall_more.dart';
 import 'trial_copy.dart';
 
 /// A1 Paywall (Figma 5:167). Honest: yearly preselected, the trial timeline
@@ -46,6 +47,8 @@ class _PaywallScreenState extends State<PaywallScreen> {
   late Plan _selected = _plans.first;
   bool _busy = false;
   bool _closed = false;
+  final _scroll = ScrollController();
+  final _moreKey = GlobalKey();
 
   /// From Start until the purchase failed, or for good once it succeeded
   /// (the trial screen and [_close] follow; late renewal info must not
@@ -66,6 +69,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
   @override
   void dispose() {
     _billing.entitlement.removeListener(_onEntitlement);
+    _scroll.dispose();
     super.dispose();
   }
 
@@ -143,6 +147,13 @@ class _PaywallScreenState extends State<PaywallScreen> {
     }
   }
 
+  void _showMore() {
+    final ctx = _moreKey.currentContext;
+    if (ctx == null) return;
+    Scrollable.ensureVisible(ctx,
+        duration: const Duration(milliseconds: 450), curve: Curves.easeOutCubic);
+  }
+
   void _close(bool subscribed) {
     if (_closed) return;
     _closed = true;
@@ -167,6 +178,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
         child: Column(children: [
           Expanded(
             child: SingleChildScrollView(
+              controller: _scroll,
               padding: const EdgeInsets.fromLTRB(24, 4, 20, 0),
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -203,7 +215,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
                                     : 'Keep recording, as long as you want.',
                                 style: LnText.body
                                     .copyWith(color: LnColors.ink2, height: null)),
-                            const SizedBox(height: 20),
+                            const SizedBox(height: 16),
                             const _Feature(LnIcons.infinity,
                                 'Record for hours. No minute counter.'),
                             const _Feature(
@@ -215,13 +227,11 @@ class _PaywallScreenState extends State<PaywallScreen> {
                             const _Feature(LnIcons.shield,
                                 'Audio saved on your phone as you record',
                                 last: true),
-                            const SizedBox(height: 22),
+                            const SizedBox(height: 18),
                             Text('Longnote Pro · auto-renewing subscription',
                                 key: const ValueKey('paywall-product-name'),
                                 style: LnText.caption),
                             const SizedBox(height: 8),
-                            _Timeline(plan: plan, trial: trial, now: now),
-                            const SizedBox(height: 14),
                             Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -253,14 +263,34 @@ class _PaywallScreenState extends State<PaywallScreen> {
                                       ),
                                     ),
                                 ]),
-                            const SizedBox(height: 16),
+                            const SizedBox(height: 12),
+                            _Timeline(plan: plan, trial: trial, now: now),
+                            const SizedBox(height: 8),
+                            PaywallMoreHint(onTap: _showMore),
+                            const SizedBox(height: 18),
+                            PaywallMore(
+                              key: _moreKey,
+                              onFaqOpened: (id) => _s.analytics.log(
+                                  AnalyticsEvent.paywallFaqOpened,
+                                  props: {'question': id}),
+                            ),
                           ]),
                     ),
                   ]),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 0, 24, 5),
+          Container(
+            // A soft edge: the plans and details scroll under the button.
+            decoration: const BoxDecoration(
+              color: LnColors.paper,
+              boxShadow: [
+                BoxShadow(
+                    color: Color(0x12000000),
+                    blurRadius: 14,
+                    offset: Offset(0, -6)),
+              ],
+            ),
+            padding: const EdgeInsets.fromLTRB(24, 12, 24, 5),
             child: Column(children: [
               LnPrimaryButton(
                 label: trial ? 'Start free trial' : 'Subscribe',
@@ -297,7 +327,7 @@ class _Feature extends StatelessWidget {
   final bool last;
   @override
   Widget build(BuildContext context) => Padding(
-        padding: EdgeInsets.only(bottom: last ? 0 : 10),
+        padding: EdgeInsets.only(bottom: last ? 0 : 8),
         child: Row(children: [
           LnIcon(icon, size: 20),
           const SizedBox(width: 12),

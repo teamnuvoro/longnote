@@ -22,6 +22,7 @@ import 'package:integration_test/integration_test.dart';
 import 'package:longnote/app_services.dart';
 import 'package:longnote/core/models/recording.dart';
 import 'package:longnote/features/import/import_controller.dart';
+import 'package:longnote/features/onboarding/onboarding_screen.dart';
 import 'package:longnote/main.dart' show launchApp;
 import 'package:longnote/ui/widgets.dart';
 import 'package:path/path.dart' as p;
@@ -656,18 +657,39 @@ class ShareRecorder {
       .setMockMethodCallHandler(channel, null);
 }
 
+/// Goes through the onboarding pages up to "Allow microphone" (not tapped):
+/// Get started, a first-question pick, a length pick, then the main button
+/// until the microphone page. With [shots], saves a screenshot per page.
+Future<void> passOnboardingPages(Qa qa, {bool shots = false}) async {
+  final next = find.byKey(OnboardingScreen.nextKey);
+  for (var i = 0; i < 14; i++) {
+    await qa.waitFor(next, what: 'the onboarding button');
+    if (find.text('Allow microphone').hitTestable().evaluate().isNotEmpty) {
+      if (shots) await qa.shot('onboarding-${i.toString().padLeft(2, '0')}');
+      return;
+    }
+    final use = find.byKey(const ValueKey('use-meetings'));
+    if (use.hitTestable().evaluate().isNotEmpty) await qa.tap(use);
+    final len = find.byKey(const ValueKey('length-1_2h'));
+    if (len.hitTestable().evaluate().isNotEmpty) await qa.tap(len);
+    if (shots) {
+      // Let the page's animations finish so the picture shows it whole.
+      await qa.wait(const Duration(milliseconds: 2400));
+      await qa.shot('onboarding-${i.toString().padLeft(2, '0')}');
+    }
+    await qa.tap(next);
+  }
+  throw TestFailure('onboarding never reached "Allow microphone"');
+}
+
 /// Earlier runs normally finished onboarding; if one stopped before that,
-/// go through it here (Continue, Continue, Allow microphone, Start free
-/// trial, Skip) so this run can still test its own part.
+/// go through it here (the pages, Allow microphone, Start free trial, Skip)
+/// so this run can still test its own part.
 Future<void> passFirstRunIfShown(Qa qa) async {
   await qa.wait(const Duration(seconds: 1));
-  if (find.text('Allow microphone').evaluate().isNotEmpty ||
-      find.text('Continue').evaluate().isNotEmpty) {
+  if (find.byType(OnboardingScreen).evaluate().isNotEmpty) {
     qa.note('onboarding was showing: going through it first');
-    while (find.text('Allow microphone').hitTestable().evaluate().isEmpty &&
-        find.text('Continue').hitTestable().evaluate().isNotEmpty) {
-      await qa.tap(find.text('Continue'));
-    }
+    await passOnboardingPages(qa);
     await qa.tap(find.text('Allow microphone'));
   }
   if (find.text('Start free trial').evaluate().isNotEmpty) {

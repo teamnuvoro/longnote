@@ -39,6 +39,8 @@ void main() {
       'restore_tapped',
       'restore_result',
       'onboarding_completed',
+      'onboarding_step',
+      'paywall_faq_opened',
       'att_result',
     ]);
   });

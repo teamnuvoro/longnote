@@ -28,6 +28,12 @@ class AnalyticsEvent {
   static const restoreResult = 'restore_result';
   static const onboardingCompleted = 'onboarding_completed';
 
+  /// Each onboarding screen as it shows (the funnel up to the paywall).
+  static const onboardingStep = 'onboarding_step';
+
+  /// A paywall FAQ question opened.
+  static const paywallFaqOpened = 'paywall_faq_opened';
+
   /// The App Tracking Transparency answer (only when the prompt was shown).
   static const attResult = 'att_result';
 
@@ -47,6 +53,8 @@ class AnalyticsEvent {
     restoreTapped,
     restoreResult,
     onboardingCompleted,
+    onboardingStep,
+    paywallFaqOpened,
     attResult,
   ];
 }

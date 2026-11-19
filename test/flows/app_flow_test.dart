@@ -44,6 +44,23 @@ import '../helpers/fake_analytics.dart';
 import '../helpers/screens_harness.dart' show loadAppFonts, phoneView;
 import 'flow_env.dart';
 
+/// Taps through the onboarding pages until "Allow microphone" shows. With
+/// [pick], answers the two questions (lectures + talks, over 2 hours).
+Future<void> passOnboardingPages(WidgetTester t, {bool pick = false}) async {
+  for (var i = 0; i < 14; i++) {
+    if (find.text('Allow microphone').evaluate().isNotEmpty) return;
+    if (pick && find.byKey(const ValueKey('use-lectures')).evaluate().isNotEmpty) {
+      await tapAndSettle(t, find.byKey(const ValueKey('use-lectures')));
+      await tapAndSettle(t, find.byKey(const ValueKey('use-talks')));
+    }
+    if (pick && find.byKey(const ValueKey('length-over_2h')).evaluate().isNotEmpty) {
+      await tapAndSettle(t, find.byKey(const ValueKey('length-over_2h')));
+    }
+    await tapAndSettle(t, find.byKey(OnboardingScreen.nextKey));
+  }
+  fail('onboarding never reached "Allow microphone"');
+}
+
 void main() {
   late FlowEnv env;
   setUpAll(loadAppFonts);
@@ -68,13 +85,23 @@ void main() {
       (t) async {
     await boot(t, firstRun: true, location: '/onboarding');
     expect(find.byType(OnboardingScreen), findsOneWidget);
-    expect(find.text('Where your audio goes'), findsNothing); // page 2 not yet
-    await tapAndSettle(t, find.text('Continue'));
+    expect(find.text('Where your audio goes'), findsNothing); // not yet
+    // Skipping both questions is allowed; the privacy page says where audio goes.
+    for (var i = 0; i < 7; i++) {
+      await tapAndSettle(t, find.byKey(OnboardingScreen.nextKey));
+    }
     expect(find.text('Where your audio goes'), findsOneWidget);
     expect(find.textContaining('speech-to-text provider'), findsOneWidget);
     expect(find.textContaining('Transcripts are made on this phone'), findsNothing);
-    await tapAndSettle(t, find.text('Continue'));
+    // Back goes one page back, then forward again.
+    await tapAndSettle(t, find.byWidgetPredicate(
+        (w) => w is LnIconButton && w.semanticLabel == 'Back'));
+    expect(find.text('Where your audio goes'), findsNothing);
+    await tapAndSettle(t, find.byKey(OnboardingScreen.nextKey));
+    await passOnboardingPages(t);
     await tapAndSettle(t, find.text('Allow microphone'));
+    expect(await env.services.kv.get(OnboardingScreen.kvUses), '');
+    expect(await env.services.kv.get(OnboardingScreen.kvLength), isNull);
 
     expect(onTop<PaywallScreen>(t), isTrue);
     await tapAndSettle(t, find.text('Start free trial'));
@@ -103,8 +130,7 @@ void main() {
     phoneView(t);
     mockPlatform();
     await env.pumpApp(t, location: '/onboarding');
-    await tapAndSettle(t, find.text('Continue'));
-    await tapAndSettle(t, find.text('Continue'));
+    await passOnboardingPages(t, pick: true);
     await tapAndSettle(t, find.text('Allow microphone'));
     expect(att.prompts, 0); // no "Allow tracking?" in v1
     expect(onTop<PaywallScreen>(t), isTrue);
@@ -112,12 +138,28 @@ void main() {
     await tapAndSettle(t, find.text('Allow the reminder'));
     expect(onTop<NotesScreen>(t), isTrue);
 
-    expect(sink.names, [
+    // One onboarding_step per page (Amplitude only), then the rest.
+    expect(sink.names.where((n) => n == AnalyticsEvent.onboardingStep).length,
+        10);
+    expect(fb.calls.where((c) => c.contains('step')), isEmpty);
+    expect(sink.names.where((n) => n != AnalyticsEvent.onboardingStep), [
       AnalyticsEvent.onboardingCompleted,
       AnalyticsEvent.paywallViewed,
       AnalyticsEvent.trialStarted,
     ]);
-    expect(sink.propsOf(AnalyticsEvent.onboardingCompleted), {'mic': 'allowed'});
+    expect(sink.propsOf(AnalyticsEvent.onboardingCompleted),
+        {
+          'mic': 'allowed',
+          'use_meetings': false,
+          'use_lectures': true,
+          'use_interviews': false,
+          'use_calls': false,
+          'use_talks': true,
+          'use_doctor': false,
+          'use_other': false,
+          'first_use': 'lectures',
+          'length': 'over_2h',
+        });
     expect(fb.advertiserId, isFalse); // never the IDFA
     // The trial goes to Meta from the server (Apple's notification), not the app.
     expect(fb.calls, contains('CompleteRegistration'));

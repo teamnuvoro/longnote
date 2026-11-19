@@ -41,11 +41,9 @@ void main() {
       await qa.expectOnTop<OnboardingScreen>();
     }, section: first);
 
-    await qa.check('A2', 'Onboarding: Continue, Continue, Allow microphone -> paywall',
+    await qa.check('A2', 'Onboarding: questions, the pitch pages, Allow microphone -> paywall',
         () async {
-      await qa.tap(find.text('Continue'));
-      await qa.waitFor(find.text('Where your audio goes'));
-      await qa.tap(find.text('Continue'));
+      await passOnboardingPages(qa, shots: true);
       await qa.tap(find.text('Allow microphone'));
       await qa.expectOnTop<PaywallScreen>();
     }, section: first, needs: ['A1']);

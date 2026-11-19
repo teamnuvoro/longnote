@@ -29,9 +29,7 @@ void main() {
     await qa.check('N2', '"Allow microphone" while iOS denies it: no crash, the '
         'screen explains iPhone Settings, Continue goes on to the paywall',
         () async {
-      await qa.tap(find.text('Continue'));
-      await qa.waitFor(find.text('Where your audio goes'));
-      await qa.tap(find.text('Continue'));
+      await passOnboardingPages(qa);
       await qa.tap(find.text('Allow microphone'));
       await qa.waitFor(
           find.textContaining('turn the microphone on later in iPhone Settings'),
