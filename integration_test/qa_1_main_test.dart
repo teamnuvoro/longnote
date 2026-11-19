@@ -311,9 +311,34 @@ void main() {
         final before = share.calls.length;
         await qa.tap(find.text(what));
         if (then != null) await qa.tap(find.text(then));
-        await qa.waitUntil(() async => share.calls.length > before,
-            what: '"$what" to reach the iOS share sheet',
-            timeout: const Duration(seconds: 90));
+        try {
+          await qa.waitUntil(() async => share.calls.length > before,
+              what: '"$what" to reach the iOS share sheet',
+              timeout: const Duration(seconds: 45));
+        } on TestFailure {
+          // Diagnose (19 Nov: PDF never reached the share sheet twice).
+          bool on(String s) => find.text(s).evaluate().isNotEmpty;
+          qa.note('$what: no share call after 45 s; '
+              'texts "$what" ${find.text(what).evaluate().length} '
+              '(tappable ${find.text(what).hitTestable().evaluate().length}), '
+              'Preparing… ${on('Preparing…')}, error toast '
+              '${on('Could not share this. Please try again.')}, '
+              'sheet on top ${qa.onTop<ShareSheet>()}, calls ${share.calls.length}');
+          await qa.tap(find.text(what));
+          if (then != null) await qa.tap(find.text(then));
+          final again = await () async {
+            try {
+              await qa.waitUntil(() async => share.calls.length > before,
+                  what: 'second tap', timeout: const Duration(seconds: 30));
+              return true;
+            } on TestFailure {
+              return false;
+            }
+          }();
+          qa.note('$what: second tap ${again ? 'reached' : 'did NOT reach'} the share sheet; '
+              'Preparing… ${on('Preparing…')}');
+          throw TestFailure('"$what" did not reach the iOS share sheet on the first tap');
+        }
         await qa.wait(const Duration(milliseconds: 500));
         expect(find.text('Could not share this. Please try again.'), findsNothing);
         qa.note('$what${then == null ? '' : ' / $then'}: ${share.calls.last}');
