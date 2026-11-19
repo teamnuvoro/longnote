@@ -38,6 +38,9 @@ class _ShareSheetState extends State<ShareSheet> {
   /// swallowed the first tap (QA 19 Nov, gesture trace).
   bool _ready = false;
 
+  /// The audio format sheet is open.
+  bool _choosing = false;
+
   @override
   void initState() {
     super.initState();
@@ -130,7 +133,12 @@ class _ShareSheetState extends State<ShareSheet> {
       await _run('audio', (n) => _s.share.shareAudio(n, origin: _origin()));
       return;
     }
-    final choice = await showLnSheet<String>(
+    // Two quick taps during a slow load must not stack two format sheets.
+    if (_choosing || _busy != null) return;
+    _choosing = true;
+    final String? choice;
+    try {
+      choice = await showLnSheet<String>(
       context,
       builder: (c) => LnSheet(
         title: 'Audio file',
@@ -155,7 +163,10 @@ class _ShareSheetState extends State<ShareSheet> {
         ]),
       ),
     );
-    if (choice == null) return;
+    } finally {
+      _choosing = false;
+    }
+    if (choice == null || !mounted) return;
     await _run('audio', (n) => choice == 'm4a'
         ? _s.share.shareAudioM4a(n, origin: _origin())
         : _s.share.shareAudio(n, origin: _origin()));

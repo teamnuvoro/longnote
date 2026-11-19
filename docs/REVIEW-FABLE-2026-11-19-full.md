@@ -183,3 +183,32 @@ The coordinator reports `flutter test` 270/270 and analyze clean.
   edge function wall-clock budget in practice (normally 1 row); if the limit is ever raised, send in parallel.
 - r4. M4 (FK + scrub of `appstore_notifications.user_id` / `payload.transaction.appAccountToken` on user deletion)
   remains open, as agreed, for the login/delete-my-data work; `privacy.md` section 5/10 overstates deletion until then.
+
+---
+
+## Re-review (diff-only), 19 Nov 2026: share sheet rows tappable while the note loads (build 115)
+
+`git diff de4a890 HEAD -- lib`: only `lib/features/note/share_sheet.dart` (+28/-7).
+
+### Verdict: APPROVED (one minor, optional)
+
+| Check | Result |
+|---|---|
+| mounted / setState | `_loaded = _load().catchError(..).whenComplete(() { if (mounted) setState(_ready = true) })`: a failed load still completes `_loaded`, `_ready` flips, `_note` stays null so PDF/Audio disable and Summary/Transcript/Copy toast "no … yet". Every action does `await _loaded; if (!mounted) return;` before touching `context`; `_run` re-checks `mounted` after the job and in `finally`. No setState after dispose. |
+| Double tap during load, same row | Two `_pdf` calls both await `_loaded`; the first resumes and runs `setState(_busy = 'pdf')` with **no await between the resume and the guard**, so the second sees `_busy != null` and returns. Summary/Transcript go through their own `await _loaded` and then `_run`'s second `await _loaded` (a microtask yield on a completed future), still with no await between `_busy` check and set: the second caller returns. Holds for mixed rows too (one `_busy`). |
+| Re-check of the old disabled conditions | PDF: `n == null` -> return (in `_run`). Summary/Copy: `_summaryText == null` -> toast. Transcript: `!_hasTranscript` -> toast. Audio: `n == null || n.durationMs == 0` -> return (the old row condition exactly). Build-time `onTap` uses the same predicates once `_ready`. |
+| Copy path | `await _loaded; mounted; _summaryText/_note` re-read after the load; `copyText` then `if (mounted) showToast`. A double tap copies twice and shows two toasts: harmless. |
+| Imported audio | Unchanged branch: `n.source == 'imported'` -> `_run('audio', shareAudio)`; the `durationMs == 0` return now applies before it, which matches the previous disabled state of the row. |
+| Analyzer | `use_build_context_synchronously` satisfied by the `mounted` checks immediately before each `context` use (analyze clean per the coordinator). |
+
+### m10 (minor, optional) Two taps on "Audio file" during a slow load open two format sheets
+`share_sheet.dart:123-157`: `_audio` passes its checks and calls `showLnSheet` **before** anything sets `_busy`;
+`LnPressable` (`pressable.dart:43`) and `showLnSheet` (`sheet.dart:131`) have no re-entrancy guard. Before this change
+the row was disabled until the load finished, so two taps had to land within the sheet's open animation; now they can
+land anywhere in a multi-second load and both resume together after `_loaded`, stacking two "Audio file" sheets (the
+second one's choice runs `_run`, the first one is left underneath). Not an imported-audio problem (that branch goes
+straight to `_run`). Fix (3 lines): a `bool _choosing` set before `showLnSheet` and cleared in `finally`, returning early
+when already set; or set `_busy = 'audio'` around the choice. Does not need to hold build 115.
+
+Also optional: a widget test that taps PDF before the fake repo resolves and asserts one `sharePdf` call, so the
+"tap during load" behaviour this fix introduces is pinned.
