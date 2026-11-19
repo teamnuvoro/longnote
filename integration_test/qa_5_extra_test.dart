@@ -12,6 +12,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:longnote/features/settings/privacy_screen.dart';
 import 'package:longnote/core/models/recording.dart';
 import 'package:longnote/core/recording/recording_controller.dart';
 import 'package:longnote/core/summary/summary_models.dart';
@@ -107,8 +108,11 @@ void main() {
       await qa.scrollTo(find.text('What happens to your audio'),
           within: find.byType(Scrollable).first);
       await qa.tap(find.text('What happens to your audio'));
-      await qa.waitFor(find.text('Support ID'), what: 'the Support ID section');
-      await qa.scrollTo(find.text('Support ID'), within: find.byType(Scrollable).first);
+      // The section is below the fold of a lazy list: scroll the privacy
+      // page itself (not Settings underneath) until it is built.
+      final page = find.byType(PrivacyScreen);
+      await qa.waitFor(page, what: 'the privacy page');
+      await qa.scrollTo(find.text('Support ID'), within: page);
       final id = await qa.services.auth?.knownUserId();
       qa.note('support id: ${id == null ? 'none yet' : '${id.substring(0, 8)}…'}');
       if (id != null) {

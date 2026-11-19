@@ -29,10 +29,14 @@ class _ShareSheetState extends State<ShareSheet> {
   bool _includeNames = true;
   String? _busy;
 
+  /// A tap can come before the note is loaded (slow phone, QA 19 Nov): the
+  /// actions wait for it instead of doing nothing.
+  late final Future<void> _loaded;
+
   @override
   void initState() {
     super.initState();
-    _load();
+    _loaded = _load().catchError((_) {});
   }
 
   Future<void> _load() async {
@@ -69,6 +73,8 @@ class _ShareSheetState extends State<ShareSheet> {
   }
 
   Future<void> _run(String kind, Future<void> Function(Recording n) job) async {
+    await _loaded;
+    if (!mounted) return;
     final n = _note;
     if (n == null || _busy != null) return;
     setState(() => _busy = kind);
@@ -88,12 +94,16 @@ class _ShareSheetState extends State<ShareSheet> {
       speakerNames: _includeNames ? _names : null));
 
   Future<void> _summaryShare() async {
+    await _loaded;
+    if (!mounted) return;
     final t = _summaryText;
     if (t == null) return showToast(context, 'There is no summary yet.');
     await _run('summary', (n) => _s.share.shareText(t, 'summary', n, origin: _origin()));
   }
 
   Future<void> _transcriptShare() async {
+    await _loaded;
+    if (!mounted) return;
     if (!_hasTranscript) return showToast(context, 'There is no transcript yet.');
     await _run('transcript', (n) async {
       final lines = await _s.repo.transcript(n.id);
@@ -104,6 +114,8 @@ class _ShareSheetState extends State<ShareSheet> {
   }
 
   Future<void> _audio() async {
+    await _loaded;
+    if (!mounted) return;
     final n = _note;
     if (n == null) return;
     if (n.source == 'imported') {
