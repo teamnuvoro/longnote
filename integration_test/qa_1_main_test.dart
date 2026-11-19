@@ -332,7 +332,13 @@ void main() {
       Future<void> option(String what, {String? then}) async {
         final before = share.calls.length;
         if (what == 'PDF') qa.note('hit path at PDF: ${hitPath(find.text(what))}');
+        if (what == 'PDF') {
+          debugPrintGestureArenaDiagnostics = true;
+          debugPrintRecognizerCallbacksTrace = true;
+        }
         await qa.tap(find.text(what));
+        debugPrintGestureArenaDiagnostics = false;
+        debugPrintRecognizerCallbacksTrace = false;
         if (then != null) await qa.tap(find.text(then));
         try {
           await qa.waitUntil(() async => share.calls.length > before,
