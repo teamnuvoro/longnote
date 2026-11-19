@@ -301,7 +301,8 @@ public class DeviceInfoPlugin: NSObject, FlutterPlugin {
       b.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "",
       UIDevice.current.systemVersion,
       machine(),
-      Locale.current.identifier,
+      // "en_US@rg=inzzzz" -> "en_US" (the region override is not needed).
+      String(Locale.current.identifier.split(separator: "@").first ?? ""),
       tz.abbreviation() ?? "",
       "",
       String(Int(screen.bounds.width)),

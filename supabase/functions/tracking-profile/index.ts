@@ -14,6 +14,7 @@ import { admin, ApiError, handle, json, readJson, requireUser } from "../_shared
 import { ProfileError, profileRow, transactionJws } from "../_shared/tracking_profile.ts";
 import { verifyAppleJws } from "../_shared/appstore_jws.ts";
 import { type AppStoreTransaction, BUNDLE_ID, priceOf } from "../_shared/appstore_events.ts";
+import { background, replaySkipped } from "../_shared/appstore_send.ts";
 
 Deno.serve(handle(async (req) => {
   const user = await requireUser(req);
@@ -60,6 +61,12 @@ Deno.serve(handle(async (req) => {
     } catch (_) {
       console.warn("tracking-profile: transaction_jws not verified");
     }
+  }
+  // Apple's first notification may have come before this profile (review
+  // M3): send what was skipped for want of it (only this user's own rows,
+  // from the appAccountToken; rows with no user are not replayed).
+  if (row.share_analytics === true) {
+    background(replaySkipped(user.id).catch(() => console.warn("tracking-profile: replay failed")));
   }
   return json(200, { ok: true, linked });
 }));

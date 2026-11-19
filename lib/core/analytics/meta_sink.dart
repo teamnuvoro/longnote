@@ -50,7 +50,7 @@ class FacebookMetaEvents implements MetaEvents {
 /// FacebookAutoInitEnabled = false, FacebookAutoLogAppEventsEnabled = false):
 /// so the "Share usage analytics" switch stops Meta too, and Meta's own
 /// automatic in-app-purchase logging cannot double count the server's events.
-/// The IDFA is collected only after the user allowed tracking (ATT).
+/// The IDFA is never collected: v1 shows no ATT prompt (owner, 18 Nov 2026).
 ///
 /// App ID and client token: Info.plist, written at build time from the
 /// GitHub secrets META_APP_ID / META_CLIENT_TOKEN (see the workflows). The

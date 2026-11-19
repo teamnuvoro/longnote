@@ -14,6 +14,16 @@ function str(v: unknown, max: number, name: string): string | null {
   return v;
 }
 
+/** Descriptive fields (versions, device, locale) are cleaned, never
+ * rejected: one odd value (e.g. iOS locale "en_US@rg=inzzzz") must not cost
+ * this user every server event. Keeps the part before "@" and drops the
+ * value if it is still not a plain code. */
+function soft(v: unknown, max: number): string | null {
+  if (typeof v !== "string") return null;
+  const cut = v.split("@")[0].trim().slice(0, max);
+  return cut && CODE.test(cut) ? cut : null;
+}
+
 /** The row for tracking_profiles. `transaction_jws` (StoreKit's signed
  * current transaction) is checked here for size only and read by
  * [transactionJws]; it is not stored in the profile. */
@@ -52,10 +62,10 @@ export function profileRow(body: Record<string, unknown>): Record<string, unknow
     share_analytics: true,
     att_enabled: att ?? null,
     meta_anon_id: str(body.meta_anon_id, 100, "meta_anon_id"),
-    app_version: str(body.app_version, 32, "app_version"),
-    os_version: str(body.os_version, 32, "os_version"),
-    device_model: str(body.device_model, 64, "device_model"),
-    locale: str(body.locale, 35, "locale"),
+    app_version: soft(body.app_version, 32),
+    os_version: soft(body.os_version, 32),
+    device_model: soft(body.device_model, 64),
+    locale: soft(body.locale, 35),
     currency,
     extinfo,
     updated_at: now,

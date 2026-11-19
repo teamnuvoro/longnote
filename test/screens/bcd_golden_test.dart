@@ -5,6 +5,8 @@ library;
 
 import 'dart:io';
 
+import 'package:clock/clock.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:longnote/app/routes.dart';
@@ -128,8 +130,11 @@ void main() {
   testWidgets('C0 ready to record', skip: _skip, (tester) async {
     await tester.runAsync(() => make(recorder: true));
     await open(tester);
-    await push(tester, R.record, query: {RecordingScreen.readyParam: '1'});
-    await shot(tester, 'c0_ready');
+    // Fixed date: the ready line shows "<date> · not started yet".
+    await withClock(Clock.fixed(DateTime(2026, 11, 18, 10, 24)), () async {
+      await push(tester, R.record, query: {RecordingScreen.readyParam: '1'});
+      await shot(tester, 'c0_ready');
+    });
   });
 
   testWidgets('C1 recording', skip: _skip, (tester) async {

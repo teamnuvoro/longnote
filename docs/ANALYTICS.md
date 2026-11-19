@@ -155,8 +155,8 @@ Meta (Info.plist + `MetaSink`):
 - `FacebookAutoLogAppEventsEnabled` = false: no automatic events and no
   automatic in-app-purchase logging (no double count with our Subscribe /
   StartTrial). The app calls `activateApp()` itself.
-- `FacebookAdvertiserIDCollectionEnabled` = false by default;
-  `setAdvertiserIdCollectionEnabled(true)` only after ATT "Allow".
+- `FacebookAdvertiserIDCollectionEnabled` = false, and the app always calls
+  `setAdvertiserIdCollectionEnabled(false)`: no IDFA (no ATT prompt in v1).
 - `FBSDKAutoLogMetaDataEnabled` = false and `setAutoLogMetaDataEnabled(false)`
   at start. The app pins Meta SDK 18.0.3 (third_party/facebook_app_events),
   which has no metadata collection; SDK 19+ would attach screen titles and URLs.
@@ -165,11 +165,9 @@ Meta (Info.plist + `MetaSink`):
 - No `CFBundleURLTypes` / `LSApplicationQueriesSchemes`: only needed for
   Facebook Login / sharing, which we do not use.
 
-ATT (`TrackingConsent`): Apple's prompt is shown at most once, right after
-onboarding (after the StoreKit refresh, before the first paywall), only when
-Meta is in the build, sharing is on and iOS says `notDetermined`. Text
-(NSUserTrackingUsageDescription): "Lets us see which of our ads brought you to
-Longnote. Your recordings and notes are never shared."
+ATT: none in v1 (owner, 18 Nov 2026). The app uses `NoTrackingConsent`, has
+no `NSUserTrackingUsageDescription` and no tracking plugin; Meta never gets
+the IDFA. Trial and subscription events come from the server (section above).
 
 ## Keys and builds
 
@@ -183,7 +181,7 @@ Longnote. Your recordings and notes are never shared."
 These values ship inside the app and are not secret, but the repo is public,
 so they stay out of git and are masked in CI logs. A build without them
 (local, simulator QA, ios-build-check) has Amplitude and Meta switched off and
-never shows the ATT prompt. Simulator QA also passes `LN_TRACKING=off`.
+has no Meta at all. Simulator QA also passes `LN_TRACKING=off`.
 The workflow fails if only one of META_APP_ID / META_CLIENT_TOKEN is set
 (initializing Meta without an app id in Info.plist would crash).
 

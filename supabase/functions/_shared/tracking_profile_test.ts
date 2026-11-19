@@ -24,9 +24,13 @@ Deno.test("bad input refused", () => {
     { share_analytics: true, extinfo: [...ext.slice(0, 15), 5] },
     { share_analytics: true, currency: "inr" },
     { share_analytics: true, meta_anon_id: "x".repeat(101) },
-    { share_analytics: true, device_model: "<script>" },
     { share_analytics: true, att_enabled: "1" },
   ]) assertThrows(() => profileRow(b as Record<string, unknown>), ProfileError);
+});
+
+Deno.test("odd descriptive fields are cleaned, not refused", () => {
+  const r = profileRow({ share_analytics: true, locale: "en_US@rg=inzzzz", device_model: "<script>", os_version: "18.1" });
+  assertEquals([r.locale, r.device_model, r.os_version], ["en_US", null, "18.1"]);
 });
 
 Deno.test("transaction_jws: read only when sharing, size-capped, never stored in the row", () => {

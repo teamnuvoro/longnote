@@ -43,7 +43,7 @@ class PrivacyScreen extends StatelessWidget {
           h('iCloud backup'),
           p('Your notes are part of your iPhone’s own iCloud backup if you have it turned on. That is Apple’s storage under your Apple ID, not ours.'),
           h('Usage analytics'),
-          p('We count how the app is used (for example: a recording started, the paywall was shown, a trial started) with Amplitude, so we can fix problems. We also tell Meta when someone installs, starts a trial or subscribes, so we can see which of our ads work. Your advertising ID is shared with Meta only if you allow tracking when iOS asks.'),
+          p('We count how the app is used (for example: a recording started, the paywall was shown, a trial started) with Amplitude, so we can fix problems. We also tell Meta when someone installs, starts a trial or subscribes, so we can see which of our ads work. Trial and subscription events are sent by our server when Apple tells us about them. We never read your advertising ID (IDFA).'),
           p('These events never include your audio, transcripts, summaries, note titles or questions. Turn them off in Settings → Share usage analytics.'),
           h('What we never do'),
           p('No account, no ads in the app, no selling data. A random ID (your Support ID, below) lets our server match your transcription jobs.'),
