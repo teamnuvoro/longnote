@@ -21,6 +21,18 @@ void main() {
     expect(find.text('How do I cancel?'), findsOneWidget);
   });
 
+  testWidgets('no trial on offer: no trial sentences', (t) async {
+    await t.pumpWidget(const MaterialApp(
+        home: Scaffold(
+            body: SingleChildScrollView(child: PaywallMore(trial: false)))));
+    expect(find.textContaining('before your trial ends'), findsNothing);
+    await t.ensureVisible(find.text('How do I cancel?'));
+    await t.tap(find.text('How do I cancel?'));
+    await t.pumpAndSettle();
+    expect(find.textContaining('free trial'), findsNothing);
+    expect(find.textContaining('end of the period you paid for'), findsOneWidget);
+  });
+
   testWidgets('opening a question shows its answer and reports its id',
       (t) async {
     final opened = <String>[];

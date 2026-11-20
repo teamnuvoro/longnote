@@ -206,9 +206,12 @@ class _PaywallScreenState extends State<PaywallScreen> {
       );
 
   Widget _body(BuildContext context) {
-    final trial = context.read<AppServices>().billing.trialEligible;
-    final now = screenNow();
     final plan = _selected;
+    // Trial wording only when Apple will really give one: eligible AND the
+    // store product carries a free-trial offer (trialDays 0 = none attached).
+    final trial =
+        context.read<AppServices>().billing.trialEligible && plan.trialDays > 0;
+    final now = screenNow();
     final yearly = _plan(PlanPeriod.year);
     final monthly = _plan(PlanPeriod.month);
     return LnScaffold(
@@ -251,7 +254,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
                             Text(
                                 trial
                                     ? 'Try everything free for ${plan.trialDays} days.'
-                                    : 'Keep recording, as long as you want.',
+                                    : 'Keep recording, for hours at a time.',
                                 style: LnText.body
                                     .copyWith(color: LnColors.ink2, height: null)),
                             const SizedBox(height: 16),
@@ -310,6 +313,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
                               // The free recording is only still unused on
                               // the first-run paywall.
                               firstRun: widget.placement == 'first_run',
+                              trial: trial,
                               onFaqOpened: (id) => _s.analytics.log(
                                   AnalyticsEvent.paywallFaqOpened,
                                   props: {'faq': id}),

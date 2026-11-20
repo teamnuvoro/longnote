@@ -80,6 +80,34 @@ void main() {
       expect(line(), contains(r'$59.99 a year'));
     });
 
+    testWidgets('store product without a trial offer: no trial wording',
+        (t) async {
+      // Eligible for a trial, but the products carry no free-trial offer
+      // (not attached in App Store Connect): Apple charges at once.
+      env.billing.plans = const [
+        Plan(
+            id: 'com.novaralabs.longnote.annual',
+            period: PlanPeriod.year,
+            price: 59.99,
+            priceLabel: r'$59.99',
+            trialDays: 0),
+        Plan(
+            id: 'com.novaralabs.longnote.monthly',
+            period: PlanPeriod.month,
+            price: 9.99,
+            priceLabel: r'$9.99',
+            trialDays: 0),
+      ];
+      expect(env.billing.trialEligible, isTrue);
+      await openPaywall(t);
+      expect(find.text('Subscribe'), findsOneWidget);
+      expect(find.text('Start free trial'), findsNothing);
+      expect(find.textContaining('free for 0 days'), findsNothing);
+      expect(
+          t.widget<Text>(find.byKey(const ValueKey('paywall-price-line'))).data,
+          contains('charged today'));
+    });
+
     testWidgets('a plan that arrives while the paywall is open closes it '
         '(StoreKit syncing after a reinstall)', (t) async {
       await openPaywall(t);
@@ -189,6 +217,15 @@ void main() {
 
   test('trial copy helpers', () {
     expect(monthlyEquivalent(annualPlan), r'$5 / mo');
+    // A currency written after the number keeps its sign.
+    expect(
+        monthlyEquivalent(const Plan(
+            id: 'y',
+            period: PlanPeriod.year,
+            price: 59.99,
+            priceLabel: '59,99 €',
+            currency: 'EUR')),
+        '5 € / mo');
     expect(yearlySavingPercent(annualPlan, monthlyPlan), 50);
     final d = TrialDates.from(figmaNow, annualPlan);
     expect(d.chargeAt, DateTime(2026, 11, 19, 10, 24));

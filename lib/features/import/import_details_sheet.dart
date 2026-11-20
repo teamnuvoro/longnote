@@ -13,6 +13,7 @@ import '../common/dates.dart';
 import '../common/widgets.dart';
 import '../settings/audio_language_screen.dart';
 import 'import_controller.dart';
+import 'import_screen.dart' show importPaywallPassed;
 
 /// F2 Import — before we start (Figma 9:781): the picked file, its name,
 /// language and summary style, then "Import and transcribe" (copy with
@@ -86,9 +87,12 @@ class _ImportDetailsSheetState extends State<ImportDetailsSheet> {
   /// parts only): imports go to the cloud, and the button says so.
   bool get _needsCloud => _mode == TranscriptionMode.onDevice;
 
-  void _start() {
+  Future<void> _start() async {
     final m = _m;
     if (m == null) return;
+    // Checked again here: another import may have used the free one since
+    // the file was picked.
+    if (!await importPaywallPassed(context, _c) || !mounted) return;
     unawaited(_c.start(m,
         title: _name.text,
         language: _language,

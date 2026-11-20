@@ -84,7 +84,8 @@ class AppServices {
   final NetworkMonitor network;
   final String recordingsRoot;
 
-  /// Apple's "Allow tracking?" prompt (a no-op without Meta / in QA).
+  /// Apple's "Allow tracking?" prompt. v1 always passes NoTrackingConsent
+  /// (never shown); kept for askTrackingOnce's tests.
   final TrackingConsent tracking;
 
   /// Meta ad measurement; null when Meta is not in this build (local

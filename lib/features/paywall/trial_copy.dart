@@ -40,14 +40,24 @@ Plan planForId(String? id) {
 String _currency(Plan p) =>
     RegExp(r'^[^\d]*').firstMatch(p.priceLabel)?.group(0)?.trim() ?? '';
 
+/// Currency suffix, for locales that put it after the number ("€" from
+/// "59,99 €").
+String _currencySuffix(Plan p) =>
+    RegExp(r'[^\d]*$').firstMatch(p.priceLabel)?.group(0)?.trim() ?? '';
+
 String _amount(double v) {
   final s = v.toStringAsFixed(2);
   return s.endsWith('.00') ? s.substring(0, s.length - 3) : s;
 }
 
 /// "$5 / mo" for the yearly card.
-String monthlyEquivalent(Plan yearly) =>
-    '${_currency(yearly)}${_amount(yearly.price / 12)} / mo';
+String monthlyEquivalent(Plan yearly) {
+  final pre = _currency(yearly);
+  final amount = _amount(yearly.price / 12);
+  if (pre.isNotEmpty) return '$pre$amount / mo';
+  final post = _currencySuffix(yearly);
+  return post.isEmpty ? '$amount / mo' : '$amount $post / mo';
+}
 
 /// Whole-percent saving of [yearly] over 12 x [monthly] ("Save 50%").
 int yearlySavingPercent(Plan yearly, Plan monthly) =>

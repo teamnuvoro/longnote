@@ -220,8 +220,11 @@ class FakeBillingService implements BillingService {
     kv.set(_key, jsonEncode(e.toJson()));
   }
 
+  /// What the "store" offers (tests: e.g. products without a trial offer).
+  List<Plan> plans = const [annualPlan, monthlyPlan];
+
   @override
-  Future<List<Plan>> loadPlans() async => const [annualPlan, monthlyPlan];
+  Future<List<Plan>> loadPlans() async => plans;
 
   @override
   Future<PurchaseResult> purchase(Plan plan) async {

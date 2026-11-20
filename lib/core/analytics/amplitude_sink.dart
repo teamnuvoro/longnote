@@ -14,10 +14,10 @@ import 'remote_analytics.dart';
 /// time (GitHub secret AMPLITUDE_API_KEY). The Amplitude SECRET key is never
 /// in the app: deletion requests ("Delete my data") must run server-side.
 ///
-/// TODO(delete-my-data): when Settings > Privacy > "Delete my data" is
-/// built, a Supabase function (holding the Amplitude secret key) must call
-/// Amplitude's User Privacy API for this user id + device id. Do not call it
-/// from the app.
+/// Data deletion in v1 is by email with the Support ID (no in-app button).
+/// If an in-app "Delete my data" is ever built, a Supabase function (holding
+/// the Amplitude secret key) must call Amplitude's User Privacy API for this
+/// user id + device id. Do not call it from the app.
 class AmplitudeSink implements AnalyticsSink {
   AmplitudeSink._(this._amp);
 

@@ -78,10 +78,16 @@ GoRouter buildRouter({required String initialLocation}) => GoRouter(
           parentNavigatorKey: rootNavigatorKey,
           pageBuilder: (c, s) {
             final first = s.uri.queryParameters['first'] == '1';
+            // ?from=import: the paywall before an import (analytics placement).
+            final fromImport = s.uri.queryParameters['from'] == 'import';
             return _modal(
               s,
               PaywallScreen(
-                placement: first ? 'first_run' : 'second_recording',
+                placement: first
+                    ? 'first_run'
+                    : fromImport
+                        ? 'import'
+                        : 'second_recording',
                 onDone: first
                     ? (ctx, _) async {
                         await ctx

@@ -191,7 +191,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           ),
         _Step.length => _Question(
             title: 'How long do they usually run?',
-            body: 'Longnote has no time limit, whatever you pick.',
+            body: 'Longnote records for hours, whatever you pick.',
             child: Column(children: [
               for (final l in RecordLength.values)
                 _Choice(
@@ -208,7 +208,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 ? 'Two hours? Four?\nKeep going.'
                 : 'Hours, not minutes.',
             body:
-                'No minute counter, no time limit. Lock your phone or switch apps: Longnote keeps recording and saves as it goes, so a phone call or a dead battery never costs you what you already recorded.',
+                'No minute counter: up to 5 hours in one recording is transcribed. Lock your phone or switch apps: Longnote keeps recording and saves as it goes, so a phone call or a dead battery never costs you what you already recorded.',
             visual: const HoursVisual(),
           ),
         _Step.summary => _Pitch(
@@ -239,7 +239,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               _style == null
                   ? '9 summary styles, from meetings to lectures'
                   : 'Summaries set up for ${_uses.first.short}',
-              'Recording with no time limit',
+              'Up to 5 hours per recording',
               'Speaker names in transcripts',
               'Ask about any note',
             ],

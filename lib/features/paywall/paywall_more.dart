@@ -7,7 +7,12 @@ import '../common/widgets.dart';
 /// it works, honest billing, and common questions. Every claim here is true
 /// of the app today (keep it that way when features change).
 class PaywallMore extends StatelessWidget {
-  const PaywallMore({super.key, this.onFaqOpened, this.firstRun = true});
+  const PaywallMore(
+      {super.key, this.onFaqOpened, this.firstRun = true, this.trial = true});
+
+  /// A free trial is on offer (eligible AND the store product has one): the
+  /// trial sentences show only then.
+  final bool trial;
 
   /// First-run paywall: the free first recording is still unused, so the
   /// "Can I try it without paying?" answer is true only here.
@@ -26,10 +31,10 @@ class PaywallMore extends StatelessWidget {
           const _Heading('How it works'),
           const _HowItWorks(),
           const SizedBox(height: 28),
-          const _HonestBilling(),
+          _HonestBilling(trial: trial),
           const SizedBox(height: 28),
           const _Heading('Questions'),
-          _Faq(onOpened: onFaqOpened, firstRun: firstRun),
+          _Faq(onOpened: onFaqOpened, firstRun: firstRun, trial: trial),
           const SizedBox(height: 12),
         ],
       );
@@ -72,7 +77,7 @@ class _FeatureGrid extends StatelessWidget {
 
   static const _items = [
     (LnIcons.infinity, 'Unlimited recordings', 'Record as often as you like.'),
-    (LnIcons.mic, 'Hours per recording', 'No time limit, screen locked or not.'),
+    (LnIcons.mic, 'Hours per recording', 'Up to 5 hours, screen locked or not.'),
     (LnIcons.users, 'Who said what', 'Speaker names and times.'),
     (LnIcons.template, '9 summary styles', 'Meetings, lectures, calls and more.'),
     (LnIcons.tabAsk, 'Ask your notes', 'Answers with the moment it was said.'),
@@ -147,7 +152,8 @@ class _HowItWorks extends StatelessWidget {
 }
 
 class _HonestBilling extends StatelessWidget {
-  const _HonestBilling();
+  const _HonestBilling({required this.trial});
+  final bool trial;
   @override
   Widget build(BuildContext context) => Container(
         width: double.infinity,
@@ -164,7 +170,9 @@ class _HonestBilling extends StatelessWidget {
                   style: LnText.rowTitleSmall.copyWith(color: LnColors.saved)),
               const SizedBox(height: 3),
               Text(
-                  'With notifications on, we remind you a day before your trial ends. Cancel any time in your iPhone Settings.',
+                  trial
+                      ? 'With notifications on, we remind you a day before your trial ends. Cancel any time in your iPhone Settings.'
+                      : 'You see the exact price and renewal date before you pay. Cancel any time in your iPhone Settings.',
                   style: LnText.meta.copyWith(color: LnColors.ink, height: 1.4)),
             ]),
           ),
@@ -173,9 +181,10 @@ class _HonestBilling extends StatelessWidget {
 }
 
 class _Faq extends StatefulWidget {
-  const _Faq({this.onOpened, required this.firstRun});
+  const _Faq({this.onOpened, required this.firstRun, required this.trial});
   final void Function(String id)? onOpened;
   final bool firstRun;
+  final bool trial;
   @override
   State<_Faq> createState() => _FaqState();
 }
@@ -185,7 +194,7 @@ class _FaqState extends State<_Faq> {
     (
       'length',
       'Is there a limit on recording time?',
-      'No. Record for minutes or for hours. Longnote saves the audio in parts as it records, so even a very long recording is safe.'
+      'Record for hours: up to 5 hours in one recording is transcribed. Longnote saves the audio in parts as it records, so even a very long recording is safe.'
     ),
     (
       'locked',
@@ -217,8 +226,14 @@ class _FaqState extends State<_Faq> {
 
   List<(String, String, String)> get _qs => [
         for (final q in _all)
-          if (q.$1 != 'free' || widget.firstRun) q,
+          if (q.$1 == 'cancel' && !widget.trial)
+            (q.$1, q.$2, _cancelNoTrial)
+          else if (q.$1 != 'free' || widget.firstRun)
+            q,
       ];
+
+  static const _cancelNoTrial =
+      'In iPhone Settings › your name › Subscriptions, any time. You keep Pro until the end of the period you paid for.';
 
   @override
   Widget build(BuildContext context) => LnCard(

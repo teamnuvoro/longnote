@@ -47,7 +47,8 @@ String plainEnglishError(String code, {Map<String, Object?> detail = const {}}) 
     case 'not_found':
       return 'We could not find that upload. We will send it again.';
     case 'too_long':
-      return "Recordings over 5 hours can't be transcribed in one piece.";
+      return 'Transcription works for recordings up to 5 hours, and this one '
+          'is longer.';
     case 'payload_too_large':
       return 'This is too long to send at once.';
     case 'upstream_failed':

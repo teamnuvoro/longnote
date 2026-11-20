@@ -35,7 +35,7 @@ class PrivacyScreen extends StatelessWidget {
           p('Transcripts, summaries and Ask chats are kept on this phone too.'),
           h('Cloud transcription (the default)'),
           p('To make the transcript, a compressed copy of the audio is uploaded to our server and given to our speech-to-text provider (Soniox).'),
-          p('As soon as the transcript is back, the audio is deleted from the provider and from our server. Anything left over is removed within 24 hours. The transcript is sent to your phone and then deleted from our server.'),
+          p('As soon as the transcript is back, the audio is deleted from the provider and from our server. Anything left over is removed within 24 hours. The transcript is sent to your phone and deleted from our server within 24 hours.'),
           h('On this phone'),
           p('If you choose “On this phone” in Settings → Transcription, the audio never leaves your phone. It is slower and has no speaker labels.'),
           h('Summaries and Ask'),

@@ -237,6 +237,7 @@ List<Widget> failedChildren(
 }) {
   final n = d.note;
   final limit = n.errorCode == 'limit_reached';
+  final tooLong = n.errorCode == 'too_long';
   final reason = (n.processingError ?? '').trim();
   final tried = n.tries > 1 ? ' We tried ${n.tries} times.' : '';
   final body = 'Your audio is safe on this phone — all '
@@ -257,7 +258,11 @@ List<Widget> failedChildren(
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-                limit ? 'Today’s limit is reached' : 'We couldn’t make the transcript',
+                limit
+                    ? 'Today’s limit is reached'
+                    : tooLong
+                        ? 'Longer than 5 hours'
+                        : 'We couldn’t make the transcript',
                 style: LnText.rowTitle),
           ),
         ]),

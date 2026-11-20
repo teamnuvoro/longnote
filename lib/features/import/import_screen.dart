@@ -110,6 +110,8 @@ class _ImportBodyState extends State<ImportBody> {
   }
 
   Future<void> _pick({bool video = false}) async {
+    // Paywall first when the free recording is used up (as Record does).
+    if (!await importPaywallPassed(context, _c)) return;
     try {
       final m = await _c.pick(video: video);
       if (m == null || !mounted) return;
@@ -279,4 +281,14 @@ class _VoiceMemosHelp extends StatelessWidget {
       ]),
     );
   }
+}
+
+/// True when the user may import now; otherwise shows the paywall
+/// (placement `import`) and returns whether they now have access.
+Future<bool> importPaywallPassed(BuildContext context, ImportController c) async {
+  if (await c.canImport()) return true;
+  if (!context.mounted) return false;
+  final ok = await context.pushOnce<bool>(R.paywall,
+      queryParameters: {'from': 'import'});
+  return ok == true;
 }
