@@ -335,18 +335,22 @@ What the server needs to send this user's subscription events, and whether it ma
 
 ## 5. Limits (env-configurable function secrets)
 
+Per-user and per-IP defaults were raised on 20 Nov 2026 (store-readiness review S1) so a paying user does not meet
+them in normal use; they remain anti-abuse ceilings. The global caps are unchanged. A secret of the same name overrides
+any default.
+
 | secret | default | what |
 |---|---|---|
-| `LIMIT_AUDIO_SECONDS_PER_DAY` | 28800 (8 h) | audio per user per UTC day (= $0.80 at $0.10/h) |
-| `LIMIT_AUDIO_SECONDS_PER_HOUR` | 14400 (4 h) | audio per user per rolling hour |
+| `LIMIT_AUDIO_SECONDS_PER_DAY` | 57600 (16 h) | audio per user per UTC day (= $1.60 at $0.10/h) |
+| `LIMIT_AUDIO_SECONDS_PER_HOUR` | 21600 (6 h) | audio per user per rolling hour |
 | `LIMIT_MAX_AUDIO_SECONDS` | 18000 (5 h) | one file (Soniox's fixed maximum is 300 min) |
-| `LIMIT_USER_LLM_USD_PER_DAY` | 1.00 | summarize + ask spend per user per UTC day (reserved, then settled) |
-| `LIMIT_ASK_PER_DAY` | 60 | ask calls per user per day (second guard) |
-| `LIMIT_SUMMARY_PER_DAY` | 40 | summarize calls per user per day (a 3-h note uses 2 parts; cached re-sends are free) |
-| `LIMIT_IP_AUDIO_SECONDS_PER_DAY` | 86400 (24 h) | audio per client IP per UTC day (scope `ip_day`) |
-| `LIMIT_IP_LLM_USD_PER_DAY` | 2.00 | summarize + ask spend per client IP per day |
-| `LIMIT_IP_SUMMARY_PER_DAY` | 300 | summarize calls per client IP per day (second guard) |
-| `LIMIT_IP_ASK_PER_DAY` | 600 | ask calls per client IP per day (second guard) |
+| `LIMIT_USER_LLM_USD_PER_DAY` | 3.00 | summarize + ask spend per user per UTC day (reserved, then settled) |
+| `LIMIT_ASK_PER_DAY` | 200 | ask calls per user per day (second guard) |
+| `LIMIT_SUMMARY_PER_DAY` | 100 | summarize calls per user per day (a 3-h note uses 2 parts; cached re-sends are free) |
+| `LIMIT_IP_AUDIO_SECONDS_PER_DAY` | 259200 (72 h) | audio per client IP per UTC day (scope `ip_day`) |
+| `LIMIT_IP_LLM_USD_PER_DAY` | 10.00 | summarize + ask spend per client IP per day |
+| `LIMIT_IP_SUMMARY_PER_DAY` | 600 | summarize calls per client IP per day (second guard) |
+| `LIMIT_IP_ASK_PER_DAY` | 1500 | ask calls per client IP per day (second guard) |
 | `LIMIT_GLOBAL_AUDIO_USD_PER_DAY` | 12 | global **audio** pool (Soniox) per UTC day (~120 h) |
 | `LIMIT_GLOBAL_LLM_USD_PER_DAY` | 8 | global **LLM** pool (OpenAI) per UTC day |
 | `LIMIT_GLOBAL_USD_PER_DAY` | 20 | total of both pools per UTC day (outer ceiling) |
@@ -362,8 +366,8 @@ of Ask traffic cannot stop transcription for everyone, and vice versa (`cost_dai
 The IP is stored only as HMAC-SHA256 with a server secret (`IP_HASH_SECRET`, else `CLEANUP_SECRET`) of the IPv4 address or
 the **IPv6 /64** (a phone usually owns a whole /64, so the exact address would be trivial to rotate); rows kept 2 days.
 
-What one abuser can still do (all numbers at defaults): one IP (/64) spends at most $2.40 audio + $2 LLM per day; it takes
-~5 distinct IPs/prefixes to fill a pool and switch that product off until 00:00 UTC. **Open:** App Attest (or a captcha on
+What one abuser can still do (all numbers at defaults): one IP (/64) spends at most $7.20 audio + $10 LLM per day; one or
+two distinct IPs/prefixes can fill a pool and switch that product off until 00:00 UTC. **Open:** App Attest (or a captcha on
 anonymous sign-up) before any public build (DECISIONS.md), and an alert when `global_day` trips. Per-IP caps stay generous
 because Indian carriers share one IPv4 across many phones (CGNAT).
 

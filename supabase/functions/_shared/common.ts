@@ -77,28 +77,30 @@ export function envNum(name: string, fallback: number): number {
  * Money caps are in USD and reserve-then-settle (docs/BACKEND-API.md 5):
  * audio and LLM have separate global pools, so a burst of asks cannot stop
  * transcription for everyone (review B1). Call counts stay as a second guard.
+ * Per-user / per-IP defaults raised 20 Nov 2026 to anti-abuse levels a paying
+ * user never meets (Fable store-readiness S1); the global caps are unchanged.
  */
 export const limits = () => ({
-  audioSecondsPerDay: envNum("LIMIT_AUDIO_SECONDS_PER_DAY", 8 * 3600),
-  audioSecondsPerHour: envNum("LIMIT_AUDIO_SECONDS_PER_HOUR", 4 * 3600),
+  audioSecondsPerDay: envNum("LIMIT_AUDIO_SECONDS_PER_DAY", 16 * 3600),
+  audioSecondsPerHour: envNum("LIMIT_AUDIO_SECONDS_PER_HOUR", 6 * 3600),
   // Total estimated spend per UTC day (audio + LLM), on top of the pools.
   globalUsdPerDay: envNum("LIMIT_GLOBAL_USD_PER_DAY", 20),
   globalAudioUsdPerDay: envNum("LIMIT_GLOBAL_AUDIO_USD_PER_DAY", 12),
   globalLlmUsdPerDay: envNum("LIMIT_GLOBAL_LLM_USD_PER_DAY", 8),
   // Per user per UTC day, LLM (summarize + ask) in USD. Audio per user is
   // capped in seconds above, which is dollars at a fixed price per hour.
-  userLlmUsdPerDay: envNum("LIMIT_USER_LLM_USD_PER_DAY", 1),
-  askPerDay: envNum("LIMIT_ASK_PER_DAY", 60),
-  summaryPerDay: envNum("LIMIT_SUMMARY_PER_DAY", 40),
+  userLlmUsdPerDay: envNum("LIMIT_USER_LLM_USD_PER_DAY", 3),
+  askPerDay: envNum("LIMIT_ASK_PER_DAY", 200),
+  summaryPerDay: envNum("LIMIT_SUMMARY_PER_DAY", 100),
   // Soniox async hard limit is 300 min per file.
   maxAudioSeconds: envNum("LIMIT_MAX_AUDIO_SECONDS", 300 * 60),
   // Per client IP (IPv6: per /64) per UTC day (anti-abuse: new anonymous
   // users are free to make). Generous-ish because Indian mobile carriers put
   // many phones behind one IPv4 (CGNAT). App Attest is the real fix (open).
-  ipAudioSecondsPerDay: envNum("LIMIT_IP_AUDIO_SECONDS_PER_DAY", 24 * 3600),
-  ipLlmUsdPerDay: envNum("LIMIT_IP_LLM_USD_PER_DAY", 2),
-  ipSummaryPerDay: envNum("LIMIT_IP_SUMMARY_PER_DAY", 300),
-  ipAskPerDay: envNum("LIMIT_IP_ASK_PER_DAY", 600),
+  ipAudioSecondsPerDay: envNum("LIMIT_IP_AUDIO_SECONDS_PER_DAY", 72 * 3600),
+  ipLlmUsdPerDay: envNum("LIMIT_IP_LLM_USD_PER_DAY", 10),
+  ipSummaryPerDay: envNum("LIMIT_IP_SUMMARY_PER_DAY", 600),
+  ipAskPerDay: envNum("LIMIT_IP_ASK_PER_DAY", 1500),
   reportsPerUserDay: envNum("LIMIT_REPORTS_PER_USER_DAY", 50),
   reportsPerIpDay: envNum("LIMIT_REPORTS_PER_IP_DAY", 200),
 });
