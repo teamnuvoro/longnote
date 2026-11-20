@@ -7,6 +7,7 @@ import '../../app/nav.dart';
 import '../../app_services.dart';
 import '../../core/analytics/analytics.dart';
 import '../../core/billing/billing_service.dart';
+import '../../core/config.dart';
 import '../../core/models/recording.dart';
 import '../../core/notes/languages.dart';
 import '../../core/summary/summary_style.dart';
@@ -112,6 +113,7 @@ class _SettingsHomeScreenState extends State<SettingsHomeScreen> {
   }
 
   void _versionTap() {
+    if (!AppConfig.devTools) return;
     if (++_taps >= 7) {
       _taps = 0;
       context.pushOnce(R.benchmark);

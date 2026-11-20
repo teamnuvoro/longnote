@@ -25,6 +25,7 @@ import 'core/cloud/longnote_api.dart';
 import 'core/cloud/network_monitor.dart';
 import 'core/cloud/supabase_auth.dart';
 import 'core/cloud/tus_uploader.dart';
+import 'core/config.dart';
 import 'core/db/app_database.dart';
 import 'core/export/share_service.dart';
 import 'core/jobs/job_queue.dart';
@@ -444,7 +445,10 @@ class AppServices {
       Timer(const Duration(seconds: 6), s._profileChanged);
     }
     s.whisperChoice.value = WhisperChoice.parse(await kv.get(kvWhisper));
-    s.useFakeTranscriber = await kv.getBool(kvFakeTranscriber);
+    // A dev switch: ignored outside dev builds, so a value left on the phone
+    // can never turn real transcripts into placeholders.
+    s.useFakeTranscriber =
+        AppConfig.devTools && await kv.getBool(kvFakeTranscriber);
 
     final pieces = CloudPieceStore(db.db);
     if (auth != null && api != null) {

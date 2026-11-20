@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
 import '../../app_services.dart';
@@ -6,6 +7,7 @@ import '../../core/cloud/backend_config.dart';
 import '../../core/analytics/analytics.dart';
 import '../../core/billing/billing_service.dart';
 import '../../core/billing/trial_reminder.dart';
+import '../../core/config.dart';
 import '../../core/summary/apple_on_device_summarizer.dart';
 import '../../core/summary/summary_service.dart';
 import '../../core/transcription/transcriber.dart';
@@ -25,13 +27,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _appleReason;
   bool? _modelReady;
   int _versionTaps = 0;
+  String _version = '';
 
   AppServices get _s => context.read<AppServices>();
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _load();
+      _loadVersion();
+    });
+  }
+
+  Future<void> _loadVersion() async {
+    try {
+      final i = await PackageInfo.fromPlatform();
+      if (mounted) setState(() => _version = '${i.version} (${i.buildNumber})');
+    } catch (_) {}
   }
 
   Future<void> _load() async {
@@ -186,9 +199,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _Header('About'),
           ListTile(
             title: const Text('Longnote'),
-            subtitle: const Text('Version 1.0.0'),
+            subtitle: Text(_version.isEmpty ? ' ' : 'Version $_version'),
             onTap: () {
-              // Hidden: tap 7 times to open the Benchmark screen.
+              // Hidden: tap 7 times to open the Benchmark screen (dev
+              // builds only, AppConfig.devTools).
+              if (!AppConfig.devTools) return;
               if (++_versionTaps >= 7) {
                 _versionTaps = 0;
                 Navigator.of(context).push(MaterialPageRoute(

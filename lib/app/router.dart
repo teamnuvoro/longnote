@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../app_services.dart';
+import '../core/config.dart';
 import '../features/ask/ask_chat_screen.dart';
 import '../features/ask/ask_screen.dart';
 import '../features/ask/choose_note_sheet.dart';
@@ -288,7 +289,9 @@ GoRouter buildRouter({required String initialLocation}) => GoRouter(
                     name: R.advanced,
                     parentNavigatorKey: rootNavigatorKey,
                     pageBuilder: (c, s) => _push(s, const SettingsScreen()),
+                    // Developer screens exist only in dev builds.
                     routes: [
+                      if (AppConfig.devTools)
                       GoRoute(
                         path: 'benchmark',
                         name: R.benchmark,

@@ -1,9 +1,18 @@
+import 'package:flutter/foundation.dart';
+
 /// App-wide constants and build-time configuration.
 ///
 /// Values that differ per build (cloud URL) come from `--dart-define`, so no
 /// secret or endpoint is hard-coded. The app never holds an AI provider key.
 class AppConfig {
   AppConfig._();
+
+  /// Developer tools (the hidden benchmark screen, widget gallery, fake
+  /// transcriber, "reset test billing"): debug builds and builds made with
+  /// `--dart-define=LN_DEV=true` only. Never in a TestFlight / App Store
+  /// build (2.3.1 hidden features; the reset would bypass the paywall).
+  static const bool devTools =
+      kDebugMode || bool.fromEnvironment('LN_DEV');
 
   static const String appName = 'Longnote';
 
