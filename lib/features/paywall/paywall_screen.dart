@@ -63,7 +63,26 @@ class _PaywallScreenState extends State<PaywallScreen> {
   /// Not during our own purchase: [_buy] decides what comes next.
   void _onEntitlement() {
     if (!mounted || _buying || _closed) return;
-    if (_billing.entitlement.value.isActive) _close(true);
+    // A plan found while open is, for the user, a restore.
+    if (_billing.entitlement.value.isActive) _close(true, how: 'restored');
+  }
+
+  /// Logs a paywall event with this paywall's placement (never blocks).
+  void _log(String name, [Map<String, Object?> props = const {}]) {
+    _s.analytics.log(name, props: {...props, 'placement': widget.placement});
+  }
+
+  void _select(Plan p) {
+    if (p != _selected) {
+      _log(AnalyticsEvent.paywallPlanSelected, {'plan': p.id});
+    }
+    setState(() => _selected = p);
+  }
+
+  void _openLegal(String link, String url) {
+    _s.analytics.log(AnalyticsEvent.legalLinkOpened,
+        props: {'link': link, 'from': 'paywall'});
+    openOrExplain(context, url);
   }
 
   @override
@@ -102,16 +121,22 @@ class _PaywallScreenState extends State<PaywallScreen> {
   Future<void> _buy() async {
     final plan = _selected;
     final s = _s;
+    _log(AnalyticsEvent.paywallPurchaseTapped, {'plan': plan.id});
     setState(() => _busy = true);
     _buying = true;
     final res = await s.billing.purchase(plan);
     if (!res.success) _buying = false;
+    s.analytics.log(AnalyticsEvent.paywallPurchaseResult, props: {
+      'plan': plan.id,
+      'placement': widget.placement,
+      'result': res.outcome.name,
+    });
     if (!mounted) return;
     setState(() => _busy = false);
     // A plan arrived during the call (e.g. Ask to Buy approved while the
     // sheet was open): the listener skipped it, so close here.
     if (!res.success && s.billing.entitlement.value.isActive) {
-      _close(true);
+      _close(true, how: 'purchased');
       return;
     }
     if (!res.success) {
@@ -129,7 +154,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
       // A2: the reminder permission is asked there, with its reason.
       await context.pushNamed(R.trialStarted);
     }
-    if (mounted) _close(true);
+    if (mounted) _close(true, how: 'purchased');
   }
 
   Future<void> _restore() async {
@@ -137,7 +162,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
     final r = await s.restorePurchases('paywall');
     if (!mounted) return;
     if (s.billing.entitlement.value.isActive) {
-      _close(true);
+      _close(true, how: 'restored');
     } else {
       showNote(
           context,
@@ -148,15 +173,18 @@ class _PaywallScreenState extends State<PaywallScreen> {
   }
 
   void _showMore() {
+    _log(AnalyticsEvent.paywallMoreOpened);
     final ctx = _moreKey.currentContext;
     if (ctx == null) return;
     Scrollable.ensureVisible(ctx,
         duration: const Duration(milliseconds: 450), curve: Curves.easeOutCubic);
   }
 
-  void _close(bool subscribed) {
+  /// [how]: close_button / purchased / restored (for paywall_closed).
+  void _close(bool subscribed, {required String how}) {
     if (_closed) return;
     _closed = true;
+    _log(AnalyticsEvent.paywallClosed, {'how': how});
     final done = widget.onDone;
     if (done != null) {
       done(context, subscribed);
@@ -165,8 +193,19 @@ class _PaywallScreenState extends State<PaywallScreen> {
     }
   }
 
+  // A pop we did not start (Android back, a swipe): paywall_closed
+  // system_back. Our own closes set [_closed] first.
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => PopScope<Object?>(
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop || _closed) return;
+          _closed = true;
+          _log(AnalyticsEvent.paywallClosed, {'how': 'system_back'});
+        },
+        child: _body(context),
+      );
+
+  Widget _body(BuildContext context) {
     final trial = context.read<AppServices>().billing.trialEligible;
     final now = screenNow();
     final plan = _selected;
@@ -193,7 +232,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
                         iconSize: 16,
                         color: LnColors.ink2,
                         semanticLabel: 'Close',
-                        onPressed: () => _close(false),
+                        onPressed: () => _close(false, how: 'close_button'),
                       ),
                     ]),
                     const SizedBox(height: 6),
@@ -245,8 +284,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
                                             ? null
                                             : 'Save ${yearlySavingPercent(yearly, monthly)}%',
                                         selected: plan == yearly,
-                                        onTap: () =>
-                                            setState(() => _selected = yearly),
+                                        onTap: () => _select(yearly),
                                       ),
                                     ),
                                   if (yearly != null && monthly != null)
@@ -258,8 +296,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
                                         price: monthly.priceLabel,
                                         sub: 'per month',
                                         selected: plan == monthly,
-                                        onTap: () =>
-                                            setState(() => _selected = monthly),
+                                        onTap: () => _select(monthly),
                                       ),
                                     ),
                                 ]),
@@ -309,11 +346,10 @@ class _PaywallScreenState extends State<PaywallScreen> {
               Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                 _Link('Restore purchase', _restore),
                 const SizedBox(width: 18),
-                _Link('Terms',
-                    () => openOrExplain(context, AppLinks.terms)),
+                _Link('Terms', () => _openLegal('terms', AppLinks.terms)),
                 const SizedBox(width: 18),
                 _Link('Privacy',
-                    () => openOrExplain(context, AppLinks.privacyPolicy)),
+                    () => _openLegal('privacy', AppLinks.privacyPolicy)),
               ]),
             ]),
           ),

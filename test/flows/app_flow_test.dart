@@ -145,11 +145,43 @@ void main() {
     expect(sink.names.where((n) => n == AnalyticsEvent.onboardingStep).length,
         10);
     expect(fb.calls.where((c) => c.contains('step')), isEmpty);
+    // Every screen and action, in order (screen_viewed on each route change,
+    // including the pop back to the paywall under A2).
     expect(sink.names.where((n) => n != AnalyticsEvent.onboardingStep), [
+      AnalyticsEvent.screenViewed,
+      AnalyticsEvent.micPermission,
+      AnalyticsEvent.summaryStyleChanged,
       AnalyticsEvent.onboardingCompleted,
+      AnalyticsEvent.screenViewed,
       AnalyticsEvent.paywallViewed,
+      AnalyticsEvent.paywallPurchaseTapped,
+      AnalyticsEvent.paywallPurchaseResult,
       AnalyticsEvent.trialStarted,
+      AnalyticsEvent.screenViewed,
+      AnalyticsEvent.notificationPermission,
+      AnalyticsEvent.screenViewed,
+      AnalyticsEvent.paywallClosed,
+      AnalyticsEvent.screenViewed,
     ]);
+    expect(
+        [
+          for (final (n, p) in sink.events)
+            if (n == AnalyticsEvent.screenViewed) p['screen']
+        ],
+        ['onboarding', 'paywall', 'trialStarted', 'paywall', 'notes']);
+    expect(sink.propsOf(AnalyticsEvent.micPermission),
+        {'result': 'allowed', 'from': 'onboarding'});
+    expect(sink.propsOf(AnalyticsEvent.summaryStyleChanged),
+        {'style': 'lecture', 'from': 'onboarding'});
+    expect(sink.propsOf(AnalyticsEvent.paywallPurchaseResult), {
+      'plan': annualPlan.id,
+      'placement': 'first_run',
+      'result': 'purchased',
+    });
+    expect(sink.propsOf(AnalyticsEvent.notificationPermission),
+        {'result': 'allowed', 'from': 'trial_started'});
+    expect(sink.propsOf(AnalyticsEvent.paywallClosed),
+        {'how': 'purchased', 'placement': 'first_run'});
     expect(sink.propsOf(AnalyticsEvent.onboardingCompleted),
         {
           'mic': 'allowed',

@@ -132,11 +132,25 @@ class Entitlement {
 /// or Apple's sign-in was dismissed - NOT "you have no purchase".
 enum RestoreResult { restored, none, failed }
 
+/// How a purchase attempt ended, for analytics (`paywall_purchase_result`).
+enum PurchaseOutcome { purchased, cancelled, pending, failed }
+
 class PurchaseResult {
-  const PurchaseResult({required this.success, this.startedTrial = false, this.error});
+  const PurchaseResult(
+      {required this.success,
+      this.startedTrial = false,
+      this.error,
+      PurchaseOutcome? outcome})
+      : _outcome = outcome;
   final bool success;
   final bool startedTrial;
   final String? error;
+  final PurchaseOutcome? _outcome;
+
+  /// [PurchaseOutcome.purchased] on success, else what the store said
+  /// (cancelled / pending), else failed.
+  PurchaseOutcome get outcome =>
+      _outcome ?? (success ? PurchaseOutcome.purchased : PurchaseOutcome.failed);
 }
 
 /// Billing behind an interface. The app uses [StoreKitBillingService]

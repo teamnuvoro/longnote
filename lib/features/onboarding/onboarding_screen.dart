@@ -79,7 +79,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     await s.kv.set(OnboardingScreen.kvLength, _length?.id);
     // The first answer picks the default summary style ("ready" says so).
     final style = _style;
-    if (style != null) await s.settings.setDefaultStyle(style);
+    if (style != null) {
+      await s.settings.setDefaultStyle(style);
+      s.analytics.log(AnalyticsEvent.summaryStyleChanged,
+          props: {'style': style.id, 'from': 'onboarding'});
+    }
     // A fresh install can learn about an existing plan a few seconds late
     // (StoreKit syncs after install): ask again before showing the paywall.
     if (!s.billing.entitlement.value.isActive) {
@@ -131,6 +135,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       _asking = false;
     }
     if (!mounted) return;
+    _s.analytics.log(AnalyticsEvent.micPermission,
+        props: {'result': ok ? 'allowed' : 'denied', 'from': 'onboarding'});
     if (ok) {
       await _finish();
     } else {

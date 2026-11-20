@@ -291,10 +291,13 @@ class StoreKitBillingService implements BillingService {
               success: true, startedTrial: e.status == EntitlementStatus.trial);
         case 'cancelled':
           return const PurchaseResult(
-              success: false, error: 'Purchase cancelled. Nothing was charged.');
+              success: false,
+              outcome: PurchaseOutcome.cancelled,
+              error: 'Purchase cancelled. Nothing was charged.');
         case 'pending':
           return const PurchaseResult(
               success: false,
+              outcome: PurchaseOutcome.pending,
               error: 'Waiting for approval. Longnote unlocks by itself once '
                   'the purchase is approved.');
         default:

@@ -90,6 +90,7 @@ class _NoteScreenState extends State<NoteScreen> {
           () => NotePlayback(
                 d.playbackPaths(_model.repo.storage),
                 d.playbackDurations,
+                onStarted: _playbackStarted(_s, widget.id),
               ))
         ..addListener(_onPlayback);
     }
@@ -552,3 +553,7 @@ class _LaterStepFailedBanner extends StatelessWidget {
         ]),
       );
 }
+
+/// playback_started for note [id] (once per opened playback).
+void Function() _playbackStarted(AppServices s, String id) =>
+    () => s.analytics.log(AnalyticsEvent.playbackStarted, recordingId: id);

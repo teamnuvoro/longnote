@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../app/routes.dart';
 import '../../app/nav.dart';
 import '../../app_services.dart';
+import '../../core/analytics/analytics.dart';
 import '../../core/cloud/api_error.dart';
 import '../../core/models/recording.dart';
 import '../../core/notes/chat.dart';
@@ -174,11 +175,18 @@ class _AskViewState extends State<AskView> {
   bool get _canSend =>
       _note != null && askable(_note!) && _pending == null;
 
-  Future<void> _send(String text, {bool retry = false}) async {
+  /// [from]: composer / starter / follow_up / retry (for ask_sent; the
+  /// question itself never goes into analytics).
+  Future<void> _send(String text,
+      {bool retry = false, String from = 'composer'}) async {
     final q = text.trim();
     final note = _note;
     if (q.isEmpty || note == null || !_canSend) return;
     final ask = _s.ask;
+    _s.analytics.log(AnalyticsEvent.askSent, recordingId: note.id, props: {
+      'from': from,
+      'screen': widget.onBack == null ? 'ask_tab' : 'note',
+    });
     _input.clear();
     setState(() {
       _pending = q;
@@ -200,7 +208,11 @@ class _AskViewState extends State<AskView> {
         await ask.ask(note.id, q);
       }
       _error = null;
+      _s.analytics.log(AnalyticsEvent.askAnswered,
+          recordingId: note.id, props: {'result': 'ok'});
     } catch (e) {
+      _s.analytics.log(AnalyticsEvent.askAnswered,
+          recordingId: note.id, props: {'result': 'failed'});
       _errorQ = q;
       _error = ask == null
           ? 'Ask needs our server, which is not set up in this build.'
@@ -272,7 +284,8 @@ class _AskViewState extends State<AskView> {
         for (final q in askStarters)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
-            child: _Starter(text: q, onTap: ready ? () => _send(q) : null),
+            child: _Starter(
+                text: q, onTap: ready ? () => _send(q, from: 'starter') : null),
           ),
         const SizedBox(height: 12),
       ],
@@ -291,7 +304,8 @@ class _AskViewState extends State<AskView> {
         items.add(const SizedBox(height: 14));
         if (last && _error != null && _errorQ == m.text && _pending == null) {
           items.add(_ErrorCard(
-              text: _error!, onRetry: () => _send(m.text, retry: true)));
+              text: _error!,
+              onRetry: () => _send(m.text, retry: true, from: 'retry')));
           items.add(const SizedBox(height: 14));
         }
       } else {
@@ -311,7 +325,9 @@ class _AskViewState extends State<AskView> {
         if (last && _pending == null) {
           items.add(Wrap(spacing: 8, runSpacing: 8, children: [
             for (final f in followUpsFor(q ?? '', found: m.found ?? true))
-              LnPillChip(label: f, onTap: _canSend ? () => _send(f) : null),
+              LnPillChip(
+                  label: f,
+                  onTap: _canSend ? () => _send(f, from: 'follow_up') : null),
           ]));
           items.add(const SizedBox(height: 12));
         }
@@ -331,7 +347,9 @@ class _AskViewState extends State<AskView> {
       }
       items.add(_ErrorCard(
           text: _error!,
-          onRetry: _errorQ == null ? null : () => _send(_errorQ!)));
+          onRetry: _errorQ == null
+              ? null
+              : () => _send(_errorQ!, from: 'retry')));
     }
     return Column(key: const ValueKey('ask-chat'), children: [
       Padding(

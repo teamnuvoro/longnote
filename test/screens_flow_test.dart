@@ -416,9 +416,13 @@ void main() {
       await t.tap(find.text('Suggest a feature'));
       await t.pump();
       expect(env.opened.last.toString(), contains('feature%20idea'));
+      // Rate opens the App Store's review page, not Apple's in-app prompt
+      // (never shown in TestFlight, rate-limited in production).
       await t.tap(find.text('Rate Longnote'));
       await t.pump();
-      expect(env.reviews, 1);
+      expect(env.reviews, 0);
+      expect(env.opened.last.toString(),
+          'https://apps.apple.com/app/id6835017154?action=write-review');
       await t.tap(find.text('Share with a friend'));
       await t.pump();
       expect(env.shared.single, contains('Longnote'));

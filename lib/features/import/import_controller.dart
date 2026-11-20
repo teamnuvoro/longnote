@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
 import '../../app_services.dart';
+import '../../core/analytics/analytics.dart';
 import '../../core/models/recording.dart';
 import '../common/screen_clock.dart';
 
@@ -27,6 +28,10 @@ class PickedMedia {
   /// Filled in by [ImportController.pick] (null while probing / unknown).
   int? durationMs;
   bool probed = false;
+
+  /// audio / video, for analytics (from the extension, never the name).
+  String get kind =>
+      const {'mp4', 'mov', 'm4v', '3gp'}.contains(extension) ? 'video' : 'audio';
 
   String get extension {
     final e = p.extension(name).replaceFirst('.', '').toLowerCase();
@@ -160,27 +165,21 @@ class ImportController extends ChangeNotifier {
 
     final dir = Directory(s.repo.storage.dirFor(id));
     final fileName = 'import.${m.extension}';
+    // Codes only: never the file's name or title.
+    final kind = {'kind': m.kind, 'format': m.extension};
+    unawaited(s.analytics.log(AnalyticsEvent.importStarted, props: kind));
     final part = File(p.join(dir.path, '$fileName.part'));
     try {
       await dir.create(recursive: true);
       await _copy(File(m.path), part, job);
-      if (job.cancelled) {
-        await _cleanup(dir);
-        jobs.remove(job);
-        notifyListeners();
-        return null;
-      }
+      if (job.cancelled) return _cancelled(job, dir, kind);
       final dest = await part.rename(p.join(dir.path, fileName));
       final ms = m.durationMs ?? await probe.durationMs(dest.path);
-      if (job.cancelled) {
-        await _cleanup(dir);
-        jobs.remove(job);
-        notifyListeners();
-        return null;
-      }
+      if (job.cancelled) return _cancelled(job, dir, kind);
       if (ms == null || ms <= 0) {
         await _cleanup(dir);
-        return _fail(job, 'We could not find any sound in this file.');
+        return _fail(job, 'We could not find any sound in this file.',
+            code: 'no_sound', kind: kind);
       }
       final now = screenNow();
       await s.repo.insert(Recording(
@@ -199,6 +198,8 @@ class ImportController extends ChangeNotifier {
       ));
       jobs.remove(job);
       notifyListeners();
+      unawaited(s.analytics.log(AnalyticsEvent.importCompleted,
+          recordingId: id, props: {...kind, 'duration_s': ms ~/ 1000}));
       await s.jobs.enqueue(id);
       await s.noteQueuedByUser();
       return id;
@@ -209,14 +210,31 @@ class ImportController extends ChangeNotifier {
           job,
           full
               ? 'Your phone is out of space. Free some space and import again.'
-              : 'We could not copy this file. Try again.');
+              : 'We could not copy this file. Try again.',
+          code: full ? 'disk_full' : 'copy_failed',
+          kind: kind);
     } catch (_) {
       await _cleanup(dir);
-      return _fail(job, 'We could not copy this file. Try again.');
+      return _fail(job, 'We could not copy this file. Try again.',
+          code: 'failed', kind: kind);
     }
   }
 
-  String? _fail(ImportJob job, String why) {
+  /// The user stopped the copy (F3 "x"): import_failed with `cancelled`.
+  Future<String?> _cancelled(
+      ImportJob job, Directory dir, Map<String, Object?> kind) async {
+    await _cleanup(dir);
+    jobs.remove(job);
+    notifyListeners();
+    unawaited(s.analytics.log(AnalyticsEvent.importFailed,
+        props: {...kind, 'error': 'cancelled'}));
+    return null;
+  }
+
+  String? _fail(ImportJob job, String why,
+      {required String code, required Map<String, Object?> kind}) {
+    unawaited(s.analytics
+        .log(AnalyticsEvent.importFailed, props: {...kind, 'error': code}));
     job
       ..state = ImportState.failed
       ..error = why;

@@ -69,8 +69,20 @@ class JustAudioEngine implements AudioEngine {
 /// Plays a note's 5-minute WAV parts as one recording, with one global
 /// position (ms) for the mini player, the full player and transcript taps.
 class NotePlayback extends ChangeNotifier {
-  NotePlayback(this.paths, this.partDurationsMs, {AudioEngine? engine})
+  NotePlayback(this.paths, this.partDurationsMs,
+      {AudioEngine? engine, this.onStarted})
       : _engine = engine ?? engineFactory();
+
+  /// Called once, the first time audio actually plays (playback_started).
+  final void Function()? onStarted;
+  bool _started = false;
+
+  Future<void> _play() async {
+    await _engine.play();
+    if (_started) return;
+    _started = true;
+    onStarted?.call();
+  }
 
   /// Swapped in widget tests.
   static AudioEngine Function() engineFactory = JustAudioEngine.new;
@@ -147,7 +159,7 @@ class NotePlayback extends ChangeNotifier {
       await _engine.pause();
     } else {
       if (_engine.completed) await _seekLoaded(0);
-      await _engine.play();
+      await _play();
     }
     _notify();
   }
@@ -186,7 +198,7 @@ class NotePlayback extends ChangeNotifier {
   Future<void> playFrom(int globalMs) async {
     _clipEndMs = null;
     await seekTo(globalMs);
-    if (_loaded && !_engine.playing) await _engine.play();
+    if (_loaded && !_engine.playing) await _play();
     _notify();
   }
 

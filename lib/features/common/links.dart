@@ -18,6 +18,13 @@ abstract final class AppLinks {
       ? website
       : 'https://apps.apple.com/app/id$appStoreId';
 
+  /// The App Store's "Write a Review" page. The Rate button opens it
+  /// directly: Apple's in-app prompt never shows in TestFlight and at most
+  /// 3 times a year in production, so a button tied to it often does nothing.
+  static String get appStoreReviewUrl => appStoreId.isEmpty
+      ? website
+      : 'https://apps.apple.com/app/id$appStoreId?action=write-review';
+
   /// Apple's own subscriptions page (cancel / change plan).
   static const manageSubscriptions =
       'itms-apps://apps.apple.com/account/subscriptions';

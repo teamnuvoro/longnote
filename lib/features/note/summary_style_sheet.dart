@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../app_services.dart';
+import '../../core/analytics/analytics.dart';
 import '../../core/models/recording.dart';
 import '../../core/summary/summary_style.dart';
 import '../../ui/widgets.dart';
@@ -66,6 +67,10 @@ class _SummaryStyleSheetState extends State<SummaryStyleSheet> {
     final id = widget.id;
     if (id == null) {
       await _s.settings.setDefaultStyle(style);
+      _s.analytics.log(AnalyticsEvent.summaryStyleChanged,
+          props: {'style': style.id, 'from': 'settings'});
+      _s.analytics.log(AnalyticsEvent.settingChanged,
+          props: {'setting': 'default_style', 'value': style.id});
       if (mounted) context.pop(true);
       return;
     }
@@ -77,6 +82,13 @@ class _SummaryStyleSheetState extends State<SummaryStyleSheet> {
       clear: own.isEmpty ? const ['custom_instructions'] : const [],
     );
     if (_asDefault) await _s.settings.setDefaultStyle(style);
+    // `custom`: own instructions were given (their text is never sent).
+    _s.analytics.log(AnalyticsEvent.summaryStyleChanged, recordingId: id, props: {
+      'style': style.id,
+      'from': 'note',
+      'custom': own.isNotEmpty,
+      'as_default': _asDefault,
+    });
     if (mounted) context.pop(true);
     await _resummarize(id, messenger);
   }

@@ -163,9 +163,21 @@ class AppServices {
   }
 
   /// Settings > Privacy > "Share usage analytics".
+  /// The last event before sharing stops is `share_analytics_off`; the
+  /// first after it starts again is `setting_changed`.
   Future<void> setShareAnalytics(bool share) async {
+    if (!share) {
+      // Sent while sharing is still on (a stuck SDK must not hold the switch).
+      await analytics
+          .log(AnalyticsEvent.shareAnalyticsOff)
+          .timeout(const Duration(seconds: 2), onTimeout: () {});
+    }
     await settings.setShareAnalytics(share);
     await analytics.setRemoteEnabled(share);
+    if (share) {
+      await analytics.log(AnalyticsEvent.settingChanged,
+          props: {'setting': 'share_analytics', 'value': 'on'});
+    }
     _profileChanged();
   }
 
@@ -225,12 +237,18 @@ class AppServices {
   Future<bool> answerNoteReadyAsk({required bool allow}) async {
     noteReadyAskDue.value = false;
     await kv.setBool(kvNotificationsAsked, true);
-    if (!allow) return false;
-    try {
-      return await reminderScheduler.requestPermission();
-    } catch (_) {
-      return false;
+    var granted = false;
+    if (allow) {
+      try {
+        granted = await reminderScheduler.requestPermission();
+      } catch (_) {}
     }
+    // "Not now" = skipped (iOS's prompt never shown).
+    unawaited(analytics.log(AnalyticsEvent.notificationPermission, props: {
+      'result': !allow ? 'skipped' : (granted ? 'allowed' : 'denied'),
+      'from': 'note_ready',
+    }));
+    return granted;
   }
 
   WhisperTranscriber get whisper {
@@ -568,6 +586,8 @@ class AppServices {
   Future<void> discardRecording() async {
     final id = recorder.current?.id;
     if (id == null) return;
+    await analytics.log(AnalyticsEvent.recordingDiscarded,
+        recordingId: id, props: {'duration_s': recorder.elapsed.inSeconds});
     _discarding = id;
     try {
       await recorder.stop(reason: 'discard');

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../app_services.dart';
+import '../../core/analytics/analytics.dart';
 import '../../core/notes/languages.dart';
 import '../../ui/widgets.dart';
 import '../common/widgets.dart';
@@ -105,14 +106,29 @@ class _AudioLanguageScreenState extends State<AudioLanguageScreen> {
     if (picked != null) {
       picked(value);
     } else {
-      final st = context.read<AppServices>().settings;
+      final s = context.read<AppServices>();
+      final st = s.settings;
       if (widget.summary) {
         await st.setSummaryLanguage(value);
       } else {
         await st.setAudioLanguage(value);
       }
+      s.analytics.log(AnalyticsEvent.settingChanged, props: {
+        'setting': widget.summary ? 'summary_language' : 'audio_language',
+        'value': _languageCode(value),
+      });
     }
     if (mounted) Navigator.of(context).maybePop(value);
+  }
+
+  /// The summary setting stores a language name ("Spanish") or `same`;
+  /// analytics gets the language code.
+  String _languageCode(String value) {
+    if (!widget.summary || value == 'same') return value;
+    for (final l in audioLanguages) {
+      if (l.name == value) return l.code;
+    }
+    return 'other';
   }
 
   List<_Choice> get _results {

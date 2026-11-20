@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../../app/routes.dart';
 import '../../app/nav.dart';
 import '../../app_services.dart';
+import '../../core/analytics/analytics.dart';
 import '../../core/notes/search.dart';
 import '../../ui/widgets.dart';
 import '../note/kit.dart';
@@ -41,6 +42,11 @@ class _SearchScreenState extends State<SearchScreen> {
   int _seq = 0;
   bool _searched = false;
 
+  /// Longest query searched in this visit (a length only; the text never
+  /// leaves this screen) and whether a result was opened.
+  int _longest = 0;
+  bool _opened = false;
+
   @override
   void initState() {
     super.initState();
@@ -49,6 +55,17 @@ class _SearchScreenState extends State<SearchScreen> {
 
   @override
   void dispose() {
+    // search_used once per visit, not per keystroke.
+    if (_longest > 0) {
+      _s.analytics.log(AnalyticsEvent.searchUsed, props: {
+        'chars_bucket': _longest <= 3
+            ? '1-3'
+            : _longest <= 10
+                ? '4-10'
+                : '11+',
+        'opened': _opened,
+      });
+    }
     _debounce?.cancel();
     _ctl.dispose();
     super.dispose();
@@ -68,6 +85,8 @@ class _SearchScreenState extends State<SearchScreen> {
       });
       return;
     }
+    final chars = q.trim().length;
+    if (chars > _longest) _longest = chars;
     final results = await _s.search.search(q);
     final durations = <String, int>{};
     final names = <String, Map<String, String>>{};
@@ -95,6 +114,7 @@ class _SearchScreenState extends State<SearchScreen> {
       };
 
   void _openHit(_Hit h) {
+    _opened = true;
     final id = h.hit.recordingId;
     if (h.hit.kind == SearchHitKind.transcript && h.hit.startMs != null) {
       context.pushOnce(R.note,

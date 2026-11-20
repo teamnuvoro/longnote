@@ -37,6 +37,72 @@ class AnalyticsEvent {
   /// The App Tracking Transparency answer (only when the prompt was shown).
   static const attResult = 'att_result';
 
+  // ---- Screens and actions (Amplitude only; no note content, ever) ------
+
+  /// Every route change (tab switch, push, sheet, pop back): `screen` = the
+  /// route name (app/routes.dart). ScreenViewTracker logs it.
+  static const screenViewed = 'screen_viewed';
+
+  // Paywall. `plan` = the store product id, `placement` as paywall_viewed.
+  static const paywallPlanSelected = 'paywall_plan_selected';
+  static const paywallPurchaseTapped = 'paywall_purchase_tapped';
+
+  /// `result`: purchased / cancelled / pending / failed.
+  static const paywallPurchaseResult = 'paywall_purchase_result';
+
+  /// `how`: close_button / purchased / restored / system_back.
+  static const paywallClosed = 'paywall_closed';
+
+  /// "See everything you get".
+  static const paywallMoreOpened = 'paywall_more_opened';
+
+  /// `result`: allowed / denied, `from`: where it was asked.
+  static const micPermission = 'mic_permission';
+
+  /// `result`: allowed / denied / skipped (our own ask, before iOS's).
+  static const notificationPermission = 'notification_permission';
+
+  static const recordingPaused = 'recording_paused';
+  static const recordingResumed = 'recording_resumed';
+
+  /// C4 "Discard recording": `duration_s`.
+  static const recordingDiscarded = 'recording_discarded';
+
+  /// Once per search session: `chars_bucket` 1-3 / 4-10 / 11+ (never the
+  /// search text).
+  static const searchUsed = 'search_used';
+  static const noteRenamed = 'note_renamed';
+  static const noteDeleted = 'note_deleted';
+  static const speakerRenamed = 'speaker_renamed';
+
+  /// `style`: the style id, `from`: note / settings / onboarding.
+  static const summaryStyleChanged = 'summary_style_changed';
+  static const playbackStarted = 'playback_started';
+
+  /// Ask: `from`; then `result` ok / failed. Never the question or answer.
+  static const askSent = 'ask_sent';
+  static const askAnswered = 'ask_answered';
+
+  /// Import: `kind` audio / video (by extension, never the file name).
+  static const importStarted = 'import_started';
+  static const importCompleted = 'import_completed';
+
+  /// `error`: a code.
+  static const importFailed = 'import_failed';
+
+  /// Settings: `setting` + `value` (codes: a language code, a mode, a style).
+  static const settingChanged = 'setting_changed';
+
+  /// Logged just BEFORE the switch turns remote analytics off.
+  static const shareAnalyticsOff = 'share_analytics_off';
+  static const rateTapped = 'rate_tapped';
+  static const supportTapped = 'support_tapped';
+  static const manageSubscriptionTapped = 'manage_subscription_tapped';
+
+  /// `link`: terms / privacy, `from`: paywall / settings / plan.
+  static const legalLinkOpened = 'legal_link_opened';
+  static const deleteDataConfirmed = 'delete_data_confirmed';
+
   static const all = [
     recordingStarted,
     recordingCompleted,
@@ -56,6 +122,35 @@ class AnalyticsEvent {
     onboardingStep,
     paywallFaqOpened,
     attResult,
+    screenViewed,
+    paywallPlanSelected,
+    paywallPurchaseTapped,
+    paywallPurchaseResult,
+    paywallClosed,
+    paywallMoreOpened,
+    micPermission,
+    notificationPermission,
+    recordingPaused,
+    recordingResumed,
+    recordingDiscarded,
+    searchUsed,
+    noteRenamed,
+    noteDeleted,
+    speakerRenamed,
+    summaryStyleChanged,
+    playbackStarted,
+    askSent,
+    askAnswered,
+    importStarted,
+    importCompleted,
+    importFailed,
+    settingChanged,
+    shareAnalyticsOff,
+    rateTapped,
+    supportTapped,
+    manageSubscriptionTapped,
+    legalLinkOpened,
+    deleteDataConfirmed,
   ];
 }
 

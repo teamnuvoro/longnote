@@ -10,6 +10,7 @@ import 'package:provider/provider.dart';
 
 import 'app/router.dart';
 import 'app/routes.dart';
+import 'app/screen_tracker.dart';
 import 'app_services.dart';
 import 'core/audio/pcm_source.dart';
 import 'core/billing/trial_reminder.dart';
@@ -145,14 +146,45 @@ class _StartupFailedAppState extends State<StartupFailedApp> {
       );
 }
 
-class LongnoteApp extends StatelessWidget {
+class LongnoteApp extends StatefulWidget {
   const LongnoteApp({super.key, required this.services, required this.router});
 
   final AppServices services;
   final GoRouter router;
 
   @override
+  State<LongnoteApp> createState() => _LongnoteAppState();
+}
+
+class _LongnoteAppState extends State<LongnoteApp> {
+  /// screen_viewed for every route change (docs/ANALYTICS.md).
+  late ScreenViewTracker _screens;
+
+  @override
+  void initState() {
+    super.initState();
+    // Before the first build, so the first screen is logged too.
+    _screens = ScreenViewTracker(widget.router, widget.services.analytics);
+  }
+
+  @override
+  void didUpdateWidget(LongnoteApp old) {
+    super.didUpdateWidget(old);
+    if (old.router != widget.router || old.services != widget.services) {
+      _screens.dispose();
+      _screens = ScreenViewTracker(widget.router, widget.services.analytics);
+    }
+  }
+
+  @override
+  void dispose() {
+    _screens.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final services = widget.services;
     return MultiProvider(
       providers: [
         Provider<AppServices>.value(value: services),
@@ -166,7 +198,7 @@ class LongnoteApp extends StatelessWidget {
         // the recording route applies lnRecordingTheme() itself.
         theme: lnLightTheme(),
         themeMode: ThemeMode.light,
-        routerConfig: router,
+        routerConfig: widget.router,
       ),
     );
   }

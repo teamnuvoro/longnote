@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../../app/routes.dart';
 import '../../app/nav.dart';
 import '../../app_services.dart';
+import '../../core/analytics/analytics.dart';
 import '../../core/notes/languages.dart';
 import '../../core/recording/recording_controller.dart';
 import '../../core/recording/recording_repository.dart';
@@ -141,9 +142,16 @@ class _RecordingScreenState extends State<RecordingScreen> {
       });
       // Capture is running (only a note setting failed): no error toast.
       if (live) return;
+      final noMic = e.toString().contains('permission');
+      // Start asks iOS for the mic; only a "no" is news (an allowed mic
+      // shows up as recording_started).
+      if (noMic) {
+        _s.analytics.log(AnalyticsEvent.micPermission,
+            props: {'result': 'denied', 'from': 'record'});
+      }
       showToast(
         context,
-        e.toString().contains('permission')
+        noMic
             ? 'Microphone is off. Turn it on in iPhone Settings › Longnote.'
             : 'Could not start recording. Please try again.',
       );
@@ -219,6 +227,8 @@ class _RecordingScreenState extends State<RecordingScreen> {
     if (name == null) return;
     rec.title = name;
     await _repo.rename(rec.id, name);
+    _s.analytics.log(AnalyticsEvent.noteRenamed,
+        recordingId: rec.id, props: {'from': 'record'});
   }
 
   Future<void> _mark(RecordingController c) async {

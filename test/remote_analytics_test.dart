@@ -148,6 +148,9 @@ void main() {
       await s.setShareAnalytics(false);
       expect(await s.settings.shareAnalytics(), isFalse, reason: 'persisted');
       expect(sink.enabled, isFalse);
+      // The last event out says sharing was turned off; then nothing.
+      expect(sink.names, [AnalyticsEvent.shareAnalyticsOff]);
+      sink.events.clear();
       await a.log(AnalyticsEvent.onboardingCompleted);
       await a.log(AnalyticsEvent.subscriptionPurchased,
           props: {'price': 59.99, 'currency': 'USD'});
@@ -160,7 +163,10 @@ void main() {
 
       await s.setShareAnalytics(true);
       await a.log(AnalyticsEvent.onboardingCompleted);
-      expect(sink.names, [AnalyticsEvent.onboardingCompleted]);
+      expect(sink.names,
+          [AnalyticsEvent.settingChanged, AnalyticsEvent.onboardingCompleted]);
+      expect(sink.events.first.$2,
+          {'setting': 'share_analytics', 'value': 'on'});
       expect(fb.calls, contains('CompleteRegistration'));
     });
 

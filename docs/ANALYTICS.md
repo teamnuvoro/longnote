@@ -45,6 +45,36 @@ Added 18 Nov 2026 (branch v1-build). Code: `lib/core/analytics/`.
 | restore_result | from, result (`restored`/`none`/`failed`), active | yes | yes | - |
 | onboarding_completed | mic (`allowed`/`denied`) | yes | yes | **CompleteRegistration** |
 | att_result | status (`authorized`/`denied`/`restricted`/`notSupported`) | yes | yes | - |
+| onboarding_step | step, index, dir (`forward`/`back`) | yes | yes | - |
+| paywall_faq_opened | faq (question id) | yes | yes | - |
+| screen_viewed | screen (route name, `R.*` in app/routes.dart) on every route change: tab switch, push, sheet, pop back; never twice in a row (`lib/app/screen_tracker.dart`, attached in `LongnoteApp`) | yes | yes | - |
+| paywall_plan_selected | plan (store product id), placement (only when the plan changes) | yes | yes | - |
+| paywall_purchase_tapped | plan, placement | yes | yes | - |
+| paywall_purchase_result | plan, placement, result (`purchased`/`cancelled`/`pending`/`failed`, from `PurchaseResult.outcome`) | yes | yes | - |
+| paywall_closed | placement, how (`close_button`/`purchased`/`restored`/`system_back`; a plan that shows up while open = `restored`) | yes | yes | - |
+| paywall_more_opened | placement ("See everything you get") | yes | yes | - |
+| mic_permission | result (`allowed`/`denied`), from (`onboarding`; `record` = Start refused for no mic, logged only on `denied`) | yes | yes | - |
+| notification_permission | result (`allowed`/`denied`/`skipped` = our own ask declined, iOS never asked), from (`trial_started`/`plan`/`note_ready`) | yes | yes | - |
+| recording_paused / recording_resumed | recording_id (user taps only) | yes | yes | - |
+| recording_discarded | recording_id, duration_s | yes | yes | - |
+| search_used | chars_bucket (`1-3`/`4-10`/`11+`, longest query of the visit), opened (a result was opened); once per visit to Search, never the text | yes | yes | - |
+| note_renamed | recording_id, from (`actions`/`record`) | yes | yes | - |
+| note_deleted | recording_id | yes | yes | - |
+| speaker_renamed | recording_id, count (never the names) | yes | yes | - |
+| summary_style_changed | style (id), from (`note`/`settings`/`onboarding`); note: recording_id, custom (own instructions given; never their text), as_default | yes | yes | - |
+| playback_started | recording_id (first play of a note's audio while it is open) | yes | yes | - |
+| ask_sent | recording_id, from (`composer`/`starter`/`follow_up`/`retry`), screen (`ask_tab`/`note`); never the question | yes | yes | - |
+| ask_answered | recording_id, result (`ok`/`failed`); never the answer | yes | yes | - |
+| import_started | kind (`audio`/`video` by extension), format (extension) | yes | yes | - |
+| import_completed | recording_id, kind, format, duration_s | yes | yes | - |
+| import_failed | kind, format, error (`no_sound`/`disk_full`/`copy_failed`/`failed`/`cancelled`) | yes | yes | - |
+| setting_changed | setting (`audio_language`/`summary_language`/`transcription_mode`/`default_style`/`speaker_labels`/`share_analytics`), value (a code: language code, `same`, mode, style id, `on`/`off`) | yes | yes | - |
+| share_analytics_off | (none) - logged BEFORE the switch stops the sinks, so it is the last event sent; turning it back on logs setting_changed share_analytics=on | yes | yes | - |
+| rate_tapped | (none) - the button opens the App Store review page (`AppLinks.appStoreReviewUrl`), not Apple's in-app prompt | yes | yes | - |
+| support_tapped | kind (`help`/`feature`) | yes | yes | - |
+| manage_subscription_tapped | from (`plan`: G4 "Cancel or change plan") | yes | yes | - |
+| legal_link_opened | link (`terms`/`privacy`), from (`paywall`/`settings`) | yes | yes | - |
+| delete_data_confirmed | reserved: not fired yet (there is no "Delete my data" screen; see below) | - | - | - |
 | (Amplitude autocapture) | session start/end, Application Installed / Updated / Opened / Backgrounded | - | yes | - |
 | (Meta) | app activation (`activateApp`, at launch and each return to the app; gives install attribution) | - | - | yes |
 

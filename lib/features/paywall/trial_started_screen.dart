@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../app_services.dart';
+import '../../core/analytics/analytics.dart';
 import '../../ui/widgets.dart';
 import '../common/dates.dart';
 import '../common/external.dart';
@@ -36,6 +37,10 @@ class _TrialStartedScreenState extends State<TrialStartedScreen> {
     } catch (_) {
       granted = false;
     }
+    s.analytics.log(AnalyticsEvent.notificationPermission, props: {
+      'result': granted ? 'allowed' : 'denied',
+      'from': 'trial_started',
+    });
     if (!mounted) return;
     setState(() => _busy = false);
     if (!granted) {
@@ -46,6 +51,13 @@ class _TrialStartedScreenState extends State<TrialStartedScreen> {
   }
 
   void _done() => Navigator.of(context).maybePop();
+
+  void _skip() {
+    context.read<AppServices>().analytics.log(
+        AnalyticsEvent.notificationPermission,
+        props: {'result': 'skipped', 'from': 'trial_started'});
+    _done();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -117,8 +129,7 @@ class _TrialStartedScreenState extends State<TrialStartedScreen> {
                 LnPrimaryButton(
                     label: 'Allow the reminder', busy: _busy, onPressed: _allow),
                 const SizedBox(height: 10),
-                LnSecondaryButton(
-                    label: 'Skip — I’ll remember', onPressed: _done),
+                LnSecondaryButton(label: 'Skip — I’ll remember', onPressed: _skip),
               ] else
                 LnPrimaryButton(label: 'Continue', onPressed: _done),
             ]),

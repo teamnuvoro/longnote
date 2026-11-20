@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../app/routes.dart';
 import '../../app/nav.dart';
 import '../../app_services.dart';
+import '../../core/analytics/analytics.dart';
 import '../../core/billing/billing_service.dart';
 import '../../core/config.dart';
 import '../../ui/widgets.dart';
@@ -21,6 +22,10 @@ class PlanScreen extends StatelessWidget {
   const PlanScreen({super.key});
 
   Future<void> _manage(BuildContext context) async {
+    context
+        .read<AppServices>()
+        .analytics
+        .log(AnalyticsEvent.manageSubscriptionTapped, props: {'from': 'plan'});
     final ok = await External.openUrl(Uri.parse(AppLinks.manageSubscriptions));
     if (ok || !context.mounted) return;
     await openOrExplain(context, AppLinks.manageSubscriptionsWeb,
@@ -212,6 +217,10 @@ class _DatesState extends State<_Dates> {
     } catch (_) {
       granted = false;
     }
+    s.analytics.log(AnalyticsEvent.notificationPermission, props: {
+      'result': granted ? 'allowed' : 'denied',
+      'from': 'plan',
+    });
     if (!mounted) return;
     setState(() {
       _busy = false;

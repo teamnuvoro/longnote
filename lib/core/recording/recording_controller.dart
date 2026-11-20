@@ -272,6 +272,8 @@ class RecordingController extends ChangeNotifier {
     await _source?.pause();
     _sink?.flushNow();
     await _setStatus(RecordingStatus.paused, CaptureState.paused);
+    await analytics.log(AnalyticsEvent.recordingPaused,
+        recordingId: current?.id);
   }
 
   Future<void> resume() async {
@@ -281,6 +283,8 @@ class RecordingController extends ChangeNotifier {
     await _endGap();
     banner = null;
     await _setStatus(RecordingStatus.recording, CaptureState.recording);
+    await analytics.log(AnalyticsEvent.recordingResumed,
+        recordingId: current?.id);
   }
 
   Future<void> _setStatus(RecordingStatus s, CaptureState cs) async {

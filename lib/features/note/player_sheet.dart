@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../app_services.dart';
+import '../../core/analytics/analytics.dart';
 import '../../core/recording/recording_repository.dart';
 import '../../ui/widgets.dart';
 import 'kit.dart';
@@ -50,7 +52,13 @@ class _PlayerSheetState extends State<PlayerSheet> {
     if (_player == null && d.hasPlayback) {
       final paths = d.playbackPaths(_model.repo.storage);
       final ms = d.playbackDurations;
-      _player = NotePlaybacks.acquire(widget.id, () => NotePlayback(paths, ms));
+      final s = context.read<AppServices>();
+      final id = widget.id;
+      _player = NotePlaybacks.acquire(
+          id,
+          () => NotePlayback(paths, ms,
+              onStarted: () => s.analytics
+                  .log(AnalyticsEvent.playbackStarted, recordingId: id)));
       if (d.hasWaveform) {
         PlayerSheet.peaksLoader(paths, ms).then((p) {
           if (mounted) setState(() => _peaks = p);

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../app/routes.dart';
 import '../../app/nav.dart';
 import '../../app_services.dart';
+import '../../core/analytics/analytics.dart';
 import '../../core/billing/billing_service.dart';
 import '../../core/models/recording.dart';
 import '../../core/notes/languages.dart';
@@ -70,18 +71,30 @@ class _SettingsHomeScreenState extends State<SettingsHomeScreen> {
   String get _versionLine =>
       _version.isEmpty ? 'Longnote' : 'Longnote $_version';
 
-  Future<void> _mail(String subject) => openOrExplain(
+  /// [kind]: help / feature (support_tapped; never the mail's text).
+  Future<void> _mail(String subject, String kind) {
+    _log(AnalyticsEvent.supportTapped, {'kind': kind});
+    return openOrExplain(
         context,
         AppLinks.mail(subject: subject, body: '\n\n—\n$_versionLine'),
         fallbackCopy: AppLinks.supportEmail,
         failText:
             'No mail app is set up. We copied ${AppLinks.supportEmail} for you.',
       );
+  }
 
+  void _log(String name, [Map<String, Object?>? props]) =>
+      _s.analytics.log(name, props: props);
+
+  /// Straight to the App Store's review page (see AppLinks.appStoreReviewUrl).
   Future<void> _rate() async {
-    final ok = await External.requestReview();
-    if (ok || !mounted) return;
-    await openOrExplain(context, AppLinks.appStoreUrl);
+    _log(AnalyticsEvent.rateTapped);
+    await openOrExplain(context, AppLinks.appStoreReviewUrl);
+  }
+
+  void _openLegal(String link, String url) {
+    _log(AnalyticsEvent.legalLinkOpened, {'link': link, 'from': 'settings'});
+    openOrExplain(context, url);
   }
 
   Future<void> _restore() async {
@@ -151,6 +164,10 @@ class _SettingsHomeScreenState extends State<SettingsHomeScreen> {
                     : (x) async {
                         setState(() => _v = v.copyWith(speakers: x));
                         await s.settings.setSpeakerLabels(x);
+                        s.analytics.log(AnalyticsEvent.settingChanged, props: {
+                          'setting': 'speaker_labels',
+                          'value': x ? 'on' : 'off',
+                        });
                       },
               ),
             ]),
@@ -190,11 +207,11 @@ class _SettingsHomeScreenState extends State<SettingsHomeScreen> {
               LnListRow(
                   icon: LnIcons.mail,
                   label: 'Contact us',
-                  onTap: () => _mail('Longnote help')),
+                  onTap: () => _mail('Longnote help', 'help')),
               LnListRow(
                   icon: LnIcons.bulb,
                   label: 'Suggest a feature',
-                  onTap: () => _mail('Longnote feature idea')),
+                  onTap: () => _mail('Longnote feature idea', 'feature')),
               LnListRow(icon: LnIcons.star, label: 'Rate Longnote', onTap: _rate),
               LnListRow(
                   icon: LnIcons.share,
@@ -209,11 +226,11 @@ class _SettingsHomeScreenState extends State<SettingsHomeScreen> {
               LnListRow(
                   icon: LnIcons.lock,
                   label: 'Privacy policy',
-                  onTap: () => openOrExplain(context, AppLinks.privacyPolicy)),
+                  onTap: () => _openLegal('privacy', AppLinks.privacyPolicy)),
               LnListRow(
                   icon: LnIcons.text,
                   label: 'Terms of use',
-                  onTap: () => openOrExplain(context, AppLinks.terms)),
+                  onTap: () => _openLegal('terms', AppLinks.terms)),
               LnListRow(
                   icon: LnIcons.refresh,
                   label: 'Restore purchases',

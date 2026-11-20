@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../app_services.dart';
+import '../../core/analytics/analytics.dart';
 import '../../core/models/recording.dart';
 import '../../core/notes/speakers.dart';
 import '../../ui/widgets.dart';
@@ -73,12 +74,19 @@ class _SpeakersSheetState extends State<SpeakersSheet> {
     final list = _speakers;
     if (list == null) return;
     setState(() => _saving = true);
+    var renamed = 0;
     for (final sp in list) {
       final v = _ctl[sp.key]!.text.trim();
       final target = v.isEmpty ? defaultSpeakerName(sp.key) : v;
       if (target != sp.name) {
         await _s.speakers.rename(widget.id, sp.key, target);
+        renamed++;
       }
+    }
+    // How many, never the names.
+    if (renamed > 0) {
+      _s.analytics.log(AnalyticsEvent.speakerRenamed,
+          recordingId: widget.id, props: {'count': renamed});
     }
     if (mounted) context.pop(true);
   }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../app_services.dart';
+import '../../core/analytics/analytics.dart';
 import '../../core/models/recording.dart';
 import '../../ui/widgets.dart';
 import '../common/widgets.dart';
@@ -34,8 +35,14 @@ class _TranscriptionScreenState extends State<TranscriptionScreen> {
   }
 
   Future<void> _setMode(TranscriptionMode m) async {
+    final changed = m != _mode;
     setState(() => _mode = m);
-    await context.read<AppServices>().settings.setTranscriptionMode(m);
+    final s = context.read<AppServices>();
+    await s.settings.setTranscriptionMode(m);
+    if (changed) {
+      s.analytics.log(AnalyticsEvent.settingChanged,
+          props: {'setting': 'transcription_mode', 'value': m.name});
+    }
   }
 
   @override

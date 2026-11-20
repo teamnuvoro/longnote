@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../app/routes.dart';
 import '../../app_services.dart';
+import '../../core/analytics/analytics.dart';
 import '../../core/models/recording.dart';
 import '../../core/summary/summary_models.dart';
 import '../../ui/widgets.dart';
@@ -57,6 +58,8 @@ class _NoteActionsSheetState extends State<NoteActionsSheet> {
     final name = await askForText(context, title: 'Rename', initial: n.title);
     if (name == null || name == n.title) return;
     await _s.repo.rename(n.id, name);
+    _s.analytics.log(AnalyticsEvent.noteRenamed,
+        recordingId: n.id, props: {'from': 'actions'});
     if (mounted) context.pop();
   }
 
@@ -92,8 +95,10 @@ class _NoteActionsSheetState extends State<NoteActionsSheet> {
       confirmLabel: 'Delete note',
     );
     if (!ok || !mounted) return;
+    final s = _s;
     context.pop();
-    await _s.repo.deleteByUser(n.id);
+    await s.repo.deleteByUser(n.id);
+    await s.analytics.log(AnalyticsEvent.noteDeleted, recordingId: n.id);
   }
 
   @override
