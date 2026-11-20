@@ -97,10 +97,14 @@ List<Widget> processingChildren(
     const SizedBox(height: 14),
     _InfoBox(
       icon: const NoteIcon(NoteIcons.bell, size: 18, color: LnColors.ink2),
-      children: const [
+      // True of the app: nothing runs once iOS suspends or closes it (no
+      // background task, no push). The server keeps transcribing an
+      // uploaded file; the rest happens the next time the app is open.
+      children: [
         TextSpan(
-            text:
-                'You can leave this screen or close the app. We’ll tell you when the note is ready.')
+            text: cloud
+                ? 'You can leave this screen. Keep Longnote open until the upload is done; if you close it, the note finishes the next time you open the app.'
+                : 'You can leave this screen. The transcript is made while Longnote is open; if you close it, it carries on the next time you open the app.')
       ],
     ),
     const SizedBox(height: 10),
@@ -280,7 +284,17 @@ List<Widget> failedChildren(
       ]),
     ),
     const SizedBox(height: 16),
-    LnPrimaryButton(label: 'Try again', onPressed: onTryAgain),
+    // Over 5 hours the cloud refuses every time: no "Try again" that cannot
+    // work. A recording can still go through the phone; an import has to be
+    // cut into shorter files (imports have no on-phone path).
+    if (!tooLong)
+      LnPrimaryButton(label: 'Try again', onPressed: onTryAgain)
+    else if (!canUsePhone)
+      Text(
+          n.source == 'imported'
+              ? 'Cut the file into parts shorter than 5 hours (for example in the Voice Memos app) and import each part.'
+              : 'Cloud transcription stops at 5 hours. You can still play and share the audio.',
+          style: LnText.body.copyWith(fontSize: 15, height: 22 / 15)),
     if (canUsePhone) ...[
       const SizedBox(height: 10),
       LnPressable(

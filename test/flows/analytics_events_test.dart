@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:longnote/app/routes.dart';
 import 'package:longnote/core/analytics/analytics.dart';
 import 'package:longnote/core/billing/billing_service.dart';
+import 'package:longnote/core/models/recording.dart';
 import 'package:longnote/core/recording/recording_controller.dart';
 import 'package:longnote/ui/widgets.dart';
 
@@ -160,6 +161,53 @@ void main() {
     expect(ev(AnalyticsEvent.recordingResumed).recordingId, id);
     expect(ev(AnalyticsEvent.recordingDiscarded).recordingId, id);
     expect(ev(AnalyticsEvent.recordingDiscarded).props['duration_s'], 3);
+  });
+
+  testWidgets('a Stop racing a Discard never spends the free recording',
+      (t) async {
+    await boot(t, trial: false);
+    await tapAndSettle(t, find.text('Record'));
+    await tapAndSettle(t, find.byKey(const ValueKey('record-start')));
+    await env.speak(t, 40); // over the 30 s free-recording minimum
+    final s = env.services;
+    final id = s.recorder.current!.id;
+    // Discard confirmed, and a Stop lands while it is still running.
+    await t.runAsync(() => Future.wait([
+          s.discardRecording(),
+          s.recorder.stop(),
+        ]));
+    await settle(t);
+    expect(await t.runAsync(() => s.gate.freeUsed()), 0);
+    expect(await env.pendingJobs(t), isEmpty);
+    expect(await t.runAsync(() => env.repo.get(id)), isNull);
+  });
+
+  testWidgets('over 5 hours: no "Try again"; the phone, or cut the import',
+      (t) async {
+    await boot(t);
+    for (final id in ['rec', 'imp']) {
+      await t.runAsync(() => env.addNote(id, 'Long $id',
+          at: env.clock.now(),
+          status: ProcessingStatus.failed,
+          errorCode: 'too_long',
+          error: 'Transcription works for recordings up to 5 hours, and this '
+              'one is longer.'));
+    }
+    await t.runAsync(() => env.db.db.update('recordings',
+        {'source': 'imported', 'import_file': 'import.m4a'},
+        where: 'id = ?', whereArgs: ['imp']));
+    env.router.pushNamed(R.note, pathParameters: {'id': 'rec'});
+    await settle(t);
+    expect(find.text('Longer than 5 hours'), findsOneWidget);
+    expect(find.text('Try again'), findsNothing);
+    expect(find.text('Transcribe on this phone instead'), findsOneWidget);
+    env.router.pop();
+    await settle(t);
+    env.router.pushNamed(R.note, pathParameters: {'id': 'imp'});
+    await settle(t);
+    expect(find.text('Try again'), findsNothing);
+    expect(find.text('Transcribe on this phone instead'), findsNothing);
+    expect(find.textContaining('Cut the file into parts'), findsOneWidget);
   });
 
   testWidgets('search_used: once per visit, a length bucket, never the text',

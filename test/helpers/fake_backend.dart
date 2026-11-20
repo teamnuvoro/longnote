@@ -36,6 +36,9 @@ class FakeBackend {
   int signups = 0;
   int refreshes = 0;
   int tusCreates = 0;
+
+  /// Next N TUS creates are refused with HTTP 400 (the 25-object cap).
+  int refuseTusCreates = 0;
   int patches = 0;
   int starts = 0;
 
@@ -154,6 +157,10 @@ class FakeBackend {
     if (user == null) return http.Response('', 401);
     if (req.method == 'POST') {
       tusCreates++;
+      if (refuseTusCreates > 0) {
+        refuseTusCreates--;
+        return http.Response('{"error":"too many objects"}', 400);
+      }
       final meta = <String, String>{};
       for (final kv in req.headers['Upload-Metadata']!.split(',')) {
         final parts = kv.split(' ');

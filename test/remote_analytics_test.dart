@@ -340,6 +340,7 @@ void main() {
       final sink = FakeSink();
       final s = await services(analytics: analyticsWith([sink]));
       final r = await s.restorePurchases('settings');
+      await pumpEventQueue(); // the logs are not awaited by the restore
       expect(sink.names,
           [AnalyticsEvent.restoreTapped, AnalyticsEvent.restoreResult]);
       expect(sink.propsOf(AnalyticsEvent.restoreResult),

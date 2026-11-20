@@ -173,6 +173,10 @@ class ImportController extends ChangeNotifier {
     final kind = {'kind': m.kind, 'format': m.extension};
     unawaited(s.analytics.log(AnalyticsEvent.importStarted, props: kind));
     final part = File(p.join(dir.path, '$fileName.part'));
+    // Set between creating the note row and queueing it: a failure in that
+    // window removes the row too (not only the files), so no note is left
+    // pointing at a deleted file.
+    var rowOnly = false;
     try {
       await dir.create(recursive: true);
       await _copy(File(m.path), part, job);
@@ -200,6 +204,7 @@ class ImportController extends ChangeNotifier {
         transcriptionMode: forceCloud ? TranscriptionMode.cloud : null,
         updatedAt: now,
       ));
+      rowOnly = true;
       // An import counts like a recording: it uses up the one free
       // recording (PaywallGate; under 30 s does not count).
       await s.gate.onRecordingFinished(Duration(milliseconds: ms),
@@ -209,10 +214,11 @@ class ImportController extends ChangeNotifier {
       unawaited(s.analytics.log(AnalyticsEvent.importCompleted,
           recordingId: id, props: {...kind, 'duration_s': ms ~/ 1000}));
       await s.jobs.enqueue(id);
+      rowOnly = false; // queued: the note is in the pipeline now
       await s.noteQueuedByUser();
       return id;
     } on FileSystemException catch (e) {
-      await _cleanup(dir);
+      await _undo(id, dir, rowOnly);
       final full = e.osError?.errorCode == 28; // ENOSPC
       return _fail(
           job,
@@ -222,20 +228,28 @@ class ImportController extends ChangeNotifier {
           code: full ? 'disk_full' : 'copy_failed',
           kind: kind);
     } catch (_) {
-      await _cleanup(dir);
+      await _undo(id, dir, rowOnly);
       return _fail(job, 'We could not copy this file. Try again.',
           code: 'failed', kind: kind);
     }
   }
 
-  /// The user stopped the copy (F3 "x"): import_failed with `cancelled`.
+  Future<void> _undo(String id, Directory dir, bool rowOnly) async {
+    if (!rowOnly) return _cleanup(dir);
+    try {
+      await s.repo.deleteByUser(id); // the row and its folder
+    } catch (_) {
+      await _cleanup(dir);
+    }
+  }
+
+  /// The user stopped the copy (F3 "x"): import_cancelled (not a failure).
   Future<String?> _cancelled(
       ImportJob job, Directory dir, Map<String, Object?> kind) async {
     await _cleanup(dir);
     jobs.remove(job);
     notifyListeners();
-    unawaited(s.analytics.log(AnalyticsEvent.importFailed,
-        props: {...kind, 'error': 'cancelled'}));
+    unawaited(s.analytics.log(AnalyticsEvent.importCancelled, props: kind));
     return null;
   }
 
@@ -243,6 +257,8 @@ class ImportController extends ChangeNotifier {
       {required String code, required Map<String, Object?> kind}) {
     unawaited(s.analytics
         .log(AnalyticsEvent.importFailed, props: {...kind, 'error': code}));
+    // The card may already be gone (a failure after the note was created).
+    if (!jobs.contains(job)) jobs.insert(0, job);
     job
       ..state = ImportState.failed
       ..error = why;

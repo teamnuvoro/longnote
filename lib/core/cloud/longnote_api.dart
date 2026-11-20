@@ -63,7 +63,7 @@ class StatusResult {
   final String? jobId;
   final String? providerStatus;
 
-  /// Only on `done` (the first fetch and repeats within 15 min).
+  /// Only on `done` (the first fetch and repeats until the ack, at most 24 h after the first fetch).
   final List<ServerTurn>? turns;
   final int? audioDurationMs;
   final String? errorCode;

@@ -171,6 +171,29 @@ class RecordingRepository extends ChangeNotifier {
 
   /// The ONLY place audio is deleted: an explicit user delete with
   /// confirmation. Processing code never calls this.
+  /// An import killed mid-copy (app closed) leaves `<id>/import.<ext>.part`
+  /// in a folder with no note row, which nothing else can free. Called at
+  /// launch: deletes only such `.part` files, never a file a note owns.
+  /// Returns how many were removed.
+  Future<int> sweepOrphanPartFiles() async {
+    var removed = 0;
+    try {
+      final root = Directory(storage.rootPath);
+      if (!await root.exists()) return 0;
+      await for (final d in root.list(followLinks: false)) {
+        if (d is! Directory) continue;
+        if (await get(p.basename(d.path)) != null) continue;
+        await for (final f in d.list(followLinks: false)) {
+          if (f is File && f.path.endsWith('.part')) {
+            await f.delete();
+            removed++;
+          }
+        }
+      }
+    } catch (_) {}
+    return removed;
+  }
+
   Future<void> deleteByUser(String id) async {
     await _db.delete('recordings', where: 'id = ?', whereArgs: [id]);
     notifyListeners();

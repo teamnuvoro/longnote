@@ -67,8 +67,9 @@ Added 18 Nov 2026 (branch v1-build). Code: `lib/core/analytics/`.
 | ask_answered | recording_id, result (`ok`/`failed`); never the answer | yes | yes | - |
 | import_started | kind (`audio`/`video` by extension), format (extension) | yes | yes | - |
 | import_completed | recording_id, kind, format, duration_s | yes | yes | - |
-| import_failed | kind, format, error (`no_sound`/`disk_full`/`copy_failed`/`failed`/`cancelled`) | yes | yes | - |
-| setting_changed | setting (`audio_language`/`summary_language`/`transcription_mode`/`default_style`/`speaker_labels`/`share_analytics`), value (a code: language code, `same`, mode, style id, `on`/`off`) | yes | yes | - |
+| import_failed | kind, format, error (`no_sound`/`disk_full`/`copy_failed`/`failed`) | yes | yes | - |
+| import_cancelled | kind, format (the user stopped the copy; not a failure) | yes | yes | - |
+| setting_changed | setting (`audio_language`/`summary_language`/`transcription_mode`/`speaker_labels`/`share_analytics`), value (a code: language code, `same`, mode, `on`/`off`). The default summary style is `summary_style_changed` from `settings` only | yes | yes | - |
 | share_analytics_off | (none) - logged BEFORE the switch stops the sinks, so it is the last event sent; turning it back on logs setting_changed share_analytics=on | yes | yes | - |
 | rate_tapped | (none) - the button opens the App Store review page (`AppLinks.appStoreReviewUrl`), not Apple's in-app prompt | yes | yes | - |
 | support_tapped | kind (`help`/`feature`) | yes | yes | - |

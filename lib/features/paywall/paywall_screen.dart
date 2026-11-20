@@ -99,7 +99,8 @@ class _PaywallScreenState extends State<PaywallScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       final s = _s;
-      await s.analytics.log(AnalyticsEvent.paywallViewed,
+      // Not awaited: store prices must not wait on analytics.
+      s.analytics.log(AnalyticsEvent.paywallViewed,
           props: {'placement': widget.placement});
       final plans = await s.billing.loadPlans();
       if (!mounted || plans.isEmpty) return;

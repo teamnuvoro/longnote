@@ -90,6 +90,9 @@ class AnalyticsEvent {
   /// `error`: a code.
   static const importFailed = 'import_failed';
 
+  /// The user stopped the copy (F3 "x"): `kind`, `format`.
+  static const importCancelled = 'import_cancelled';
+
   /// Settings: `setting` + `value` (codes: a language code, a mode, a style).
   static const settingChanged = 'setting_changed';
 
@@ -144,6 +147,7 @@ class AnalyticsEvent {
     importStarted,
     importCompleted,
     importFailed,
+    importCancelled,
     settingChanged,
     shareAnalyticsOff,
     rateTapped,

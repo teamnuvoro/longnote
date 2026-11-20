@@ -98,7 +98,7 @@ class _NoteActionsSheetState extends State<NoteActionsSheet> {
     final s = _s;
     context.pop();
     await s.repo.deleteByUser(n.id);
-    await s.analytics.log(AnalyticsEvent.noteDeleted, recordingId: n.id);
+    s.analytics.log(AnalyticsEvent.noteDeleted, recordingId: n.id);
   }
 
   @override

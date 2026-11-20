@@ -177,21 +177,23 @@ class AppServices {
     await settings.setShareAnalytics(share);
     await analytics.setRemoteEnabled(share);
     if (share) {
-      await analytics.log(AnalyticsEvent.settingChanged,
-          props: {'setting': 'share_analytics', 'value': 'on'});
+      unawaited(analytics.log(AnalyticsEvent.settingChanged,
+          props: {'setting': 'share_analytics', 'value': 'on'}));
     }
     _profileChanged();
   }
 
   /// "Restore purchases" from any screen ([from] = where, for analytics).
   Future<RestoreResult> restorePurchases(String from) async {
-    await analytics.log(AnalyticsEvent.restoreTapped, props: {'from': from});
+    // Analytics never holds up the restore (or its answer on screen).
+    unawaited(
+        analytics.log(AnalyticsEvent.restoreTapped, props: {'from': from}));
     final r = await billing.restore();
-    await analytics.log(AnalyticsEvent.restoreResult, props: {
+    unawaited(analytics.log(AnalyticsEvent.restoreResult, props: {
       'from': from,
       'result': r.name,
       'active': billing.entitlement.value.isActive,
-    });
+    }));
     return r;
   }
 
@@ -497,6 +499,8 @@ class AppServices {
       await s._afterRecording(r);
     }
     s.recoveredAtLaunch = recovered;
+    // Off the start path: partial copies of imports the app was killed in.
+    unawaited(repo.sweepOrphanPartFiles());
 
     // 2) + 3) Resume processing, wire network/foreground wake-ups.
     await s.start();
@@ -591,11 +595,14 @@ class AppServices {
   Future<void> discardRecording() async {
     final id = recorder.current?.id;
     if (id == null) return;
-    await analytics.log(AnalyticsEvent.recordingDiscarded,
-        recordingId: id, props: {'duration_s': recorder.elapsed.inSeconds});
+    // Mark the discard BEFORE anything awaits: a Stop (or a self-stop) in
+    // between must not count it as the free recording or queue it.
     _discarding = id;
+    final seconds = recorder.elapsed.inSeconds;
     try {
       await recorder.stop(reason: 'discard');
+      unawaited(analytics.log(AnalyticsEvent.recordingDiscarded,
+          recordingId: id, props: {'duration_s': seconds}));
       await repo.deleteByUser(id);
     } finally {
       _discarding = null;

@@ -39,7 +39,7 @@ class NoteReadyAskSheet extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
           Text(
-              'A long recording takes a few minutes to become a note. We can send one notification when each note is ready, and nothing else.',
+              'A long recording takes a few minutes to become a note. If it becomes ready while Longnote is still open in the background, we can send one notification, and nothing else.',
               style: LnText.body.copyWith(color: LnColors.ink2)),
           const SizedBox(height: 20),
           LnPrimaryButton(

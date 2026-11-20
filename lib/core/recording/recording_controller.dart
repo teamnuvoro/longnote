@@ -179,7 +179,10 @@ class RecordingController extends ChangeNotifier {
         );
       }
       state = CaptureState.recording;
-      await analytics.log(AnalyticsEvent.recordingStarted, recordingId: rec.id);
+      // Never awaited on the capture path: a slow analytics sink must not
+      // hold Start, Pause, Resume or Stop.
+      unawaited(
+          analytics.log(AnalyticsEvent.recordingStarted, recordingId: rec.id));
       notifyListeners();
       return rec;
     } catch (_) {
@@ -272,8 +275,8 @@ class RecordingController extends ChangeNotifier {
     await _source?.pause();
     _sink?.flushNow();
     await _setStatus(RecordingStatus.paused, CaptureState.paused);
-    await analytics.log(AnalyticsEvent.recordingPaused,
-        recordingId: current?.id);
+    unawaited(
+        analytics.log(AnalyticsEvent.recordingPaused, recordingId: current?.id));
   }
 
   Future<void> resume() async {
@@ -283,8 +286,8 @@ class RecordingController extends ChangeNotifier {
     await _endGap();
     banner = null;
     await _setStatus(RecordingStatus.recording, CaptureState.recording);
-    await analytics.log(AnalyticsEvent.recordingResumed,
-        recordingId: current?.id);
+    unawaited(analytics.log(AnalyticsEvent.recordingResumed,
+        recordingId: current?.id));
   }
 
   Future<void> _setStatus(RecordingStatus s, CaptureState cs) async {
@@ -325,14 +328,14 @@ class RecordingController extends ChangeNotifier {
         _openGapId = gapId;
         banner =
             'Paused by a phone call or another app. Audio up to now is saved.';
-        await analytics.log(
+        unawaited(analytics.log(
           AnalyticsEvent.recordingInterrupted,
           recordingId: rec.id,
           props: {
             'cause': 'audio_interruption',
             'at_ms': sink.totalDuration.inMilliseconds,
           },
-        );
+        ));
         await _setStatus(RecordingStatus.paused, CaptureState.paused);
       case InterruptionPhase.endedResumable:
         if (_userPaused) return;
@@ -417,11 +420,11 @@ class RecordingController extends ChangeNotifier {
         ..note = reason == 'error' ? banner : null;
       await repo.updateCapture(rec);
       saved = true;
-      await analytics.log(
+      unawaited(analytics.log(
         AnalyticsEvent.recordingCompleted,
         recordingId: rec.id,
         props: {'duration_ms': rec.durationMs, 'reason': reason},
-      );
+      ));
     } catch (e, st) {
       // Disk full / database error: the audio files are on disk and the row
       // is repaired at the next launch (RecoveryService). Never leave the

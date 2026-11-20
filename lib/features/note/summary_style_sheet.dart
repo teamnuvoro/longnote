@@ -67,10 +67,10 @@ class _SummaryStyleSheetState extends State<SummaryStyleSheet> {
     final id = widget.id;
     if (id == null) {
       await _s.settings.setDefaultStyle(style);
+      // One event per action: the default style is summary_style_changed
+      // from `settings` (not also setting_changed).
       _s.analytics.log(AnalyticsEvent.summaryStyleChanged,
           props: {'style': style.id, 'from': 'settings'});
-      _s.analytics.log(AnalyticsEvent.settingChanged,
-          props: {'setting': 'default_style', 'value': style.id});
       if (mounted) context.pop(true);
       return;
     }

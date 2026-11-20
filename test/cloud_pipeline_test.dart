@@ -267,6 +267,24 @@ void main() {
     expect((await note('n1')).processingStatus, ProcessingStatus.transcribing);
   });
 
+  test('upload refused (per-user file cap): waits and retries, no try used',
+      () async {
+    await makeRecording('n1');
+    server.refuseTusCreates = 1;
+    final app = boot();
+    await app.queue.enqueue('n1');
+    await app.queue.runDue();
+    var r = await note('n1');
+    expect(r.errorCode, 'upload_refused');
+    expect(r.processingStatus, isNot(ProcessingStatus.failed));
+    expect(r.tries, 0);
+
+    env.clock.advance(const Duration(minutes: 16));
+    expect(await app.queue.runDue(), 1);
+    r = await note('n1');
+    expect(r.processingStatus, ProcessingStatus.transcribing);
+  });
+
   test('over the 5-hour cap: split into pieces, transcribe each, stitch with offsets',
       () async {
     // Scaled down: cap 10 s, pieces of 8 s; 3 parts of 6 s = 18 s.

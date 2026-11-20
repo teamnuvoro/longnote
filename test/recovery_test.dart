@@ -139,4 +139,26 @@ void main() {
     expect(interruptedNote(const Duration(minutes: 125)),
         'Interrupted - saved 2 h 5 min');
   });
+
+  test('launch sweep: removes .part files only from folders with no note',
+      () async {
+    final orphan = Directory(env.repo.storage.dirFor('killed-import'))
+      ..createSync(recursive: true);
+    File(p.join(orphan.path, 'import.mov.part')).writeAsBytesSync([1, 2, 3]);
+    File(p.join(orphan.path, 'keep.txt')).writeAsStringSync('x');
+    await env.repo.insert(Recording(
+        id: 'n1',
+        title: 'Kept',
+        createdAt: env.clock.now(),
+        status: RecordingStatus.completed));
+    final owned = Directory(env.repo.storage.dirFor('n1'))
+      ..createSync(recursive: true);
+    final ownedPart = File(p.join(owned.path, 'import.m4a.part'))
+      ..writeAsBytesSync([1]);
+
+    expect(await env.repo.sweepOrphanPartFiles(), 1);
+    expect(File(p.join(orphan.path, 'import.mov.part')).existsSync(), isFalse);
+    expect(File(p.join(orphan.path, 'keep.txt')).existsSync(), isTrue);
+    expect(ownedPart.existsSync(), isTrue, reason: 'a note owns it');
+  });
 }

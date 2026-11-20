@@ -512,6 +512,17 @@ class CloudPipeline {
             error: e.userMessage,
             errorCode: 'limit_reached',
           );
+        case 'upload_refused':
+          // The server's per-user file cap: files leave as their jobs end,
+          // so wait and try again without using up a try (the message says
+          // "We will try again", so it must stay true).
+          return JobDeferral(
+            wait: config.hourLimitWait,
+            status: ProcessingStatus.queued,
+            progress: 'Waiting to upload',
+            error: e.userMessage,
+            errorCode: 'upload_refused',
+          );
         case 'upstream_failed' when e.detail['in_progress'] == true:
           // The same summary is still being written on the server (an
           // earlier attempt): check back soon, without using up a try.

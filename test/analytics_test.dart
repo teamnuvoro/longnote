@@ -64,6 +64,7 @@ void main() {
       'import_started',
       'import_completed',
       'import_failed',
+      'import_cancelled',
       'setting_changed',
       'share_analytics_off',
       'rate_tapped',

@@ -129,9 +129,10 @@ class TusUploader {
   ApiException _error(String step, http.Response r) {
     final code = switch (r.statusCode) {
       401 => 'unauthorized',
-      // Storage refuses a new upload with 403 when the per-user file limit
-      // is reached (BACKEND-API): not a sign-in problem.
-      403 when step == 'create' => 'upload_refused',
+      // Storage refuses a new upload when the per-user file limit is
+      // reached (BACKEND-API 2: HTTP 400; 403 seen too): not a sign-in
+      // problem and not permanent.
+      400 || 403 when step == 'create' => 'upload_refused',
       403 => 'unauthorized',
       413 => 'payload_too_large',
       >= 500 => 'server_error',
