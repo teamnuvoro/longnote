@@ -14,8 +14,9 @@ const CHECK_EVERY_S = envNum("SONIOX_CHECK_EVERY_SECONDS", 20);
 /** After Soniox says finished, wait this long for the webhook before pulling. */
 const WEBHOOK_GRACE_S = envNum("WEBHOOK_GRACE_SECONDS", 120);
 
-const COLS = "id,client_note_id,status,language,audio_seconds,error_code,error,result," +
-  "soniox_transcription_id,soniox_checked_at,soniox_completed_seen_at,fetched_at,created_at,updated_at";
+// One literal (not joined with +), so postgrest-js can type the row.
+const COLS =
+  "id,client_note_id,status,language,audio_seconds,error_code,error,result,soniox_transcription_id,soniox_checked_at,soniox_completed_seen_at,fetched_at,created_at,updated_at";
 
 Deno.serve(handle(async (req) => {
   const user = await requireUser(req);

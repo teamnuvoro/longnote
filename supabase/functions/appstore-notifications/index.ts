@@ -133,7 +133,7 @@ async function handleNotification(req: Request): Promise<Response> {
   let userId: string | null = null;
   const token = tx?.appAccountToken;
   const { data: subRow } = otid
-    ? await db.from("subscriptions").select("user_id,last_offer_type,last_offer_discount_type,last_price,paid_count")
+    ? await db.from("subscriptions").select("user_id,last_offer_type,last_offer_discount_type,last_price,paid_count,last_signed_date")
       .eq("original_transaction_id", otid).maybeSingle()
     : { data: null };
   if (subRow?.user_id) userId = subRow.user_id as string;
@@ -144,6 +144,7 @@ async function handleNotification(req: Request): Promise<Response> {
       last_offer_discount_type: subRow.last_offer_discount_type ?? null,
       last_price: subRow.last_price === null || subRow.last_price === undefined ? null : Number(subRow.last_price),
       paid_count: subRow.paid_count ?? 0,
+      last_signed_date: subRow.last_signed_date ?? null,
     }
     : null;
   let profile: TrackingProfile | null = null;

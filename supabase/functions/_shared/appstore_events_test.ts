@@ -187,6 +187,16 @@ Deno.test("nextState: trial then renew counts paid payments; REFUND keeps the of
   assertEquals(nextState(n("TEST"), null, null, "test", null), null);
 });
 
+Deno.test("nextState: an older notification (Apple retry) does not overwrite newer state", () => {
+  const newer: PriorState = { ...afterPaid, last_signed_date: new Date(NOW).toISOString() };
+  const old = nextState(n("DID_RENEW"), paidTx, { autoRenewStatus: 0 }, "renewed", newer)!;
+  assertEquals(Object.keys(old).sort(), ["original_transaction_id", "paid_count", "updated_at"]);
+  assertEquals(old.paid_count, 2, "its payment still counts");
+  const older: PriorState = { ...afterPaid, last_signed_date: new Date(NOW - DAY).toISOString() };
+  const fresh = nextState(n("DID_RENEW"), paidTx, null, "renewed", older)!;
+  assertEquals([fresh.status, fresh.paid_count], ["active", 2]);
+});
+
 Deno.test("extinfo: 16 strings, i2 + bundle id, filled from the profile", () => {
   const e = extinfoFrom(profile);
   assertEquals(e.length, 16);

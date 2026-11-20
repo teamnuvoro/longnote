@@ -23,6 +23,8 @@ Deno.serve(handle(async (req) => {
   }
   const tid = typeof body?.id === "string" ? body.id : "";
   if (!tid) return fail("bad_request", "missing id");
+  // The id goes into Soniox URLs: only plain id characters.
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(tid)) return fail("bad_request", "bad id");
 
   const db = admin();
   let { data: job } = await db.from("jobs").select("id,status")

@@ -266,7 +266,7 @@ Reply `200`:
 - **Size cap:** the transcript sent to the model is at most **240,000 chars** (~60k tokens, ~4.5 h of speech). Above that the
   server keeps the turns sharing the most words with the question (and recent user messages), plus each one's neighbours,
   in time order, with `[...]` at the gaps, and returns `truncated: true`. The app need not trim.
-- Limits: **60 asks per user per UTC day** plus the user's/IP's daily LLM dollars (section 5). Reserves an upper-bound cost
+- Limits: **200 asks per user per UTC day** plus the user's/IP's daily LLM dollars (section 5). Reserves an upper-bound cost
   before the model call (**~$0.02 for a short note, up to ~$0.10** for a 240k-char transcript with full history), settled
   to the real cost after (~$0.01 first ask on a 1-h note, ~$0.002 with the prompt cache). Same refund/keep rule as summarize.
 
@@ -347,8 +347,8 @@ any default.
 | `LIMIT_USER_LLM_USD_PER_DAY` | 3.00 | summarize + ask spend per user per UTC day (reserved, then settled) |
 | `LIMIT_ASK_PER_DAY` | 200 | ask calls per user per day (second guard) |
 | `LIMIT_SUMMARY_PER_DAY` | 100 | summarize calls per user per day (a 3-h note uses 2 parts; cached re-sends are free) |
-| `LIMIT_IP_AUDIO_SECONDS_PER_DAY` | 259200 (72 h) | audio per client IP per UTC day (scope `ip_day`) |
-| `LIMIT_IP_LLM_USD_PER_DAY` | 10.00 | summarize + ask spend per client IP per day |
+| `LIMIT_IP_AUDIO_SECONDS_PER_DAY` | 129600 (36 h) | audio per client IP per UTC day (scope `ip_day`) |
+| `LIMIT_IP_LLM_USD_PER_DAY` | 4.00 | summarize + ask spend per client IP per day |
 | `LIMIT_IP_SUMMARY_PER_DAY` | 600 | summarize calls per client IP per day (second guard) |
 | `LIMIT_IP_ASK_PER_DAY` | 1500 | ask calls per client IP per day (second guard) |
 | `LIMIT_GLOBAL_AUDIO_USD_PER_DAY` | 12 | global **audio** pool (Soniox) per UTC day (~120 h) |
@@ -366,8 +366,8 @@ of Ask traffic cannot stop transcription for everyone, and vice versa (`cost_dai
 The IP is stored only as HMAC-SHA256 with a server secret (`IP_HASH_SECRET`, else `CLEANUP_SECRET`) of the IPv4 address or
 the **IPv6 /64** (a phone usually owns a whole /64, so the exact address would be trivial to rotate); rows kept 2 days.
 
-What one abuser can still do (all numbers at defaults): one IP (/64) spends at most $7.20 audio + $10 LLM per day; one or
-two distinct IPs/prefixes can fill a pool and switch that product off until 00:00 UTC. **Open:** App Attest (or a captcha on
+What one abuser can still do (all numbers at defaults): one IP (/64) spends at most $3.60 audio + $4 LLM per day (about half of
+each pool); it takes ~2-4 distinct IPs/prefixes to fill a pool and switch that product off until 00:00 UTC. **Open:** App Attest (or a captcha on
 anonymous sign-up) before any public build (DECISIONS.md), and an alert when `global_day` trips. Per-IP caps stay generous
 because Indian carriers share one IPv4 across many phones (CGNAT).
 

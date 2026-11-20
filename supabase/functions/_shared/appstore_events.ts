@@ -61,6 +61,8 @@ export interface PriorState {
   last_offer_discount_type: string | null;
   last_price: number | null;
   paid_count: number;
+  /** signedDate of the notification last written (ISO); null if unknown. */
+  last_signed_date?: string | null;
 }
 
 /** The user's tracking profile (table tracking_profiles). */
@@ -220,6 +222,17 @@ export function nextState(
   if (!otid) return null;
   const STATUS: Record<number, string> = { 1: "active", 2: "expired", 3: "billing_retry", 4: "grace_period", 5: "revoked" };
   const paidNow = kind === "subscribed" || kind === "trial_converted" || kind === "renewed" || kind === "plan_upgraded";
+  // Apple retries a notification we failed (hours later) after newer ones
+  // were written: an older one must not overwrite the newer state. It still
+  // counts its payment.
+  const priorSigned = prior?.last_signed_date ? Date.parse(prior.last_signed_date) : NaN;
+  if (Number.isFinite(priorSigned) && priorSigned > n.signedDate) {
+    return {
+      original_transaction_id: otid,
+      paid_count: (prior?.paid_count ?? 0) + (paidNow ? 1 : 0),
+      updated_at: new Date().toISOString(),
+    };
+  }
   const row: Record<string, unknown> = {
     original_transaction_id: otid,
     environment: n.data?.environment ?? null,

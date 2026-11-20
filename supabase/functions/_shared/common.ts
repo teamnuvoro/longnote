@@ -2,7 +2,8 @@
 // codes, auth (real user only), service-role DB client, limits config.
 // Contract: docs/BACKEND-API.md. Never log transcripts, summaries or secrets.
 
-import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
+// Pinned to the minor deno resolved on 20 Nov 2026, so a deploy never picks up a new minor unseen.
+import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.118";
 
 export const CORS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -79,6 +80,8 @@ export function envNum(name: string, fallback: number): number {
  * transcription for everyone (review B1). Call counts stay as a second guard.
  * Per-user / per-IP defaults raised 20 Nov 2026 to anti-abuse levels a paying
  * user never meets (Fable store-readiness S1); the global caps are unchanged.
+ * Per-IP audio and LLM stay at about half of their global pool (36 h = $3.60
+ * of $12; $4 of $8), so one network cannot switch a product off for all.
  */
 export const limits = () => ({
   audioSecondsPerDay: envNum("LIMIT_AUDIO_SECONDS_PER_DAY", 16 * 3600),
@@ -97,8 +100,8 @@ export const limits = () => ({
   // Per client IP (IPv6: per /64) per UTC day (anti-abuse: new anonymous
   // users are free to make). Generous-ish because Indian mobile carriers put
   // many phones behind one IPv4 (CGNAT). App Attest is the real fix (open).
-  ipAudioSecondsPerDay: envNum("LIMIT_IP_AUDIO_SECONDS_PER_DAY", 72 * 3600),
-  ipLlmUsdPerDay: envNum("LIMIT_IP_LLM_USD_PER_DAY", 10),
+  ipAudioSecondsPerDay: envNum("LIMIT_IP_AUDIO_SECONDS_PER_DAY", 36 * 3600),
+  ipLlmUsdPerDay: envNum("LIMIT_IP_LLM_USD_PER_DAY", 4),
   ipSummaryPerDay: envNum("LIMIT_IP_SUMMARY_PER_DAY", 600),
   ipAskPerDay: envNum("LIMIT_IP_ASK_PER_DAY", 1500),
   reportsPerUserDay: envNum("LIMIT_REPORTS_PER_USER_DAY", 50),
