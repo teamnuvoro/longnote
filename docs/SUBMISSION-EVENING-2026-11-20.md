@@ -3,7 +3,7 @@
 Nothing here sends the app to Apple. "Submit for Review" is the last step and happens only on the owner's go.
 
 ## A. Before the App Store Connect forms
-1. Install TestFlight 118 (when ready). Quick check: onboarding, paywall, one sandbox "Start free trial", delete + reinstall + "Restore purchase", lock-screen recording 10 min, Settings > Rate Longnote opens the App Store (it says "not available" until launch; that is expected).
+1. Install TestFlight 118 (VALID 20 Nov; sim QA 56/56 run 44680257919; Fable full review + re-check APPROVED). Quick check: onboarding, paywall, one sandbox "Start free trial", delete + reinstall + "Restore purchase", lock-screen recording 10 min, Settings > Rate Longnote opens the App Store (it says "not available" until launch; that is expected).
 2. Re-publish the website in Figma Make (privacy + support pages): paste `docs/store/website/FIGMA-MAKE-PRIVACY-UPDATE.txt`, and apply the support page text from `docs/store/website/support.md`. This removes the "Settings > Account > Delete account" line (we have no accounts; a reviewer would look for it) and the old "June 4, 2026" date. While there: set the page title to "Longnote" (it says "Figma Make App") and remove the template description.
 
 ## B. App Store Connect website (appstoreconnect.apple.com > Longnote)
@@ -29,7 +29,7 @@ Nothing here sends the app to Apple. "Submit for Review" is the last step and ha
 4. **Version 1.0 page**:
    - Build: remove 116, select **118**.
    - "In-App Purchases and Subscriptions": tick **Longnote Yearly** and **Longnote Monthly**.
-   - Review notes: Claude updates them through the API once 118 is attached (they still say "three intro screens").
+   - Review notes: DONE by Claude 20 Nov (describe the new onboarding).
    - Screenshots: the 8 uploaded are from the older design; fine to submit, refresh later.
 5. Claude checks everything once more through the API and reports.
 6. Owner says go → "Add for Review" → "Submit to App Review". Release is set to "automatically after approval"; change to "Manually release" first if you want to pick the day.
