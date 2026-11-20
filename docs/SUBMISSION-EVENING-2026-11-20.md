@@ -35,7 +35,7 @@ Nothing here sends the app to Apple. "Submit for Review" is the last step and ha
 6. Owner says go → "Add for Review" → "Submit to App Review". Release is set to "automatically after approval"; change to "Manually release" first if you want to pick the day.
 
 ## C. After submission (not blocking)
-- Supabase Pro ($25/month) before ad spend (free projects pause after a week of no use and have small limits).
+- Supabase Pro: ALREADY ON (org "The App Company" plan pro, checked 21 Nov).
 - OpenAI and Soniox billing alerts.
 - Recordings longer than 5 hours: split into parts (today the app says "up to 5 hours").
 - Login + "Delete account" (then update the privacy label: Contact Info).
