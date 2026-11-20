@@ -34,8 +34,8 @@
 	     FacebookClientToken are added at build time by the CI workflows from
 	     the GitHub secrets META_APP_ID / META_CLIENT_TOKEN. The SDK starts
 	     only when the app calls it (and never while "Share usage analytics"
-	     is off); no automatic event or purchase logging; the advertising ID
-	     only after the user allows tracking. -->
+	     is off); no automatic event or purchase logging; never the advertising
+	     ID (no ATT prompt in v1, IDFA collection off). -->
 	<key>FacebookDisplayName</key>
 	<string>Longnote</string>
 	<key>FacebookAutoInitEnabled</key>
@@ -91,13 +91,6 @@
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
-	</array>
-	<key>UISupportedInterfaceOrientations~ipad</key>
-	<array>
-		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationPortraitUpsideDown</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 </dict>
 </plist>
