@@ -1,6 +1,6 @@
 # Longnote Privacy Policy
 
-**Last updated: 19 November 2026**
+**Last updated: 20 November 2026**
 
 Longnote is an iPhone app that records long conversations and turns them into transcripts and summaries. This policy explains what data the app uses, where it goes, and how long it is kept. If anything is unclear, email us at support@novaralabs.in.
 
@@ -159,8 +159,7 @@ While **Share usage analytics** is on, our server sends these events to **Amplit
 You can:
 
 - **Delete a note.** Delete it in the app. It is removed from your phone. (Our servers do not keep notes.)
-- **Delete your account.** If you have signed in with an account, go to **Settings > Account > Delete account**. This deletes your account and everything our backend holds for it, asks Amplitude to delete your analytics events, and signs you out. We confirm by email if you gave us one.
-- **Delete all your data without an account.** Email support@novaralabs.in with the Support ID shown in **Settings > Privacy**. We will:
+- **Delete all your data.** Longnote has no accounts. Email support@novaralabs.in with the Support ID shown in **Settings > What happens to your audio**. We will:
   - delete your anonymous ID, job records, usage counts, push token, subscription status and ad measurement details from our backend;
   - ask Amplitude to delete all analytics events linked to your IDs (Amplitude completes this within about 30 days);
   - confirm by email within 30 days.
@@ -169,7 +168,7 @@ You can:
 - **Delete the app.** This removes everything stored on your phone. It does not remove server records, so email us first (with your Support ID) if you want those removed now. Records of an unused install are deleted after 90 days anyway.
 - **Turn off analytics and ad measurement** in **Settings > Share usage analytics** (sections 6 and 7).
 - **Turn off notifications** in iPhone Settings.
-- **Email us** at support@novaralabs.in to access, correct or delete your data, to object to processing, or to ask a question. Because we have no account, please include the support ID shown in **Settings > Privacy**, so we can find your records. We reply within 30 days.
+- **Email us** at support@novaralabs.in to access, correct or delete your data, to object to processing, or to ask a question. Because we have no account, please include the Support ID shown in **Settings > What happens to your audio**, so we can find your records. We reply within 30 days.
 
 **If you are in the EU, UK or EEA (GDPR):** you have the right to access, correct, delete, restrict, object to, and port your data, and to withdraw consent. Our legal bases are:
 
