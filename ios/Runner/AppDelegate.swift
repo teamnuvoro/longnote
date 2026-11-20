@@ -426,7 +426,11 @@ public class AudioEncoderPlugin: NSObject, FlutterPlugin {
       AVLinearPCMIsNonInterleaved: false,
     ]
     let readerOutput = AVAssetReaderAudioMixOutput(audioTracks: [track], audioSettings: pcm)
-    readerOutput.alwaysCopiesSampleData = false
+    // Copy each buffer: the AAC encoder runs on its own thread and can read a
+    // buffer after the reader has reused that memory (simulator QA run
+    // 44752027594 crashed in aacEncodeFrame on a 61-min note, SIGSEGV just past
+    // a page boundary). Copying costs a little CPU, never correctness.
+    readerOutput.alwaysCopiesSampleData = true
     guard reader.canAdd(readerOutput) else { throw EncodeError.reader("cannot add output") }
     reader.add(readerOutput)
 
