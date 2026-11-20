@@ -39,3 +39,4 @@ Nothing here sends the app to Apple. "Submit for Review" is the last step and ha
 - OpenAI and Soniox billing alerts.
 - Recordings longer than 5 hours: split into parts (today the app says "up to 5 hours").
 - Login + "Delete account" (then update the privacy label: Contact Info).
+- 1.0.1: a native crash during processing re-runs the same job on every launch (resetInterrupted keeps attempts; Fable 20 Nov). Add a separate "interrupted while running" counter with a higher cap so normal iOS background kills don't fail notes. Also consider running sim QA on an arm64 simulator (CI simulator runs under Rosetta; AAC encoder crash in run 44752027594 is a Rosetta/x86 codec artefact per Fable).
