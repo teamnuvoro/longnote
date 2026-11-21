@@ -131,6 +131,49 @@ void main() {
       await t.runAsync(env.dispose);
     });
 
+    testWidgets('action owners stay with their task after an autosave '
+        'reloads the editor; a summary written by someone else closes it '
+        'without saving', (t) async {
+      final env = (await t.runAsync(TestEnv.create))!;
+      const start = MeetingSummary(actionItems: [
+        ActionItem(task: 'A', owner: 'Priya'),
+        ActionItem(task: 'B', owner: 'Arjun'),
+        ActionItem(task: 'C', owner: 'Meera', due: 'Friday'),
+      ]);
+      final saved = <MeetingSummary>[];
+      var done = 0;
+      Widget app(MeetingSummary initial) => MaterialApp(
+          home: Scaffold(
+              body: SingleChildScrollView(
+                  child: SummaryEditor(
+                      recordingId: 'n',
+                      initial: initial,
+                      analytics: env.analytics,
+                      save: (s) async => saved.add(s),
+                      onDone: () => done++))));
+      await t.pumpWidget(app(start));
+      await t.enterText(find.text('B'), '');
+      await t.pump(SummaryEditor.autosaveDelay);
+      // The note screen reloads: the editor gets what it saved.
+      await t.pumpWidget(app(MeetingSummary.parse(saved.last.encode())));
+      await t.enterText(find.text('C'), 'C2');
+      await t.pump(SummaryEditor.autosaveDelay);
+      expect(saved.last.actionItems.map((a) => (a.task, a.owner, a.due)),
+          [('A', 'Priya', null), ('C2', 'Meera', 'Friday')]);
+      expect(done, 0);
+
+      // A new style finished meanwhile: the editor closes, keeps theirs.
+      final n = saved.length;
+      await t.enterText(find.text('A'), 'A typed');
+      await t.pumpWidget(app(const MeetingSummary(inShort: 'Fresh summary')));
+      await t.pump();
+      expect(done, 1);
+      await t.pumpWidget(const SizedBox());
+      await t.pump(SummaryEditor.autosaveDelay);
+      expect(saved.length, n);
+      await t.runAsync(env.dispose);
+    });
+
     testWidgets('no change: nothing saved, no event', (t) async {
       final (saved, env) = await pump(t);
       await t.tap(find.text('Done'));

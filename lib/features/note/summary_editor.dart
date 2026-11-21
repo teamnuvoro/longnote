@@ -33,12 +33,15 @@ class SummaryEditor extends StatefulWidget {
 }
 
 class _Field {
-  _Field(String text, {this.added = false})
+  _Field(String text, {this.added = false, this.action})
       : ctl = TextEditingController(text: text),
         original = text;
   final TextEditingController ctl;
   final String original;
   final bool added;
+
+  /// Action items: the original item (its owner and date are kept).
+  final ActionItem? action;
   String get text => ctl.text.trim();
 }
 
@@ -49,7 +52,7 @@ class _SummaryEditorState extends State<SummaryEditor> {
   late final _keyPoints = [for (final t in widget.initial.keyPoints) _Field(t)];
   late final _decisions = [for (final t in widget.initial.decisions) _Field(t)];
   late final _actions = [
-    for (final a in widget.initial.actionItems) _Field(a.task)
+    for (final a in widget.initial.actionItems) _Field(a.task, action: a)
   ];
   late final _numbers = [
     for (final t in widget.initial.numbersAndDates) _Field(t)
@@ -60,6 +63,32 @@ class _SummaryEditorState extends State<SummaryEditor> {
 
   Timer? _debounce;
   bool _dirty = false;
+
+  /// What this editor last wrote (normalised). A different summary arriving
+  /// means someone else wrote it (a new style finished): close, keep theirs.
+  late String _lastSaved = _norm(widget.initial.encode());
+  bool _stale = false;
+  static String _norm(String json) {
+    try {
+      return MeetingSummary.parse(json).encode();
+    } catch (_) {
+      return json;
+    }
+  }
+
+  @override
+  void didUpdateWidget(SummaryEditor old) {
+    super.didUpdateWidget(old);
+    if (_stale || _saving) return;
+    if (_norm(widget.initial.encode()) != _lastSaved) {
+      _stale = true;
+      _dirty = false;
+      _debounce?.cancel();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.onDone();
+      });
+    }
+  }
   bool _saving = false;
   bool _savedOnce = false;
 
@@ -89,18 +118,14 @@ class _SummaryEditorState extends State<SummaryEditor> {
   MeetingSummary _build() {
     List<String> texts(List<_Field> l) =>
         [for (final f in l) if (f.text.isNotEmpty) f.text];
-    final a = widget.initial.actionItems;
     return MeetingSummary(
       inShort: (_inShort?.text.isEmpty ?? true) ? null : _inShort!.text,
       keyPoints: texts(_keyPoints),
       decisions: texts(_decisions),
       actionItems: [
-        for (var i = 0; i < _actions.length; i++)
-          if (_actions[i].text.isNotEmpty)
-            ActionItem(
-                task: _actions[i].text,
-                owner: i < a.length ? a[i].owner : null,
-                due: i < a.length ? a[i].due : null),
+        for (final f in _actions)
+          if (f.text.isNotEmpty)
+            ActionItem(task: f.text, owner: f.action?.owner, due: f.action?.due),
       ],
       numbersAndDates: texts(_numbers),
       openQuestions: texts(_questions),
@@ -110,17 +135,23 @@ class _SummaryEditorState extends State<SummaryEditor> {
 
   Future<void> _save() async {
     _debounce?.cancel();
-    if (!_dirty || _saving) return;
+    if (!_dirty || _saving || _stale) return;
     _dirty = false;
     _saving = true;
+    final next = _build();
+    _lastSaved = _norm(next.encode());
     try {
-      await widget.save(_build());
+      await widget.save(next);
       _savedOnce = true;
     } catch (_) {
       _dirty = true; // try again on the next change or on Done
     } finally {
       _saving = false;
-      if (mounted) setState(() {});
+      if (mounted) {
+        setState(() {});
+        // Typed while the save ran: schedule the next one.
+        if (_dirty) _changed();
+      }
     }
   }
 
@@ -155,7 +186,9 @@ class _SummaryEditorState extends State<SummaryEditor> {
   @override
   void dispose() {
     // Leaving the note (or Done): save what is left, log the session.
-    if (_dirty) unawaited(widget.save(_build()).catchError((_) {}));
+    if (_dirty && !_stale) {
+      unawaited(widget.save(_build()).catchError((_) {}));
+    }
     _logSession();
     _debounce?.cancel();
     for (final f in _all) {

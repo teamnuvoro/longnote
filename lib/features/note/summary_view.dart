@@ -59,7 +59,11 @@ List<Widget> summaryChildren(
             overflow: TextOverflow.ellipsis,
             style: LnText.caption),
       ),
-      if (onEdit != null && s != null && !s.isEmpty && !rewriting) ...[
+      // Not while the note is being (re)processed: a new summary is coming.
+      if (onEdit != null &&
+          s != null &&
+          !s.isEmpty &&
+          !note.processingStatus.inProgress) ...[
         LnPressable(
           onPressed: onEdit,
           semanticLabel: 'Edit summary',

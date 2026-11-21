@@ -133,3 +133,4 @@ Foundations for the Figma v1 screens. Map: `docs/APP-ARCHITECTURE.md`.
 
 - **1.0.2 (owner, 21 Nov 2026): the summary is editable, the transcript is not.** Edit on the Summary tab turns every sentence/point into a field; it saves by itself 0.7 s after typing stops and when the editor closes; an emptied point is removed. The summary is marked "Edited by you"; Change style warns it replaces the edits. Events summary_edit_opened / summary_edited (counts only).
 - **Speaker renames and merges reach the summary** (owner, 21 Nov 2026): the old name is replaced by the new one as a whole word in every summary text, so "Speaker 1" becomes "Priya" there too.
+- Known limits of the rename: it is a whole-word text swap, so renaming a speaker to another speaker's current name joins them in the summary for good; a summary in another language ("Sprecher 1") or one where the model already used a real name is not changed.
