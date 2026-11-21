@@ -140,17 +140,20 @@ class _SummaryEditorState extends State<SummaryEditor> {
     _saving = true;
     final next = _build();
     _lastSaved = _norm(next.encode());
+    var failed = false;
     try {
       await widget.save(next);
       _savedOnce = true;
     } catch (_) {
+      failed = true;
       _dirty = true; // try again on the next change or on Done
     } finally {
       _saving = false;
       if (mounted) {
         setState(() {});
-        // Typed while the save ran: schedule the next one.
-        if (_dirty) _changed();
+        // Typed while the save ran: schedule the next one (not a retry loop
+        // after a failed write).
+        if (_dirty && !failed) _changed();
       }
     }
   }
