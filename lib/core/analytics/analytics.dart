@@ -76,6 +76,11 @@ class AnalyticsEvent {
   static const noteRenamed = 'note_renamed';
   static const noteDeleted = 'note_deleted';
   static const speakerRenamed = 'speaker_renamed';
+  /// Edit tapped on the Summary tab.
+  static const summaryEditOpened = 'summary_edit_opened';
+  /// One per edit session that changed something: counts only, never text
+  /// (`fields_changed`, `items_removed`, `items_added`).
+  static const summaryEdited = 'summary_edited';
 
   /// `style`: the style id, `from`: note / settings / onboarding.
   static const summaryStyleChanged = 'summary_style_changed';
@@ -143,6 +148,8 @@ class AnalyticsEvent {
     noteRenamed,
     noteDeleted,
     speakerRenamed,
+    summaryEditOpened,
+    summaryEdited,
     summaryStyleChanged,
     playbackStarted,
     askSent,

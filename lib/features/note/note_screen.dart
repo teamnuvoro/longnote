@@ -17,6 +17,7 @@ import 'kit.dart';
 import 'note_model.dart';
 import 'note_playback.dart';
 import 'processing_view.dart';
+import 'summary_editor.dart';
 import 'summary_view.dart';
 import 'transcript_view.dart';
 
@@ -45,6 +46,7 @@ class _NoteScreenState extends State<NoteScreen> {
   late NoteTab _tab = widget.initialTab ?? NoteTab.summary;
   bool _showSpeakers = true;
   bool _searching = false;
+  bool _editingSummary = false;
   String _query = '';
   bool? _cloud;
   bool _popped = false;
@@ -217,10 +219,16 @@ class _NoteScreenState extends State<NoteScreen> {
     }
   }
 
+  void _editSummary() {
+    setState(() => _editingSummary = true);
+    _s.analytics.log(AnalyticsEvent.summaryEditOpened, recordingId: widget.id);
+  }
+
   void _setTab(NoteTab t) {
     if (t == _tab) return;
     setState(() {
       _tab = t;
+      _editingSummary = false;
       _searching = false;
       _query = '';
       _searchCtl.clear();
@@ -302,10 +310,19 @@ class _NoteScreenState extends State<NoteScreen> {
               onChanged: _setTab,
             ),
             const SizedBox(height: 16),
-            if (_tab == NoteTab.summary)
+            if (_tab == NoteTab.summary && _editingSummary && d.summary != null)
+              SummaryEditor(
+                recordingId: widget.id,
+                initial: d.summary!,
+                analytics: _s.analytics,
+                save: (sum) => _s.repo.updateSummaryJson(widget.id, sum.encode()),
+                onDone: () => setState(() => _editingSummary = false),
+              )
+            else if (_tab == NoteTab.summary)
               ...summaryChildren(d,
                   onChangeStyle: _openStyle,
-                  onMakeSummary: () => _s.redoSummary(widget.id))
+                  onMakeSummary: () => _s.redoSummary(widget.id),
+                  onEdit: _editSummary)
             else
               _transcriptToolbar(d),
           ],

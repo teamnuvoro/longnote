@@ -38,7 +38,11 @@ class MeetingSummary {
     this.actionItems = const [],
     this.numbersAndDates = const [],
     this.openQuestions = const [],
+    this.edited = false,
   });
+
+  /// The user changed this summary by hand (Edit on the Summary tab).
+  final bool edited;
 
   final String? inShort;
   final List<String> keyPoints;
@@ -62,7 +66,26 @@ class MeetingSummary {
         'action_items': actionItems.map((a) => a.toJson()).toList(),
         'numbers_and_dates': numbersAndDates,
         'open_questions': openQuestions,
+        if (edited) 'edited': true,
       };
+
+  /// Every text in the summary through [f] (speaker renames). Keeps
+  /// [edited].
+  MeetingSummary mapText(String Function(String) f) => MeetingSummary(
+        inShort: inShort == null ? null : f(inShort!),
+        keyPoints: keyPoints.map(f).toList(),
+        decisions: decisions.map(f).toList(),
+        actionItems: [
+          for (final a in actionItems)
+            ActionItem(
+                task: f(a.task),
+                owner: a.owner == null ? null : f(a.owner!),
+                due: a.due == null ? null : f(a.due!)),
+        ],
+        numbersAndDates: numbersAndDates.map(f).toList(),
+        openQuestions: openQuestions.map(f).toList(),
+        edited: edited,
+      );
 
   String encode() => jsonEncode(toJson());
 
@@ -103,6 +126,7 @@ class MeetingSummary {
       actionItems: _actions(normalized['action_items']),
       numbersAndDates: _strings(normalized['numbers_and_dates']),
       openQuestions: _strings(normalized['open_questions']),
+      edited: normalized['edited'] == true,
     );
   }
 

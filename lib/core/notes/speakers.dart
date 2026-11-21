@@ -81,9 +81,12 @@ class SpeakerStore {
   Future<void> rename(String recordingId, String key, String name) async {
     final n = name.trim();
     if (n.isEmpty) return;
+    final old = (await names(recordingId))[key];
     await _db.update('speakers', {'display_name': n},
         where: 'recording_id = ? AND speaker_key = ?',
         whereArgs: [recordingId, key]);
+    // The summary names people as the transcript did: follow the rename.
+    if (old != null) await repo.renameInSummary(recordingId, old, n);
     repo.changed();
   }
 
@@ -92,6 +95,7 @@ class SpeakerStore {
   Future<void> merge(String recordingId,
       {required String fromKey, required String intoKey}) async {
     if (fromKey == intoKey) return;
+    final before = await names(recordingId);
     await _db.transaction((txn) async {
       await txn.update('transcript_lines', {'speaker': intoKey},
           where: 'recording_id = ? AND speaker = ?',
@@ -100,6 +104,10 @@ class SpeakerStore {
           where: 'recording_id = ? AND speaker_key = ?',
           whereArgs: [recordingId, fromKey]);
     });
+    final from = before[fromKey], into = before[intoKey];
+    if (from != null && into != null) {
+      await repo.renameInSummary(recordingId, from, into);
+    }
     repo.changed();
   }
 

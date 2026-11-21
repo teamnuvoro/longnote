@@ -130,3 +130,6 @@ Foundations for the Figma v1 screens. Map: `docs/APP-ARCHITECTURE.md`.
 - **The on-device transcript is replaced only when the first cloud turns are saved** (review MEDIUM). Same transaction; a failed cloud run keeps the old transcript.
 - **Renewal dates clamp the day** (review LOW). Jan 31 + 1 month = Feb 28/29, Feb 29 + 1 year = Feb 28 (App Store behaviour).
 - **Paywall says "We can remind you"; G4 shows the reminder Off with "tap to turn on" when none is scheduled** (review LOW). The scheduled time is kept in kv (`trial_reminder_at`).
+
+- **1.0.2 (owner, 21 Nov 2026): the summary is editable, the transcript is not.** Edit on the Summary tab turns every sentence/point into a field; it saves by itself 0.7 s after typing stops and when the editor closes; an emptied point is removed. The summary is marked "Edited by you"; Change style warns it replaces the edits. Events summary_edit_opened / summary_edited (counts only).
+- **Speaker renames and merges reach the summary** (owner, 21 Nov 2026): the old name is replaced by the new one as a whole word in every summary text, so "Speaker 1" becomes "Priya" there too.

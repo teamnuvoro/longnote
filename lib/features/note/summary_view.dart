@@ -41,6 +41,7 @@ List<Widget> summaryChildren(
   NoteData d, {
   required VoidCallback onChangeStyle,
   required VoidCallback onMakeSummary,
+  VoidCallback? onEdit,
 }) {
   final s = d.summary;
   final note = d.note;
@@ -58,6 +59,21 @@ List<Widget> summaryChildren(
             overflow: TextOverflow.ellipsis,
             style: LnText.caption),
       ),
+      if (onEdit != null && s != null && !s.isEmpty && !rewriting) ...[
+        LnPressable(
+          onPressed: onEdit,
+          semanticLabel: 'Edit summary',
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              const LnIcon(LnIcons.pencil, size: 14),
+              const SizedBox(width: 4),
+              Text('Edit', style: LnText.smallButton),
+            ]),
+          ),
+        ),
+        const SizedBox(width: 16),
+      ],
       LnPressable(
         onPressed: rewriting ? null : onChangeStyle,
         semanticLabel: 'Change style',
@@ -127,6 +143,10 @@ List<Widget> summaryChildren(
   section('Open questions', [for (final t in s.openQuestions) _Bullet(text: t)]);
   if (d.summaryNote != null) {
     out.add(Text(d.summaryNote!, style: LnText.meta.copyWith(color: LnColors.ink3)));
+  }
+  if (s.edited) {
+    out.add(const SizedBox(height: 4));
+    out.add(Text('Edited by you', style: LnText.meta.copyWith(color: LnColors.ink3)));
   }
   return out;
 }

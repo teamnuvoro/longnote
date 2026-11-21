@@ -304,6 +304,35 @@ class RecordingRepository extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Replaces only the summary text (a hand edit or a speaker rename); keeps
+  /// engine, style, note and date.
+  Future<void> updateSummaryJson(String recordingId, String json) async {
+    final n = await _db.update('summaries', {'json': json},
+        where: 'recording_id = ?', whereArgs: [recordingId]);
+    if (n == 0) return;
+    try {
+      await _db.update('notes_fts', {'summary': summaryPlainText(json)},
+          where: 'recording_id = ?', whereArgs: [recordingId]);
+    } catch (_) {}
+    notifyListeners();
+  }
+
+  /// A speaker was renamed (or merged): the same person in the summary
+  /// gets the new name ("Speaker 1" -> "Priya"). Whole names only.
+  Future<void> renameInSummary(String recordingId, String from, String to) async {
+    if (from.trim().isEmpty || from == to) return;
+    final s = await summary(recordingId);
+    if (s == null) return;
+    final MeetingSummary parsed;
+    try {
+      parsed = MeetingSummary.parse(s.json);
+    } catch (_) {
+      return;
+    }
+    final next = parsed.mapText((t) => replaceWholeName(t, from, to)).encode();
+    if (next != parsed.encode()) await updateSummaryJson(recordingId, next);
+  }
+
   /// One-line preview per note for the Notes list: the summary's in_short,
   /// else its first key point.
   Future<Map<String, String>> summaryPreviews() async {
@@ -336,4 +365,13 @@ String? summaryPreviewLine(String json) {
   } catch (_) {
     return null;
   }
+}
+
+/// [text] with every whole-word [from] replaced by [to] ("Speaker 1" never
+/// matches inside "Speaker 10"; case-sensitive).
+String replaceWholeName(String text, String from, String to) {
+  final re = RegExp(
+      '(?<![\\p{L}\\p{N}_])${RegExp.escape(from)}(?![\\p{L}\\p{N}_])',
+      unicode: true);
+  return text.replaceAll(re, to);
 }

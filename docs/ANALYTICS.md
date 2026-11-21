@@ -56,6 +56,8 @@ Added 18 Nov 2026 (branch v1-build). Code: `lib/core/analytics/`.
 | mic_permission | result (`allowed`/`denied`), from (`onboarding`; `record` = Start refused for no mic, logged only on `denied`) | yes | yes | - |
 | notification_permission | result (`allowed`/`denied`/`skipped` = our own ask declined, iOS never asked), from (`trial_started`/`plan`/`note_ready`) | yes | yes | - |
 | recording_paused / recording_resumed | recording_id (user taps only) | yes | yes | - |
+| summary_edit_opened | recording_id (Edit tapped on the Summary tab) | yes | yes | - |
+| summary_edited | recording_id, fields_changed, items_removed, items_added (one per edit session that changed something; never text) | yes | yes | - |
 | free_limit_reached | recording_id, duration_s (the free 30 s ran out mid-recording; capture paused, paywall opens) | yes | yes | - |
 | recording_discarded | recording_id, duration_s | yes | yes | - |
 | search_used | chars_bucket (`1-3`/`4-10`/`11+`, longest query of the visit), opened (a result was opened); once per visit to Search, never the text | yes | yes | - |

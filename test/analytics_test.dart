@@ -58,6 +58,8 @@ void main() {
       'note_renamed',
       'note_deleted',
       'speaker_renamed',
+      'summary_edit_opened',
+      'summary_edited',
       'summary_style_changed',
       'playback_started',
       'ask_sent',

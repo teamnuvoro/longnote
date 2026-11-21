@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../app_services.dart';
 import '../../core/analytics/analytics.dart';
 import '../../core/models/recording.dart';
+import '../../core/summary/summary_models.dart';
 import '../../core/summary/summary_style.dart';
 import '../../ui/widgets.dart';
 import 'kit.dart';
@@ -30,6 +31,7 @@ class _SummaryStyleSheetState extends State<SummaryStyleSheet> {
   bool _ownOpen = false;
   bool _asDefault = false;
   bool _busy = false;
+  bool _edited = false; // the summary has hand edits a new style replaces
 
   @override
   void initState() {
@@ -41,9 +43,17 @@ class _SummaryStyleSheetState extends State<SummaryStyleSheet> {
     final id = widget.id;
     final def = await _s.settings.defaultStyle();
     Recording? note;
-    if (id != null) note = await _s.repo.get(id);
+    var edited = false;
+    if (id != null) {
+      note = await _s.repo.get(id);
+      final sum = await _s.repo.summary(id);
+      try {
+        edited = sum != null && MeetingSummary.parse(sum.json).edited;
+      } catch (_) {}
+    }
     if (!mounted) return;
     setState(() {
+      _edited = edited;
       _style = note?.summaryStyle == null
           ? def
           : SummaryStyle.parse(note!.summaryStyle);
@@ -131,7 +141,9 @@ class _SummaryStyleSheetState extends State<SummaryStyleSheet> {
             Text(
               widget.id == null
                   ? 'Pick how new notes are summarised. You can change it per note.'
-                  : 'Pick how this note is summarised. Your transcript stays the same.',
+                  : _edited
+                      ? 'Pick how this note is summarised. This writes a new summary and replaces your edits. Your transcript stays the same.'
+                      : 'Pick how this note is summarised. Your transcript stays the same.',
               style: LnText.preview,
             ),
             const SizedBox(height: 14),
