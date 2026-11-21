@@ -256,9 +256,12 @@ class _PaywallScreenState extends State<PaywallScreen> {
                             ),
                             const SizedBox(height: 6),
                             Text(
-                                trial
-                                    ? 'Try everything free for ${plan.trialDays} days.'
-                                    : 'Keep recording, for hours at a time.',
+                                widget.placement == 'free_limit'
+                                    ? '${trial ? 'Start your free ${plan.trialDays}-day trial to keep recording.' : 'Subscribe to keep recording.'}'
+                                        ' Or close this to save the 30 seconds as a note.'
+                                    : trial
+                                        ? 'Try everything free for ${plan.trialDays} days.'
+                                        : 'Keep recording, for hours at a time.',
                                 style: LnText.body
                                     .copyWith(color: LnColors.ink2, height: null)),
                             const SizedBox(height: 16),

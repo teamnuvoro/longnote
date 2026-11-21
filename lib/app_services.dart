@@ -584,6 +584,7 @@ class AppServices {
 
   void dispose() {
     _endFreeLimit();
+    freeLimitHit.dispose();
     if (_reminderSyncOn) billing.entitlement.removeListener(_syncReminder);
     if (_profileSyncOn) billing.entitlement.removeListener(_profileChanged);
     _netSub?.cancel();
@@ -638,12 +639,20 @@ class AppServices {
       _endFreeLimit();
       return;
     }
-    if (recorder.elapsed < budget || freeLimitHit.value == id) return;
+    if (recorder.elapsed < budget) return;
+    // Past the limit, any resume other than afterFreeLimitPaywall (a plan)
+    // pauses again.
+    if (!_limitPausing) {
+      _limitPausing = true;
+      unawaited(recorder.pause().whenComplete(() => _limitPausing = false));
+    }
+    if (freeLimitHit.value == id) return;
     freeLimitHit.value = id;
-    unawaited(recorder.pause());
     unawaited(analytics.log(AnalyticsEvent.freeLimitReached,
         recordingId: id, props: {'duration_s': recorder.elapsed.inSeconds}));
   }
+
+  bool _limitPausing = false;
 
   void _endFreeLimit() {
     _freeBudget = null;

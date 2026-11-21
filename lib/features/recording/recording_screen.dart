@@ -114,11 +114,19 @@ class _RecordingScreenState extends State<RecordingScreen> {
     if (id != _s.recorder.current?.id) return;
     _limitPaywallOpen = true;
     try {
+      // Subscribed elsewhere (Settings › Plan) while it sat paused.
+      if (await _s.afterFreeLimitPaywall()) return;
+      if (!mounted) return;
       final router = GoRouter.of(context);
       await router.pushNamed<bool>(R.paywall,
           queryParameters: {'from': 'free_limit'});
       if (!mounted || _s.recorder.current?.id != id) return;
       if (await _s.afterFreeLimitPaywall()) return;
+      if (!mounted) return;
+      // A sheet (rename, language, discard) may sit above this screen:
+      // close it so Stop pops this screen, not the sheet.
+      final self = ModalRoute.of(context);
+      Navigator.of(context).popUntil((r) => r == self || r.isFirst);
       if (!mounted) return;
       await _stop(_s.recorder);
     } finally {

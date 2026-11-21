@@ -21,7 +21,7 @@ Labels: **DONE** = code written and unit-tested. **PARTIAL** = some of it done.
 | 2b | Summary (key points, decisions, action items w/ owner/due only when stated, numbers/dates, open questions) | PARTIAL | Local extractive: DONE + tested. Apple: UNTESTED (never compiled). Cloud: written, NOT deployed |
 | 2c | Original audio always playable; failures never delete audio; retry | DONE (logic) / UNTESTED (playback) | Queue tested: backoff, final fail, manual retry, audio unchanged after failures, per-part resume. Playback uses just_audio, not run |
 | 3 | Rename, playback + seek, copy/share transcript and summary, PDF, share audio | DONE (code) / UNTESTED on device | PDF builder tested (Unicode fonts). Share sheet not seen |
-| 4 | Honest billing UI, $9.99 / $59.99, 3-day trial, no weekly, renewal price + date, how-to-cancel before buy, trial reminder, first recording free / paywall on 2nd | DONE with FAKE billing | Gate rule + reminder date math tested. **No StoreKit yet** |
+| 4 | Honest billing UI, $9.99 / $59.99, 3-day trial, no weekly, renewal price + date, how-to-cancel before buy, trial reminder, 1.0: first recording free / paywall on 2nd; 1.0.1: 30 s free, then the paywall mid-recording (DECISIONS.md) | DONE with FAKE billing | Gate rule + reminder date math tested. **No StoreKit yet** |
 | 5 | Onboarding: 3 screens, privacy promise, mic permission; no account | DONE (UI) | |
 | 6 | Analytics events (16): local log + Amplitude + Meta App Events, ATT prompt, "Share usage analytics" switch | DONE | docs/ANALYTICS.md; test/remote_analytics_test.dart |
 | - | Settings: privacy explainer, engine choice, model choice/download, plan status, hidden Benchmark | DONE (UI) | Benchmark UNTESTED on device |

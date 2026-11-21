@@ -52,7 +52,9 @@ class PaywallGate {
   Future<void> onRecordingFinished(Duration length,
       {required bool wasEntitled}) async {
     if (wasEntitled || length <= Duration.zero) return;
-    final used = await freeSecondsUsed() + length.inSeconds;
+    // Rounded up: many sub-second recordings must not be free.
+    final used =
+        await freeSecondsUsed() + (length.inMilliseconds / 1000).ceil();
     final cap = AppConfig.freeSeconds.inSeconds;
     await kv.setInt(freeSecondsKey, used > cap ? cap : used);
   }
