@@ -170,6 +170,53 @@ void main() {
     expect(ev(AnalyticsEvent.recordingDiscarded).props['duration_s'], 3);
   });
 
+  testWidgets('summary: rename a speaker -> the summary follows; Edit -> '
+      'autosave -> Done -> "Edited by you"; events carry counts only',
+      (t) async {
+    await boot(t);
+    await t.runAsync(() => env.addNote('n1', 'Budget review',
+        at: env.clock.now(),
+        summary: 'Speaker 1 said they love Tibidabo.',
+        turns: const [('1', 0, 'I love Tibidabo.'), ('2', 2000, 'Same.')]));
+    await settle(t);
+    env.router.pushNamed(R.note, pathParameters: {'id': 'n1'});
+    await settle(t);
+    expect(find.text('Speaker 1 said they love Tibidabo.'), findsOneWidget);
+
+    // Rename on the transcript tab (D4).
+    await tapAndSettle(t, find.text('Transcript'));
+    await tapAndSettle(t, find.text('Edit names'));
+    await t.enterText(find.byType(TextField).first, 'Priya');
+    await tapAndSettle(t, find.text('Save'));
+    await tapAndSettle(t, find.text('Summary'));
+    expect(find.text('Priya said they love Tibidabo.'), findsOneWidget);
+
+    // Edit the summary; it saves by itself.
+    await tapAndSettle(t, find.text('Edit'));
+    expect(find.text('Done'), findsOneWidget);
+    await t.enterText(find.text('Priya said they love Tibidabo.'),
+        'Priya said she loves Tibidabo.');
+    await t.pump(const Duration(seconds: 1));
+    await settle(t);
+    final saved = (await t.runAsync(() => env.repo.summary('n1')))!;
+    expect(saved.json, contains('Priya said she loves Tibidabo.'));
+    expect(saved.json, contains('"edited":true'));
+    // Still editing after the reload that the save caused.
+    expect(find.text('Done'), findsOneWidget);
+    await tapAndSettle(t, find.text('Done'));
+    expect(find.text('Priya said she loves Tibidabo.'), findsOneWidget);
+    expect(find.text('Edited by you'), findsOneWidget);
+    // The transcript has no editor.
+    await tapAndSettle(t, find.text('Transcript'));
+    expect(find.text('I love Tibidabo.'), findsOneWidget);
+    expect(find.byType(TextField), findsNothing);
+
+    expect(named(AnalyticsEvent.summaryEditOpened), hasLength(1));
+    expect(named(AnalyticsEvent.summaryEdited).single.$2,
+        {'fields_changed': 1, 'items_removed': 0, 'items_added': 0,
+          'recording_id': 'n1'});
+  });
+
   testWidgets('free 30 s: capture pauses at the limit and the paywall '
       'opens; closing it saves the note and spends the seconds', (t) async {
     await boot(t, trial: false);
