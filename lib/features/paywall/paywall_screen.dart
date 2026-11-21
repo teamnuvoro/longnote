@@ -247,7 +247,10 @@ class _PaywallScreenState extends State<PaywallScreen> {
                           children: [
                             SizedBox(
                               width: 300,
-                              child: Text('Every word of every meeting.',
+                              child: Text(
+                                  widget.placement == 'free_limit'
+                                      ? 'Your free 30 seconds are up.'
+                                      : 'Every word of every meeting.',
                                   style: LnText.largeTitle
                                       .copyWith(fontSize: 31, height: 36 / 31)),
                             ),
@@ -311,7 +314,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
                             const SizedBox(height: 18),
                             PaywallMore(
                               key: _moreKey,
-                              // The free recording is only still unused on
+                              // The free 30 seconds are only still unused on
                               // the first-run paywall.
                               firstRun: widget.placement == 'first_run',
                               trial: trial,

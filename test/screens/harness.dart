@@ -175,6 +175,11 @@ class FakePcm implements PcmSource {
   static Completer<void>? startGate;
   final audio = StreamController<Uint8List>();
   final ints = StreamController<InterruptionPhase>.broadcast();
+  final lvl = StreamController<double>.broadcast();
+  double _level = -40;
+
+  /// One meter tick (a changed value, so listeners hear it).
+  void tickLevel() => lvl.add(_level = _level == -40 ? -39 : -40);
   @override
   Future<bool> hasPermission({bool request = true}) async => true;
   @override
@@ -190,7 +195,7 @@ class FakePcm implements PcmSource {
   @override
   Future<void> stop() async => audio.close();
   @override
-  Stream<double> levels() => const Stream.empty();
+  Stream<double> levels() => lvl.stream;
   @override
   Stream<InterruptionPhase> interruptions() => ints.stream;
   @override

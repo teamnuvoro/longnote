@@ -310,6 +310,7 @@ void main() {
   group('Import', () {
     testWidgets('Files -> F2 -> import -> note created and queued', (t) async {
       phoneView(t);
+      await t.runAsync(() => env.billing.purchase(annualPlan)); // Pro only
       env.picker.next = env.makeFile('Board meeting Nov 12.m4a', 3 * 1024 * 1024);
       await t.pumpWidget(env.app('/import'));
       await settle(t);

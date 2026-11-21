@@ -49,38 +49,44 @@ void main() {
     });
   });
 
-  group('paywall gate: first recording free, second gated', () {
+  group('paywall gate: 30 free seconds, then the paywall', () {
     test('pure rule', () {
       const none = Entitlement();
-      expect(PaywallGate.canStartRecording(freeRecordingsUsed: 0, entitlement: none), isTrue);
-      expect(PaywallGate.canStartRecording(freeRecordingsUsed: 1, entitlement: none), isFalse);
+      expect(PaywallGate.canStartRecording(freeSecondsUsed: 0, entitlement: none), isTrue);
+      expect(PaywallGate.canStartRecording(freeSecondsUsed: 29, entitlement: none), isTrue);
+      expect(PaywallGate.canStartRecording(freeSecondsUsed: 30, entitlement: none), isFalse);
       const trial = Entitlement(status: EntitlementStatus.trial);
       const active = Entitlement(status: EntitlementStatus.active);
       const expired = Entitlement(status: EntitlementStatus.expired);
-      expect(PaywallGate.canStartRecording(freeRecordingsUsed: 5, entitlement: trial), isTrue);
-      expect(PaywallGate.canStartRecording(freeRecordingsUsed: 5, entitlement: active), isTrue);
-      expect(PaywallGate.canStartRecording(freeRecordingsUsed: 1, entitlement: expired), isFalse);
+      expect(PaywallGate.canStartRecording(freeSecondsUsed: 30, entitlement: trial), isTrue);
+      expect(PaywallGate.canStartRecording(freeSecondsUsed: 30, entitlement: active), isTrue);
+      expect(PaywallGate.canStartRecording(freeSecondsUsed: 30, entitlement: expired), isFalse);
     });
 
-    test('flow: free recording of any length, then the paywall', () async {
+    test('free seconds add up across recordings, capped at 30', () async {
       final gate = PaywallGate(env.kv);
       const none = Entitlement();
+      expect(await gate.freeLeft(), const Duration(seconds: 30));
+      await gate.onRecordingFinished(const Duration(seconds: 12), wasEntitled: false);
+      expect(await gate.freeLeft(), const Duration(seconds: 18));
       expect(await gate.canStart(none), isTrue);
-      // A 3-hour first recording is fine (any length).
       await gate.onRecordingFinished(const Duration(hours: 3), wasEntitled: false);
+      expect(await gate.freeSecondsUsed(), 30);
+      expect(await gate.freeLeft(), Duration.zero);
       expect(await gate.canStart(none), isFalse);
     });
 
-    test('a mis-tap (<30 s) does not use up the free recording', () async {
+    test('a 1.0 user who used the free recording has no free seconds', () async {
+      await env.kv.setInt(PaywallGate.legacyFreeUsedKey, 1);
       final gate = PaywallGate(env.kv);
-      await gate.onRecordingFinished(const Duration(seconds: 12), wasEntitled: false);
-      expect(await gate.canStart(const Entitlement()), isTrue);
+      expect(await gate.freeLeft(), Duration.zero);
+      expect(await gate.canStart(const Entitlement()), isFalse);
     });
 
     test('recordings made while subscribed do not count', () async {
       final gate = PaywallGate(env.kv);
       await gate.onRecordingFinished(const Duration(hours: 1), wasEntitled: true);
-      expect(await gate.freeUsed(), 0);
+      expect(await gate.freeSecondsUsed(), 0);
     });
   });
 

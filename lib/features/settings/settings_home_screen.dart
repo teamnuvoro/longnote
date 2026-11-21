@@ -314,7 +314,7 @@ class _PlanCard extends StatelessWidget {
           : 'Renews ${monthDayYear(e.renewsAt!)} · ${plan.priceLabel} ${perPeriodWords(plan)}.';
     } else {
       title = 'Longnote · Free';
-      sub = 'Your first recording is free, any length.';
+      sub = 'Try 30 seconds of recording free.';
     }
     return LnPressable(
       onPressed: onManage,

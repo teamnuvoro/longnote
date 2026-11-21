@@ -63,6 +63,8 @@ class AnalyticsEvent {
   static const notificationPermission = 'notification_permission';
 
   static const recordingPaused = 'recording_paused';
+  /// A user without a plan used the free 30 s mid-recording (`duration_s`).
+  static const freeLimitReached = 'free_limit_reached';
   static const recordingResumed = 'recording_resumed';
 
   /// C4 "Discard recording": `duration_s`.
@@ -134,6 +136,7 @@ class AnalyticsEvent {
     micPermission,
     notificationPermission,
     recordingPaused,
+    freeLimitReached,
     recordingResumed,
     recordingDiscarded,
     searchUsed,

@@ -583,6 +583,7 @@ class AppServices {
   }
 
   void dispose() {
+    _endFreeLimit();
     if (_reminderSyncOn) billing.entitlement.removeListener(_syncReminder);
     if (_profileSyncOn) billing.entitlement.removeListener(_profileChanged);
     _netSub?.cancel();
@@ -612,7 +613,59 @@ class AppServices {
 
   String? _discarding;
 
+  // ---- Free 30 seconds (PaywallGate) ---------------------------------------
+
+  /// The recording id when a user without a plan ran out of free seconds
+  /// mid-recording (capture is paused). The recording screen opens the
+  /// paywall; [afterFreeLimitPaywall] settles it. Null otherwise.
+  final ValueNotifier<String?> freeLimitHit = ValueNotifier(null);
+
+  /// Free time left for the current recording; null = no limit (a plan or
+  /// trial, or nothing recording).
+  Duration? _freeBudget;
+  RecordingController? _limitWatched;
+  // Level ticks can stop changing in a silent room (ValueNotifier only
+  // notifies on change), so a 1 s timer checks too (not in widget tests).
+  Timer? _limitTimer;
+
+  /// Called on every audio level tick while capturing (no extra timer).
+  void _checkFreeLimit() {
+    final budget = _freeBudget;
+    final id = recorder.current?.id;
+    if (budget == null || id == null) return;
+    if (recorder.state != CaptureState.recording) return;
+    if (billing.entitlement.value.isActive) {
+      _endFreeLimit();
+      return;
+    }
+    if (recorder.elapsed < budget || freeLimitHit.value == id) return;
+    freeLimitHit.value = id;
+    unawaited(recorder.pause());
+    unawaited(analytics.log(AnalyticsEvent.freeLimitReached,
+        recordingId: id, props: {'duration_s': recorder.elapsed.inSeconds}));
+  }
+
+  void _endFreeLimit() {
+    _freeBudget = null;
+    _limitTimer?.cancel();
+    _limitTimer = null;
+    _limitWatched?.level.removeListener(_checkFreeLimit);
+    _limitWatched = null;
+    freeLimitHit.value = null;
+  }
+
+  /// The paywall opened at the free limit closed. On a plan or trial now:
+  /// the same recording resumes. Returns whether it resumed; if not, the
+  /// caller stops (saves) the recording.
+  Future<bool> afterFreeLimitPaywall() async {
+    if (!billing.entitlement.value.isActive) return false;
+    _endFreeLimit();
+    await recorder.resume();
+    return true;
+  }
+
   Future<void> _onRecordingFinished(Recording r) async {
+    _endFreeLimit();
     if (r.id == _discarding) return;
     try {
       await _afterRecording(r);
@@ -628,13 +681,18 @@ class AppServices {
     if (r.durationMs > 0) await jobs.enqueue(r.id);
   }
 
-  /// Gate check + start. Returns false when the paywall must be shown.
-  Future<bool> canStartRecording() async {
+  /// On a plan or trial now (asks the store if the paid-through date passed).
+  Future<bool> hasPlan() async {
     final paidUntil = billing.entitlement.value.renewsAt;
     if (paidUntil != null && paidUntil.isBefore(DateTime.now())) {
-      // Past the paid-through date: ask the store whether it renewed.
       await billing.refresh();
     }
+    return billing.entitlement.value.isActive;
+  }
+
+  /// Gate check + start. Returns false when the paywall must be shown.
+  Future<bool> canStartRecording() async {
+    if (await hasPlan()) return true;
     return gate.canStart(billing.entitlement.value);
   }
 
@@ -646,6 +704,20 @@ class AppServices {
   Future<Recording> startRecording() async {
     jobs.pause(); // keep CPU/battery for capture
     try {
+      // Read the free time BEFORE capture starts (the first level tick
+      // must already see the budget).
+      final free = billing.entitlement.value.isActive
+          ? null
+          : await gate.freeLeft();
+      _endFreeLimit();
+      if (free != null) {
+        _freeBudget = free;
+        _limitWatched = recorder..level.addListener(_checkFreeLimit);
+        if (recorder.useTimers) {
+          _limitTimer = Timer.periodic(
+              const Duration(seconds: 1), (_) => _checkFreeLimit());
+        }
+      }
       final r = await recorder.start();
       // The note starts with the current defaults (the C1 language chip and
       // D6 can change them per note).
@@ -657,7 +729,10 @@ class AppServices {
     } catch (_) {
       // Capture may have started and only the note options failed: keep
       // the queue paused while it records.
-      if (!recorder.isActive) jobs.resume();
+      if (!recorder.isActive) {
+        _endFreeLimit();
+        jobs.resume();
+      }
       rethrow;
     }
   }

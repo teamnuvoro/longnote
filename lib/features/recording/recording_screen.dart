@@ -92,12 +92,38 @@ class _RecordingScreenState extends State<RecordingScreen> {
     _openedAt; // start the double-tap guard now
     _repo.addListener(_loadNote);
     _loadNote();
+    _s.freeLimitHit.addListener(_onFreeLimit);
+    // Reopened from the recording bar after the limit hit in the background.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _onFreeLimit());
   }
 
   @override
   void dispose() {
     _repo.removeListener(_loadNote);
+    _s.freeLimitHit.removeListener(_onFreeLimit);
     super.dispose();
+  }
+
+  bool _limitPaywallOpen = false;
+
+  /// The free 30 s ran out (capture is paused): the paywall. A plan or trial
+  /// resumes the same recording; closing it saves the recording as a note.
+  Future<void> _onFreeLimit() async {
+    final id = _s.freeLimitHit.value;
+    if (id == null || !mounted || _limitPaywallOpen || _leaving) return;
+    if (id != _s.recorder.current?.id) return;
+    _limitPaywallOpen = true;
+    try {
+      final router = GoRouter.of(context);
+      await router.pushNamed<bool>(R.paywall,
+          queryParameters: {'from': 'free_limit'});
+      if (!mounted || _s.recorder.current?.id != id) return;
+      if (await _s.afterFreeLimitPaywall()) return;
+      if (!mounted) return;
+      await _stop(_s.recorder);
+    } finally {
+      _limitPaywallOpen = false;
+    }
   }
 
   Future<void> _loadNote() async {

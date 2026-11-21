@@ -14,7 +14,7 @@ class PaywallMore extends StatelessWidget {
   /// trial sentences show only then.
   final bool trial;
 
-  /// First-run paywall: the free first recording is still unused, so the
+  /// First-run paywall: the free 30 seconds are still unused, so the
   /// "Can I try it without paying?" answer is true only here.
   final bool firstRun;
 
@@ -214,7 +214,7 @@ class _FaqState extends State<_Faq> {
     (
       'free',
       'Can I try it without paying?',
-      'Yes. Close this screen and your first recording is free, with its full transcript and summary.'
+      'Yes. Close this screen and record up to 30 seconds free, with its transcript and summary.'
     ),
     (
       'languages',

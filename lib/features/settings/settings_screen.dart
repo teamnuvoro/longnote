@@ -275,7 +275,8 @@ class _PlanTile extends StatefulWidget {
 
 class _PlanTileState extends State<_PlanTile> {
   // Read once, not on every build.
-  late final Future<int> _freeUsed = context.read<AppServices>().gate.freeUsed();
+  late final Future<Duration> _freeLeft =
+      context.read<AppServices>().gate.freeLeft();
 
   @override
   Widget build(BuildContext context) {
@@ -295,14 +296,14 @@ class _PlanTileState extends State<_PlanTile> {
               ? null
               : Text('Renews ${formatDate(e.renewsAt!)} for ${plan.priceLabel}.'),
         ),
-      _ => FutureBuilder<int>(
-          future: _freeUsed,
+      _ => FutureBuilder<Duration>(
+          future: _freeLeft,
           builder: (_, snap) => ListTile(
             leading: const Icon(Icons.card_giftcard),
             title: const Text('Free'),
-            subtitle: Text((snap.data ?? 0) >= 1
-                ? 'You have used your free recording.'
-                : 'Your first recording is free, any length.'),
+            subtitle: Text((snap.data?.inSeconds ?? 30) < 1
+                ? 'You have used your free 30 seconds.'
+                : '${snap.data?.inSeconds ?? 30} seconds of free recording left.'),
           ),
         ),
     };

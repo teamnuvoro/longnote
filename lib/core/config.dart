@@ -33,8 +33,9 @@ class AppConfig {
   /// Heartbeat written to the database while recording.
   static const Duration heartbeatInterval = Duration(seconds: 5);
 
-  /// A recording shorter than this does not use up the free recording.
-  static const Duration freeRecordingMinLength = Duration(seconds: 30);
+  /// Recording time a user without a plan or trial gets, in total
+  /// (PaywallGate). At the limit capture pauses and the paywall opens.
+  static const Duration freeSeconds = Duration(seconds: 30);
 
   // ---- Processing ----------------------------------------------------------
   static const int maxAutoAttempts = 4;

@@ -38,7 +38,7 @@ Added 18 Nov 2026 (branch v1-build). Code: `lib/core/analytics/`.
 | processing_retried | manual, attempt | yes | yes | - |
 | transcript_viewed / summary_viewed | recording_id | yes | yes | - |
 | export | kind, via | yes | yes | - |
-| paywall_viewed | placement (`first_run` / `second_recording`) | yes | yes | - |
+| paywall_viewed | placement (`first_run` / `second_recording` / `import` / `free_limit`) | yes | yes | - |
 | trial_started | source `app`, plan, period, price, currency, trial_days, trial_ends_at | yes | yes (no revenue) | - (server sends StartTrial) |
 | subscription_purchased | source `app`, plan, period, price, currency | yes | yes (**no revenue**: the server sends it) | - (server sends Subscribe) |
 | restore_tapped | from (`paywall`/`settings`/`plan`/`settings_old`) | yes | yes | - |
@@ -56,6 +56,7 @@ Added 18 Nov 2026 (branch v1-build). Code: `lib/core/analytics/`.
 | mic_permission | result (`allowed`/`denied`), from (`onboarding`; `record` = Start refused for no mic, logged only on `denied`) | yes | yes | - |
 | notification_permission | result (`allowed`/`denied`/`skipped` = our own ask declined, iOS never asked), from (`trial_started`/`plan`/`note_ready`) | yes | yes | - |
 | recording_paused / recording_resumed | recording_id (user taps only) | yes | yes | - |
+| free_limit_reached | recording_id, duration_s (the free 30 s ran out mid-recording; capture paused, paywall opens) | yes | yes | - |
 | recording_discarded | recording_id, duration_s | yes | yes | - |
 | search_used | chars_bucket (`1-3`/`4-10`/`11+`, longest query of the visit), opened (a result was opened); once per visit to Search, never the text | yes | yes | - |
 | note_renamed | recording_id, from (`actions`/`record`) | yes | yes | - |

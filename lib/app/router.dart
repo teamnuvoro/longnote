@@ -79,7 +79,10 @@ GoRouter buildRouter({required String initialLocation}) => GoRouter(
           pageBuilder: (c, s) {
             final first = s.uri.queryParameters['first'] == '1';
             // ?from=import: the paywall before an import (analytics placement).
-            final fromImport = s.uri.queryParameters['from'] == 'import';
+            final from = s.uri.queryParameters['from'];
+            final fromImport = from == 'import';
+            // ?from=free_limit: the free 30 s ran out mid-recording.
+            final freeLimit = from == 'free_limit';
             return _modal(
               s,
               PaywallScreen(
@@ -87,7 +90,9 @@ GoRouter buildRouter({required String initialLocation}) => GoRouter(
                     ? 'first_run'
                     : fromImport
                         ? 'import'
-                        : 'second_recording',
+                        : freeLimit
+                            ? 'free_limit'
+                            : 'second_recording',
                 onDone: first
                     ? (ctx, _) async {
                         await ctx

@@ -684,8 +684,8 @@ void main() {
     await settle(t);
   }
 
-  testWidgets('Import is behind the paywall: the first import is the free '
-      'recording; the next one (and Record) shows the paywall', (t) async {
+  testWidgets('Import is Pro only: without a plan Files shows the paywall '
+      '(placement import), nothing is picked', (t) async {
     await t.runAsync(() async => env = await FlowEnv.create(trial: false));
     phoneView(t);
     mockPlatform();
@@ -696,22 +696,11 @@ void main() {
       Directory(p.dirname(wav)).createSync(recursive: true);
       (WavWriter.create(wav)..append(Uint8List(32000 * 5))).close();
     });
-    PickedMedia pick() =>
+    env.picker.next =
         PickedMedia(path: wav, name: 'Lecture.wav', bytes: File(wav).lengthSync());
-    env.picker.next = pick();
-    env.probe.ms = 60000; // over 30 s: counts as the free recording
+    env.probe.ms = 60000;
 
     await tapAndSettle(t, byLabel('Import'));
-    await tapAndSettle(t, find.text('Files'));
-    expect(onTop<ImportDetailsSheet>(t), isTrue);
-    await t.tap(find.text('Import and transcribe'));
-    await settle(t);
-    await finishCopies(t);
-    await dismissNotificationAsk(t);
-    expect(await t.runAsync(() => env.services.gate.freeUsed()), 1);
-
-    // Second import: the paywall (placement import), nothing picked.
-    env.picker.next = pick();
     await tapAndSettle(t, find.text('Files'));
     expect(onTop<PaywallScreen>(t), isTrue);
     final viewed = await t.runAsync(() =>
@@ -720,8 +709,8 @@ void main() {
     await tapAndSettle(t, byLabel('Close'));
     expect(onTop<ImportDetailsSheet>(t), isFalse);
     expect(onTop<ImportScreen>(t), isTrue);
-    // Record follows the same allowance.
-    expect(await t.runAsync(() => env.services.canStartRecording()), isFalse);
+    // Record still has the free 30 seconds.
+    expect(await t.runAsync(() => env.services.canStartRecording()), isTrue);
   });
 
   testWidgets('Import: Files -> F2 -> F3 copying -> note in Notes -> processed',

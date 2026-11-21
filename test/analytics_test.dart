@@ -51,6 +51,7 @@ void main() {
       'mic_permission',
       'notification_permission',
       'recording_paused',
+      'free_limit_reached',
       'recording_resumed',
       'recording_discarded',
       'search_used',

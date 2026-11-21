@@ -225,7 +225,8 @@ class _BenchmarkScreenState extends State<BenchmarkScreen> {
             onTap: () async {
               final b = _s.billing;
               if (b is FakeBillingService) await b.resetForDev();
-              await _s.kv.setInt(PaywallGate.freeUsedKey, 0);
+              await _s.kv.setInt(PaywallGate.legacyFreeUsedKey, 0);
+              await _s.kv.setInt(PaywallGate.freeSecondsKey, 0);
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Reset done.')));

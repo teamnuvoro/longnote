@@ -384,6 +384,8 @@ class FlowEnv {
     FakePcm.last!.audio.add(Uint8List(32000 * seconds));
     await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 30)));
     services.recorder.tickFlush();
+    FakePcm.last!.tickLevel();
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
     await t.pump();
   }
 }

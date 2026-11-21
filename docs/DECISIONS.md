@@ -53,8 +53,8 @@ One line each: the decision, then why. "Lead" = set in the brief. "Build" = made
 ## Billing
 - **Monthly $9.99 and yearly $59.99, 3-day trial, no weekly plan** (lead).
 - **Billing behind `BillingService`; v1 ships `FakeBillingService`** (lead). No StoreKit products exist yet. Swap in `in_app_purchase` or RevenueCat later; UI does not change.
-- **First recording is free (any length) with full summary; paywall when starting the 2nd** (lead).
-- **A recording under 30 s does not use up the free recording** (build). A mis-tap or an early crash should not burn the free try.
+- ~~First recording is free (any length) with full summary; paywall when starting the 2nd~~ (1.0 only).
+- **1.0.1 (owner, 21 Nov 2026): no plan and no trial = 30 seconds of recording in total.** At 30 s capture pauses and the paywall opens (placement `free_limit`): subscribe or start the 3-day trial and the same recording resumes; close it and the recording is saved and processed. With the 30 s used, Record opens the paywall first. Import is Pro only. 1.0 users who already used their free recording have no free seconds left.
 - **Viewing, playing, exporting old recordings is never blocked** (build). Honest: you keep what you made.
 - **Trial reminder 26 h before the trial ends (brief said "1 day")** (build). Apple can charge up to 24 h before the period ends; a reminder at exactly 24 h could arrive after the charge.
 - **Paywall shows: today's price, the exact charge date and amount, that it renews, and how to cancel - all above the buy button** (lead).

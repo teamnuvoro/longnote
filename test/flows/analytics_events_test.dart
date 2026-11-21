@@ -8,6 +8,7 @@ import 'package:longnote/core/analytics/analytics.dart';
 import 'package:longnote/core/billing/billing_service.dart';
 import 'package:longnote/core/models/recording.dart';
 import 'package:longnote/core/recording/recording_controller.dart';
+import 'package:longnote/features/paywall/paywall_screen.dart';
 import 'package:longnote/ui/widgets.dart';
 
 import '../helpers/fake_analytics.dart';
@@ -33,6 +34,12 @@ void main() {
         for (final (n, p) in sink.events)
           if (n == AnalyticsEvent.screenViewed) p['screen']
       ];
+
+  bool onTop<T>(WidgetTester t) {
+    final f = find.byType(T);
+    if (f.evaluate().isEmpty) return false;
+    return ModalRoute.of(f.evaluate().last)?.isCurrent ?? false;
+  }
 
   List<(String, Map<String, Object>)> named(String name) =>
       [for (final e in sink.events) if (e.$1 == name) e];
@@ -163,12 +170,64 @@ void main() {
     expect(ev(AnalyticsEvent.recordingDiscarded).props['duration_s'], 3);
   });
 
-  testWidgets('a Stop racing a Discard never spends the free recording',
+  testWidgets('free 30 s: capture pauses at the limit and the paywall '
+      'opens; closing it saves the note and spends the seconds', (t) async {
+    await boot(t, trial: false);
+    await tapAndSettle(t, find.text('Record'));
+    await tapAndSettle(t, find.byKey(const ValueKey('record-start')));
+    final s = env.services;
+    final id = s.recorder.current!.id;
+    await env.speak(t, 20);
+    expect(s.recorder.state, CaptureState.recording);
+    await env.speak(t, 15); // 35 s: past the free 30
+    await settle(t);
+    expect(s.recorder.state, CaptureState.paused);
+    expect(onTop<PaywallScreen>(t), isTrue);
+    expect(find.text('Your free 30 seconds are up.'), findsOneWidget);
+    expect(named(AnalyticsEvent.paywallViewed).last.$2['placement'],
+        'free_limit');
+    expect(named(AnalyticsEvent.freeLimitReached), hasLength(1));
+    await tapAndSettle(t, byLabel('Close'));
+    await settle(t);
+    expect(s.recorder.isActive, isFalse);
+    expect(await t.runAsync(() => env.repo.get(id)), isNotNull);
+    expect(await t.runAsync(() => s.gate.freeSecondsUsed()), 30);
+    expect(await t.runAsync(() => s.canStartRecording()), isFalse);
+  });
+
+  testWidgets('free 30 s: starting the trial on that paywall resumes the '
+      'same recording', (t) async {
+    await boot(t, trial: false);
+    await tapAndSettle(t, find.text('Record'));
+    await tapAndSettle(t, find.byKey(const ValueKey('record-start')));
+    final s = env.services;
+    final id = s.recorder.current!.id;
+    await env.speak(t, 35);
+    await settle(t);
+    expect(onTop<PaywallScreen>(t), isTrue);
+    await tapAndSettle(t, find.text('Start free trial'));
+    await settle(t);
+    if (find.text('Allow the reminder').evaluate().isNotEmpty) {
+      await tapAndSettle(t, find.text('Allow the reminder'));
+    }
+    await settle(t);
+    expect(s.recorder.current?.id, id);
+    expect(s.recorder.state, CaptureState.recording);
+    // On the trial now: more audio never pauses it again.
+    await env.speak(t, 60);
+    await settle(t);
+    expect(s.recorder.state, CaptureState.recording);
+    await t.runAsync(() => s.recorder.stop());
+    await settle(t);
+    expect(await t.runAsync(() => s.gate.freeSecondsUsed()), 0);
+  });
+
+  testWidgets('a Stop racing a Discard never spends the free seconds',
       (t) async {
     await boot(t, trial: false);
     await tapAndSettle(t, find.text('Record'));
     await tapAndSettle(t, find.byKey(const ValueKey('record-start')));
-    await env.speak(t, 40); // over the 30 s free-recording minimum
+    await env.speak(t, 20); // under the 30 s free limit
     final s = env.services;
     final id = s.recorder.current!.id;
     // Discard confirmed, and a Stop lands while it is still running.
@@ -177,7 +236,7 @@ void main() {
           s.recorder.stop(),
         ]));
     await settle(t);
-    expect(await t.runAsync(() => s.gate.freeUsed()), 0);
+    expect(await t.runAsync(() => s.gate.freeSecondsUsed()), 0);
     expect(await env.pendingJobs(t), isEmpty);
     expect(await t.runAsync(() => env.repo.get(id)), isNull);
   });

@@ -140,7 +140,7 @@ class _Summary extends StatelessWidget {
     } else {
       over = 'No plan';
       big = 'Free';
-      text = 'Your first recording is free, any length. Your notes stay yours '
+      text = 'You can record 30 seconds free. Your notes stay yours '
           'with or without a plan.';
     }
     return LnCard(

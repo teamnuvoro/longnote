@@ -110,7 +110,7 @@ class _ImportBodyState extends State<ImportBody> {
   }
 
   Future<void> _pick({bool video = false}) async {
-    // Paywall first when the free recording is used up (as Record does).
+    // Import is Pro only: the paywall first without a plan.
     if (!await importPaywallPassed(context, _c)) return;
     try {
       final m = await _c.pick(video: video);

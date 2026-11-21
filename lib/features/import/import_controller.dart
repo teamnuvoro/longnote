@@ -131,9 +131,9 @@ class ImportController extends ChangeNotifier {
   PickedMedia? pending;
   final List<ImportJob> jobs = [];
 
-  /// Import is part of Pro, like recording: the same gate (one free
-  /// recording or import, then the paywall). False = show the paywall.
-  Future<bool> canImport() => s.canStartRecording();
+  /// Import is Pro only (the free 30 s cannot cover a file that may be
+  /// hours long). False = show the paywall.
+  Future<bool> canImport() => s.hasPlan();
 
   /// Opens the picker; returns the file (also kept in [pending]) or null.
   Future<PickedMedia?> pick({bool video = false}) async {
@@ -205,8 +205,8 @@ class ImportController extends ChangeNotifier {
         updatedAt: now,
       ));
       rowOnly = true;
-      // An import counts like a recording: it uses up the one free
-      // recording (PaywallGate; under 30 s does not count).
+      // Only on a plan (canImport); if the plan lapsed meanwhile, the
+      // import spends the free seconds like a recording.
       await s.gate.onRecordingFinished(Duration(milliseconds: ms),
           wasEntitled: s.billing.entitlement.value.isActive);
       jobs.remove(job);
